@@ -1,5 +1,4 @@
-import {createLogger,transports,format, info} from 'winston';
-
+import {createLogger,transports,format} from 'winston';
 const logFormat = format.combine(
     format.timestamp({format: 'YYYY-MM-DD HH:mm:ss' }),
     format.printf((info)=>`[${info.timestamp}] ${info.level.toUpperCase()}: ${info.message}`)
@@ -10,7 +9,7 @@ const logger = createLogger({
     format: logFormat,
     transports: [
       new transports.File({
-        filename:'./logs/error.log',
+        filename:'../logs/error.log',
         level: 'error',
       }),
       new transports.File({
@@ -32,5 +31,5 @@ const logger = createLogger({
     )
   }
   
-  module.exports = logger
+ export default logger;
   

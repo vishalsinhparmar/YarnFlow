@@ -1,7 +1,9 @@
 import express from 'express';
 import connectDB from './db.js';
 import authRoutes from './src/routes/authRoutes.js';
-import dotenv from 'dotenv'
+// import dotenv from 'dotenv';
+
+// dotenv.config({path:})
 const app = express();
 app.use(express.json());
 connectDB();
