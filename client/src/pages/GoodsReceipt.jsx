@@ -1,4 +1,162 @@
+import React, { useState, useEffect } from 'react';
+import { grnAPI, grnUtils } from '../services/grnAPI';
+import Modal from '../components/Modal';
+import GRNForm from '../components/GRNForm';
+import GRNDetail from '../components/GRNDetail';
+import GRNQualityCheck from '../components/GRNQualityCheck';
+
 const GoodsReceipt = () => {
+  const [grns, setGRNs] = useState([]);
+  const [stats, setStats] = useState({
+    totalGRNs: 0,
+    statusBreakdown: [],
+    pendingReview: 0,
+    thisMonth: 0,
+    monthlyValue: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Modal states
+  const [showCreateGRN, setShowCreateGRN] = useState(false);
+  const [showGRNDetail, setShowGRNDetail] = useState(false);
+  const [showQualityCheck, setShowQualityCheck] = useState(false);
+  const [selectedGRN, setSelectedGRN] = useState(null);
+  
+  // Filters and search
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({});
+
+  // Fetch GRN statistics
+  const fetchStats = async () => {
+    try {
+      const response = await grnAPI.getStats();
+      setStats(response.data);
+    } catch (err) {
+      console.error('Error fetching GRN stats:', err);
+    }
+  };
+
+  // Fetch GRNs
+  const fetchGRNs = async (page = 1, search = '', status = '') => {
+    try {
+      setLoading(true);
+      const params = {
+        page,
+        limit: 10,
+        ...(search && { search }),
+        ...(status && { status })
+      };
+      
+      const response = await grnAPI.getAll(params);
+      setGRNs(response.data);
+      setPagination(response.pagination);
+      setError(null);
+    } catch (err) {
+      setError('Failed to fetch GRNs');
+      console.error('Error fetching GRNs:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial data load
+  useEffect(() => {
+    fetchStats();
+    fetchGRNs();
+  }, []);
+
+  // Handle search and filter changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchGRNs(1, searchTerm, statusFilter);
+      setCurrentPage(1);
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter]);
+
+  // Handle GRN creation
+  const handleCreateGRN = async (grnData) => {
+    try {
+      await grnAPI.create(grnData);
+      setShowCreateGRN(false);
+      fetchGRNs(currentPage, searchTerm, statusFilter);
+      fetchStats();
+    } catch (err) {
+      console.error('Error creating GRN:', err);
+      throw err;
+    }
+  };
+
+  // Handle status update
+  const handleStatusUpdate = async (grnId, newStatus, notes = '') => {
+    try {
+      await grnAPI.updateStatus(grnId, {
+        status: newStatus,
+        notes: notes,
+        updatedBy: 'Admin'
+      });
+      fetchGRNs(currentPage, searchTerm, statusFilter);
+      fetchStats();
+      if (selectedGRN && selectedGRN._id === grnId) {
+        const updatedGRN = await grnAPI.getById(grnId);
+        setSelectedGRN(updatedGRN.data);
+      }
+    } catch (err) {
+      console.error('Error updating GRN status:', err);
+      alert('Failed to update GRN status');
+    }
+  };
+
+  // Handle GRN approval
+  const handleApproveGRN = async (grnId, approvedBy, notes) => {
+    try {
+      await grnAPI.approve(grnId, approvedBy, notes);
+      fetchGRNs(currentPage, searchTerm, statusFilter);
+      fetchStats();
+      if (selectedGRN && selectedGRN._id === grnId) {
+        const updatedGRN = await grnAPI.getById(grnId);
+        setSelectedGRN(updatedGRN.data);
+      }
+    } catch (err) {
+      console.error('Error approving GRN:', err);
+      throw err;
+    }
+  };
+
+  // View GRN details
+  const handleViewGRN = async (grn) => {
+    try {
+      const response = await grnAPI.getById(grn._id);
+      setSelectedGRN(response.data);
+      setShowGRNDetail(true);
+    } catch (err) {
+      console.error('Error fetching GRN details:', err);
+      alert('Failed to load GRN details');
+    }
+  };
+
+  // Handle quality check
+  const handleQualityCheck = async (grn) => {
+    try {
+      const response = await grnAPI.getById(grn._id);
+      setSelectedGRN(response.data);
+      setShowQualityCheck(true);
+    } catch (err) {
+      console.error('Error loading GRN for quality check:', err);
+      alert('Failed to load GRN for quality check');
+    }
+  };
+
+  // Get status counts for display
+  const getStatusCount = (status) => {
+    const statusItem = stats.statusBreakdown.find(item => item._id === status);
+    return statusItem ? statusItem.count : 0;
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -8,7 +166,10 @@ const GoodsReceipt = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Goods Receipt Note (GRN)</h1>
             <p className="text-gray-600">Track and manage incoming goods and materials</p>
           </div>
-          <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+          <button 
+            onClick={() => setShowCreateGRN(true)}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
             + New GRN
           </button>
         </div>
@@ -20,10 +181,10 @@ const GoodsReceipt = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total GRNs</p>
-              <p className="text-2xl font-bold text-gray-900">89</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalGRNs}</p>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">📦</span>
+            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+              <span className="text-orange-600 text-xl">📦</span>
             </div>
           </div>
         </div>
@@ -32,10 +193,10 @@ const GoodsReceipt = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Pending Review</p>
-              <p className="text-2xl font-bold text-orange-600">12</p>
+              <p className="text-2xl font-bold text-yellow-600">{stats.pendingReview}</p>
             </div>
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <span className="text-orange-600 text-xl">👀</span>
+            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <span className="text-yellow-600 text-xl">👥</span>
             </div>
           </div>
         </div>
@@ -44,7 +205,7 @@ const GoodsReceipt = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Approved</p>
-              <p className="text-2xl font-bold text-green-600">67</p>
+              <p className="text-2xl font-bold text-green-600">{getStatusCount('Approved') + getStatusCount('Completed')}</p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <span className="text-green-600 text-xl">✅</span>
@@ -56,11 +217,41 @@ const GoodsReceipt = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">This Month</p>
-              <p className="text-2xl font-bold text-blue-600">24</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.thisMonth}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-blue-600 text-xl">📅</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters and Search */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search GRNs by number, PO reference, supplier..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+          <div className="sm:w-48">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              <option value="">All Status</option>
+              <option value="Draft">Draft</option>
+              <option value="Received">Received</option>
+              <option value="Under_Review">Under Review</option>
+              <option value="Approved">Approved</option>
+              <option value="Completed">Completed</option>
+              <option value="Rejected">Rejected</option>
+            </select>
           </div>
         </div>
       </div>
@@ -70,52 +261,204 @@ const GoodsReceipt = () => {
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Recent Goods Receipt Notes</h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GRN Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO Reference</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">GRN-2024-045</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">PO-2024-001</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">ABC Textiles Ltd.</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 20, 2024</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">500 kg</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">Pending Review</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-blue-600 hover:text-blue-900 mr-3">Review</button>
-                  <button className="text-green-600 hover:text-green-900">Approve</button>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">GRN-2024-044</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">PO-2024-002</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">XYZ Cotton Mills</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 18, 2024</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">300 kg</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Approved</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-blue-600 hover:text-blue-900 mr-3">View</button>
-                  <button className="text-gray-400">Approved</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        
+        {loading ? (
+          <div className="p-8 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+            <p className="mt-2 text-gray-600">Loading GRNs...</p>
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center">
+            <p className="text-red-600">{error}</p>
+            <button 
+              onClick={() => fetchGRNs(currentPage, searchTerm, statusFilter)}
+              className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+            >
+              Retry
+            </button>
+          </div>
+        ) : grns.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-gray-600">No GRNs found</p>
+            <button 
+              onClick={() => setShowCreateGRN(true)}
+              className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+            >
+              Create First GRN
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      GRN Number
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      PO Reference
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Supplier
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Received Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quantity
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {grns.map((grn) => (
+                    <tr key={grn._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{grn.grnNumber}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{grn.poNumber}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{grn.supplierDetails?.companyName}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {grnUtils.formatDate(grn.receiptDate)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {grn.items?.reduce((total, item) => total + item.receivedQuantity, 0)} 
+                        {grn.items?.[0]?.unit && ` ${grn.items[0].unit}`}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${grnUtils.getStatusColor(grn.status)}`}>
+                          {grnUtils.formatStatus(grn.status)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button 
+                          onClick={() => handleViewGRN(grn)}
+                          className="text-blue-600 hover:text-blue-900 mr-3"
+                        >
+                          View
+                        </button>
+                        {grn.status === 'Received' && (
+                          <button 
+                            onClick={() => handleQualityCheck(grn)}
+                            className="text-yellow-600 hover:text-yellow-900 mr-3"
+                          >
+                            Review
+                          </button>
+                        )}
+                        {grnUtils.canApprove(grn.status, grn.qualityCheckStatus) && (
+                          <button 
+                            onClick={() => handleApproveGRN(grn._id, 'Manager', 'Approved via UI')}
+                            className="text-green-600 hover:text-green-900"
+                          >
+                            Approve
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {pagination.pages > 1 && (
+              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} results
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => {
+                      const newPage = currentPage - 1;
+                      setCurrentPage(newPage);
+                      fetchGRNs(newPage, searchTerm, statusFilter);
+                    }}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-700">
+                    Page {currentPage} of {pagination.pages}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const newPage = currentPage + 1;
+                      setCurrentPage(newPage);
+                      fetchGRNs(newPage, searchTerm, statusFilter);
+                    }}
+                    disabled={currentPage === pagination.pages}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
+
+      {/* Modals */}
+      {showCreateGRN && (
+        <Modal
+          isOpen={showCreateGRN}
+          onClose={() => setShowCreateGRN(false)}
+          title="Create New GRN"
+          size="xl"
+        >
+          <GRNForm
+            onSubmit={handleCreateGRN}
+            onCancel={() => setShowCreateGRN(false)}
+          />
+        </Modal>
+      )}
+
+      {showGRNDetail && selectedGRN && (
+        <Modal
+          isOpen={showGRNDetail}
+          onClose={() => setShowGRNDetail(false)}
+          title={`GRN Details - ${selectedGRN.grnNumber}`}
+          size="xl"
+        >
+          <GRNDetail
+            grn={selectedGRN}
+            onStatusUpdate={handleStatusUpdate}
+            onApprove={handleApproveGRN}
+            onClose={() => setShowGRNDetail(false)}
+          />
+        </Modal>
+      )}
+
+      {showQualityCheck && selectedGRN && (
+        <Modal
+          isOpen={showQualityCheck}
+          onClose={() => setShowQualityCheck(false)}
+          title={`Quality Check - ${selectedGRN.grnNumber}`}
+          size="xl"
+        >
+          <GRNQualityCheck
+            grn={selectedGRN}
+            onSubmit={(qualityData) => {
+              // Handle quality check submission
+              console.log('Quality check data:', qualityData);
+              setShowQualityCheck(false);
+              fetchGRNs(currentPage, searchTerm, statusFilter);
+            }}
+            onCancel={() => setShowQualityCheck(false)}
+          />
+        </Modal>
+      )}
     </div>
   );
 };

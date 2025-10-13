@@ -1,4 +1,148 @@
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { salesChallanAPI, salesChallanUtils } from '../services/salesChallanAPI';
+import CreateChallanModal from '../components/CreateChallanModal';
+import ChallanDetailModal from '../components/ChallanDetailModal';
+import ChallanStatusUpdateModal from '../components/ChallanStatusUpdateModal';
+
 const SalesChallan = () => {
+  const location = useLocation();
+  const [challans, setChallans] = useState([]);
+  const [stats, setStats] = useState({
+    overview: {
+      totalChallans: 0,
+      thisMonth: 0,
+      inTransit: 0,
+      deliveredThisMonth: 0
+    },
+    statusBreakdown: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedChallan, setSelectedChallan] = useState(null);
+  
+  // Filter states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
+
+  // Fetch data on component mount
+  useEffect(() => {
+    fetchAllData();
+    
+    // Auto-open create modal if navigated from Sales Order
+    if (location.state?.selectedOrderId) {
+      setShowCreateModal(true);
+    }
+  }, [currentPage, searchTerm, statusFilter, location.state]);
+
+  const fetchAllData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch stats and challans in parallel
+      const [statsRes, challansRes] = await Promise.all([
+        salesChallanAPI.getStats(),
+        salesChallanAPI.getAll({
+          page: currentPage,
+          limit: 10,
+          search: searchTerm,
+          status: statusFilter
+        })
+      ]);
+
+      if (statsRes.success) {
+        setStats(statsRes.data);
+      }
+
+      if (challansRes.success) {
+        setChallans(challansRes.data);
+        setPagination(challansRes.pagination);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to fetch data');
+      console.error('Error fetching data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle challan creation
+  const handleCreateChallan = async (challanData) => {
+    try {
+      await salesChallanAPI.create(challanData);
+      setShowCreateModal(false);
+      fetchAllData(); // Refresh data
+    } catch (err) {
+      console.error('Error creating challan:', err);
+      throw err;
+    }
+  };
+
+  // Handle status update
+  const handleStatusUpdate = async (challanId, statusData) => {
+    try {
+      await salesChallanAPI.updateStatus(challanId, statusData);
+      setShowStatusModal(false);
+      fetchAllData(); // Refresh data
+      
+      // Update selected challan if it's the one being updated
+      if (selectedChallan && selectedChallan._id === challanId) {
+        const updatedChallan = await salesChallanAPI.getById(challanId);
+        setSelectedChallan(updatedChallan.data);
+      }
+    } catch (err) {
+      console.error('Error updating status:', err);
+      throw err;
+    }
+  };
+
+  // Handle challan action
+  const handleChallanAction = async (action, challan) => {
+    switch (action.type) {
+      case 'view':
+        setSelectedChallan(challan);
+        setShowDetailModal(true);
+        break;
+      case 'updateStatus':
+        setSelectedChallan(challan);
+        setShowStatusModal(true);
+        break;
+      case 'track':
+        // Open tracking modal or navigate to tracking page
+        window.open(`/track/${challan.challanNumber}`, '_blank');
+        break;
+      case 'print':
+        // Handle print functionality
+        window.print();
+        break;
+      case 'delete':
+        if (window.confirm('Are you sure you want to delete this challan?')) {
+          try {
+            await salesChallanAPI.delete(challan._id);
+            fetchAllData();
+          } catch (err) {
+            alert('Failed to delete challan: ' + err.message);
+          }
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
+  // Get status breakdown for overview
+  const getStatusCount = (status) => {
+    const statusData = stats.statusBreakdown.find(s => s._id === status);
+    return statusData ? statusData.count : 0;
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -8,11 +152,21 @@ const SalesChallan = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Sales Challan</h1>
             <p className="text-gray-600">Manage delivery challans and shipment documents</p>
           </div>
-          <button className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
             + New Challan
           </button>
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          <p className="text-red-800 text-sm">{error}</p>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -20,7 +174,7 @@ const SalesChallan = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Challans</p>
-              <p className="text-2xl font-bold text-gray-900">198</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.overview.totalChallans}</p>
             </div>
             <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center">
               <span className="text-teal-600 text-xl">🚚</span>
@@ -32,7 +186,7 @@ const SalesChallan = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">In Transit</p>
-              <p className="text-2xl font-bold text-orange-600">34</p>
+              <p className="text-2xl font-bold text-orange-600">{stats.overview.inTransit}</p>
             </div>
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
               <span className="text-orange-600 text-xl">🚛</span>
@@ -44,7 +198,7 @@ const SalesChallan = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Delivered</p>
-              <p className="text-2xl font-bold text-green-600">156</p>
+              <p className="text-2xl font-bold text-green-600">{stats.overview.deliveredThisMonth}</p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <span className="text-green-600 text-xl">✅</span>
@@ -56,7 +210,7 @@ const SalesChallan = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">This Month</p>
-              <p className="text-2xl font-bold text-blue-600">47</p>
+              <p className="text-2xl font-bold text-blue-600">{stats.overview.thisMonth}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-blue-600 text-xl">📅</span>
@@ -68,154 +222,219 @@ const SalesChallan = () => {
       {/* Delivery Status Overview */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Delivery Status Overview</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-blue-50 rounded-lg">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-blue-600 text-lg">📋</span>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-blue-600 text-2xl">📋</span>
             </div>
-            <p className="text-sm font-medium text-gray-900">Prepared</p>
-            <p className="text-xl font-bold text-blue-600">8</p>
+            <p className="text-sm font-medium text-gray-600">Prepared</p>
+            <p className="text-xl font-bold text-blue-600">{getStatusCount('Prepared')}</p>
           </div>
-          <div className="text-center p-4 bg-yellow-50 rounded-lg">
-            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-yellow-600 text-lg">📦</span>
+          
+          <div className="text-center">
+            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-yellow-600 text-2xl">📦</span>
             </div>
-            <p className="text-sm font-medium text-gray-900">Packed</p>
-            <p className="text-xl font-bold text-yellow-600">12</p>
+            <p className="text-sm font-medium text-gray-600">Packed</p>
+            <p className="text-xl font-bold text-yellow-600">{getStatusCount('Packed')}</p>
           </div>
-          <div className="text-center p-4 bg-orange-50 rounded-lg">
-            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-orange-600 text-lg">🚚</span>
+          
+          <div className="text-center">
+            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-orange-600 text-2xl">🚚</span>
             </div>
-            <p className="text-sm font-medium text-gray-900">Dispatched</p>
-            <p className="text-xl font-bold text-orange-600">22</p>
+            <p className="text-sm font-medium text-gray-600">Dispatched</p>
+            <p className="text-xl font-bold text-orange-600">{getStatusCount('Dispatched')}</p>
           </div>
-          <div className="text-center p-4 bg-green-50 rounded-lg">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-green-600 text-lg">🏠</span>
+          
+          <div className="text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-green-600 text-2xl">🏠</span>
             </div>
-            <p className="text-sm font-medium text-gray-900">Delivered</p>
-            <p className="text-xl font-bold text-green-600">156</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Deliveries */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Deliveries</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center">
-                <span className="text-green-500 text-lg mr-3">✅</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">CH-2024-089</p>
-                  <p className="text-xs text-gray-500">Fashion Hub Ltd. - Delivered</p>
-                </div>
-              </div>
-              <span className="text-xs text-gray-400">2h ago</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center">
-                <span className="text-green-500 text-lg mr-3">✅</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">CH-2024-088</p>
-                  <p className="text-xs text-gray-500">Textile World Co. - Delivered</p>
-                </div>
-              </div>
-              <span className="text-xs text-gray-400">5h ago</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
-              <div className="flex items-center">
-                <span className="text-orange-500 text-lg mr-3">🚚</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">CH-2024-087</p>
-                  <p className="text-xs text-gray-500">Premium Fabrics - In Transit</p>
-                </div>
-              </div>
-              <span className="text-xs text-gray-400">1d ago</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Pending Dispatches</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-              <div className="flex items-center">
-                <span className="text-yellow-500 text-lg mr-3">📦</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">CH-2024-090</p>
-                  <p className="text-xs text-gray-500">Ready for dispatch</p>
-                </div>
-              </div>
-              <button className="text-xs bg-yellow-600 text-white px-2 py-1 rounded">Dispatch</button>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center">
-                <span className="text-blue-500 text-lg mr-3">📋</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">CH-2024-091</p>
-                  <p className="text-xs text-gray-500">Being prepared</p>
-                </div>
-              </div>
-              <button className="text-xs bg-blue-600 text-white px-2 py-1 rounded">Prepare</button>
-            </div>
+            <p className="text-sm font-medium text-gray-600">Delivered</p>
+            <p className="text-xl font-bold text-green-600">{getStatusCount('Delivered')}</p>
           </div>
         </div>
       </div>
 
-      {/* Challan Table */}
+      {/* Search and Filters */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search challans by number, SO reference, customer..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+          <div className="w-full md:w-48">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="">All Status</option>
+              <option value="Prepared">Prepared</option>
+              <option value="Packed">Packed</option>
+              <option value="Dispatched">Dispatched</option>
+              <option value="In_Transit">In Transit</option>
+              <option value="Out_for_Delivery">Out for Delivery</option>
+              <option value="Delivered">Delivered</option>
+              <option value="Returned">Returned</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Sales Challans Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Sales Challans</h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Challan No.</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SO Reference</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispatch Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle No.</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">CH-2024-090</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">SO-2024-123</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Fashion Hub Ltd.</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 22, 2024</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">MH-12-AB-1234</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">In Transit</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-blue-600 hover:text-blue-900 mr-3">Track</button>
-                  <button className="text-teal-600 hover:text-teal-900">Print</button>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">CH-2024-089</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">SO-2024-122</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Textile World Co.</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 20, 2024</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">GJ-05-CD-5678</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Delivered</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-blue-600 hover:text-blue-900 mr-3">View</button>
-                  <button className="text-gray-400">Completed</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        
+        {loading ? (
+          <div className="p-8 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
+            <p className="mt-2 text-gray-600">Loading challans...</p>
+          </div>
+        ) : challans.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-gray-600">No challans found</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Challan No.
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    SO Reference
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Customer
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Dispatch Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Vehicle No.
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {challans.map((challan) => (
+                  <tr key={challan._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {challan.challanNumber}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {challan.soReference}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {challan.customerDetails?.companyName || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {salesChallanUtils.formatDate(challan.challanDate)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {challan.transportDetails?.vehicleNumber || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${salesChallanUtils.getStatusColor(challan.status)}`}>
+                        {salesChallanUtils.formatStatus(challan.status)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex space-x-2">
+                        {salesChallanUtils.getAvailableActions(challan).map((action, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleChallanAction(action, challan)}
+                            className={`text-${action.color}-600 hover:text-${action.color}-900 text-sm`}
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="bg-white rounded-lg shadow-sm p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
+              {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
+              {pagination.totalItems} results
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="px-3 py-1 bg-teal-100 text-teal-800 rounded text-sm">
+                {currentPage} of {pagination.totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(Math.min(pagination.totalPages, currentPage + 1))}
+                disabled={currentPage === pagination.totalPages}
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
+      {showCreateModal && (
+        <CreateChallanModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={handleCreateChallan}
+          preSelectedOrderId={location.state?.selectedOrderId}
+        />
+      )}
+
+      {showDetailModal && selectedChallan && (
+        <ChallanDetailModal
+          isOpen={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
+          challan={selectedChallan}
+          onStatusUpdate={(statusData) => handleStatusUpdate(selectedChallan._id, statusData)}
+        />
+      )}
+
+      {showStatusModal && selectedChallan && (
+        <ChallanStatusUpdateModal
+          isOpen={showStatusModal}
+          onClose={() => setShowStatusModal(false)}
+          challan={selectedChallan}
+          onSubmit={(statusData) => handleStatusUpdate(selectedChallan._id, statusData)}
+        />
+      )}
     </div>
   );
 };

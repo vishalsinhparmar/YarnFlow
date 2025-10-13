@@ -29,21 +29,20 @@ const purchaseOrderItemSchema = new mongoose.Schema({
   unit: {
     type: String,
     enum: ['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'],
-    required: true
+    default: 'Bags'
   },
   unitPrice: {
     type: Number,
-    required: true,
+    default: 0,
     min: 0
   },
   totalPrice: {
     type: Number,
-    required: true,
+    default: 0,
     min: 0
   },
   deliveryDate: {
-    type: Date,
-    required: true
+    type: Date
   },
   receivedQuantity: {
     type: Number,
@@ -93,14 +92,19 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   expectedDeliveryDate: {
     type: Date,
-    required: true
+    default: function() {
+      // Default to 7 days from now
+      const date = new Date();
+      date.setDate(date.getDate() + 7);
+      return date;
+    }
   },
   items: [purchaseOrderItemSchema],
   
   // Financial Details
   subtotal: {
     type: Number,
-    required: true,
+    default: 0,
     min: 0
   },
   taxRate: {
@@ -111,7 +115,7 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   taxAmount: {
     type: Number,
-    required: false,
+    default: 0,
     min: 0
   },
   discountAmount: {
@@ -121,7 +125,7 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   totalAmount: {
     type: Number,
-    required: false,
+    default: 0,
     min: 0
   },
   
@@ -271,14 +275,30 @@ purchaseOrderSchema.pre('save', async function(next) {
 
 // Calculate totals before saving
 purchaseOrderSchema.pre('save', function(next) {
+  // Ensure each item has required fields calculated
+  this.items.forEach(item => {
+    // Set delivery date to PO delivery date if not provided
+    if (!item.deliveryDate) {
+      item.deliveryDate = this.expectedDeliveryDate;
+    }
+    
+    // Calculate totalPrice if not provided
+    if (!item.totalPrice || item.totalPrice === 0) {
+      item.totalPrice = (item.quantity || 0) * (item.unitPrice || 0);
+    }
+  });
+  
   // Calculate subtotal
-  this.subtotal = this.items.reduce((sum, item) => sum + item.totalPrice, 0);
+  this.subtotal = this.items.reduce((sum, item) => {
+    const itemTotal = item.totalPrice || ((item.quantity || 0) * (item.unitPrice || 0));
+    return sum + itemTotal;
+  }, 0);
   
   // Calculate tax amount
-  this.taxAmount = (this.subtotal * this.taxRate) / 100;
+  this.taxAmount = (this.subtotal * (this.taxRate || 0)) / 100;
   
   // Calculate total amount
-  this.totalAmount = this.subtotal + this.taxAmount - this.discountAmount;
+  this.totalAmount = this.subtotal + this.taxAmount - (this.discountAmount || 0);
   
   next();
 });
@@ -293,13 +313,21 @@ purchaseOrderSchema.index({ createdAt: -1 });
 
 // Virtual for checking if PO is overdue
 purchaseOrderSchema.virtual('isOverdue').get(function() {
+  if (!this.expectedDeliveryDate || !this.status) {
+    return false;
+  }
   return this.expectedDeliveryDate < new Date() && !['Fully_Received', 'Cancelled', 'Closed'].includes(this.status);
 });
 
 // Virtual for completion percentage
 purchaseOrderSchema.virtual('completionPercentage').get(function() {
-  const totalQuantity = this.items.reduce((sum, item) => sum + item.quantity, 0);
-  const receivedQuantity = this.items.reduce((sum, item) => sum + item.receivedQuantity, 0);
+  // Safety check for items array
+  if (!this.items || !Array.isArray(this.items)) {
+    return 0;
+  }
+  
+  const totalQuantity = this.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  const receivedQuantity = this.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0);
   return totalQuantity > 0 ? Math.round((receivedQuantity / totalQuantity) * 100) : 0;
 });
 
