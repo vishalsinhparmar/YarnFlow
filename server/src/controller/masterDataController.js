@@ -114,7 +114,7 @@ export const updateCustomer = async (req, res) => {
     const customer = await Customer.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }
+      { new: true }
     );
     
     if (!customer) {

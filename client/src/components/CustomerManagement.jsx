@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
 import Modal from './Modal';
 import CustomerForm from './CustomerForm';
 import { customerAPI, formatters, handleAPIError } from '../services/masterDataAPI';
+import useToast from '../hooks/useToast';
 
 const CustomerManagement = ({ isOpen, onClose }) => {
+  const { customerToasts } = useToast();
+  
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
@@ -11,7 +15,6 @@ const CustomerManagement = ({ isOpen, onClose }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
   const [pagination, setPagination] = useState({
     current: 1,
     pages: 1,
@@ -31,7 +34,6 @@ const CustomerManagement = ({ isOpen, onClose }) => {
       };
       
       if (searchTerm) queryParams.search = searchTerm;
-      if (statusFilter) queryParams.status = statusFilter;
       
       const response = await customerAPI.getAll(queryParams);
       
@@ -41,6 +43,7 @@ const CustomerManagement = ({ isOpen, onClose }) => {
       }
     } catch (err) {
       setError(handleAPIError(err, 'Failed to fetch customers'));
+      customerToasts.loadError();
     } finally {
       setLoading(false);
     }
@@ -51,17 +54,13 @@ const CustomerManagement = ({ isOpen, onClose }) => {
     if (isOpen) {
       fetchCustomers();
     }
-  }, [isOpen, searchTerm, statusFilter]);
+  }, [isOpen, searchTerm]);
 
   // Handle search
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
   };
 
-  // Handle status filter
-  const handleStatusFilter = (e) => {
-    setStatusFilter(e.target.value);
-  };
 
   // Handle create customer
   const handleCreateCustomer = async (customerData) => {
@@ -73,10 +72,10 @@ const CustomerManagement = ({ isOpen, onClose }) => {
         setShowForm(false);
         setEditingCustomer(null);
         fetchCustomers(); // Refresh list
-        alert('Customer created successfully!');
+        customerToasts.created();
       }
     } catch (err) {
-      alert(handleAPIError(err, 'Failed to create customer'));
+      customerToasts.createError();
     } finally {
       setFormLoading(false);
     }
@@ -92,10 +91,10 @@ const CustomerManagement = ({ isOpen, onClose }) => {
         setShowForm(false);
         setEditingCustomer(null);
         fetchCustomers(); // Refresh list
-        alert('Customer updated successfully!');
+        customerToasts.updated();
       }
     } catch (err) {
-      alert(handleAPIError(err, 'Failed to update customer'));
+      customerToasts.updateError();
     } finally {
       setFormLoading(false);
     }
@@ -110,10 +109,10 @@ const CustomerManagement = ({ isOpen, onClose }) => {
         
         if (response.success) {
           fetchCustomers(); // Refresh list
-          alert('Customer deleted successfully!');
+          customerToasts.deleted(customerName);
         }
       } catch (err) {
-        alert(handleAPIError(err, 'Failed to delete customer'));
+        customerToasts.deleteError();
       } finally {
         setLoading(false);
       }
@@ -140,12 +139,14 @@ const CustomerManagement = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      title="Customer Management" 
-      size="xl"
-    >
+    <>
+      <Toaster />
+      <Modal 
+        isOpen={isOpen} 
+        onClose={onClose} 
+        title="Customer Management" 
+        size="xl"
+      >
       {showForm ? (
         <CustomerForm
           customer={editingCustomer}
@@ -169,19 +170,6 @@ const CustomerManagement = ({ isOpen, onClose }) => {
                 />
               </div>
               
-              {/* Status Filter */}
-              <div>
-                <select
-                  value={statusFilter}
-                  onChange={handleStatusFilter}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Status</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="Blocked">Blocked</option>
-                </select>
-              </div>
             </div>
             
             {/* Add Customer Button */}
@@ -224,12 +212,6 @@ const CustomerManagement = ({ isOpen, onClose }) => {
                       Location
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Credit Limit
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -269,23 +251,6 @@ const CustomerManagement = ({ isOpen, onClose }) => {
                             {customer.address?.pincode}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {formatters.currency(customer.creditLimit)}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {customer.paymentTerms}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            customer.status === 'Active' ? 'bg-green-100 text-green-800' :
-                            customer.status === 'Inactive' ? 'bg-gray-100 text-gray-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {customer.status}
-                          </span>
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
                             onClick={() => handleEditCustomer(customer)}
@@ -304,7 +269,7 @@ const CustomerManagement = ({ isOpen, onClose }) => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
                         No customers found
                       </td>
                     </tr>
@@ -339,7 +304,8 @@ const CustomerManagement = ({ isOpen, onClose }) => {
           )}
         </div>
       )}
-    </Modal>
+      </Modal>
+    </>
   );
 };
 

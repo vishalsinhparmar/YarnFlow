@@ -57,13 +57,6 @@ export const validateCustomer = [
     .isPostalCode('IN')
     .withMessage('Please provide a valid Indian pincode'),
   
-
-  
-  body('creditLimit')
-    .optional()
-    .isNumeric()
-    .withMessage('Credit limit must be a number'),
-  
   handleValidationErrors
 ];
 

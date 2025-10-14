@@ -8,42 +8,35 @@ const customerSchema = new mongoose.Schema({
   },
   companyName: {
     type: String,
-    required: true,
     trim: true
   },
   contactPerson: {
     type: String,
-    required: true,
     trim: true
   },
   email: {
     type: String,
-    required: true,
     unique: true,
+    sparse: true,
     lowercase: true,
     trim: true
   },
   phone: {
     type: String,
-    required: true,
     trim: true
   },
   address: {
     street: {
-      type: String,
-      required: true
+      type: String
     },
     city: {
-      type: String,
-      required: true
+      type: String
     },
     state: {
-      type: String,
-      required: true
+      type: String
     },
     pincode: {
-      type: String,
-      required: true
+      type: String
     },
     country: {
       type: String,
@@ -57,20 +50,6 @@ const customerSchema = new mongoose.Schema({
   panNumber: {
     type: String,
     trim: true
-  },
-  creditLimit: {
-    type: Number,
-    default: 0
-  },
-  paymentTerms: {
-    type: String,
-    enum: ['Cash', 'Credit-15', 'Credit-30', 'Credit-45', 'Credit-60'],
-    default: 'Credit-30'
-  },
-  status: {
-    type: String,
-    enum: ['Active', 'Inactive', 'Blocked'],
-    default: 'Active'
   },
   notes: {
     type: String,

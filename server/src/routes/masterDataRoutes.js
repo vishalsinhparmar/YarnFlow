@@ -26,14 +26,7 @@ import {
   getMasterDataStats
 } from '../controller/masterDataController.js';
 
-import {
-  validateCustomer,
-  validateCustomerUpdate,
-  validateSupplier,
-  validateSupplierUpdate,
-  validateProduct,
-  validateCategory
-} from '../validators/masterDataValidator.js';
+// Validation imports removed - using flexible validation approach
 
 const router = express.Router();
 
@@ -43,20 +36,20 @@ router.get('/stats', getMasterDataStats);
 // ============ CUSTOMER ROUTES ============
 router.get('/customers', getAllCustomers);
 router.get('/customers/:id', getCustomerById);
-router.post('/customers', validateCustomer, createCustomer);
-router.put('/customers/:id', validateCustomerUpdate, updateCustomer);
+router.post('/customers', createCustomer);
+router.put('/customers/:id', updateCustomer);
 router.delete('/customers/:id', deleteCustomer);
 
 // ============ SUPPLIER ROUTES ============
 router.get('/suppliers', getAllSuppliers);
 router.get('/suppliers/:id', getSupplierById);
-router.post('/suppliers', validateSupplier, createSupplier);
-router.put('/suppliers/:id', validateSupplierUpdate, updateSupplier);
+router.post('/suppliers', createSupplier);
+router.put('/suppliers/:id', updateSupplier);
 router.delete('/suppliers/:id', deleteSupplier);
 
 // ============ CATEGORY ROUTES ============
 router.get('/categories', getAllCategories);
-router.post('/categories', validateCategory, createCategory);
+router.post('/categories', createCategory);
 
 // ============ PRODUCT ROUTES ============
 router.get('/products', getAllProducts);
