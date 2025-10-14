@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { salesOrderAPI, salesOrderUtils } from '../services/salesOrderAPI';
+import { apiRequest } from '../services/common.js';
 
 const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
   const [formData, setFormData] = useState({
@@ -103,9 +104,8 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
 
   const loadCustomers = async () => {
     try {
-      // Load customers from master data API
-      const response = await fetch('http://localhost:3020/api/master-data/customers');
-      const data = await response.json();
+      // Load customers from master data API (centralized base)
+      const data = await apiRequest('/master-data/customers');
       
       if (data.success) {
         setCustomers(data.data || []);
@@ -132,9 +132,8 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
 
   const loadProducts = async () => {
     try {
-      // Load products from master data API
-      const response = await fetch('http://localhost:3020/api/master-data/products');
-      const data = await response.json();
+      // Load products from master data API (centralized base)
+      const data = await apiRequest('/master-data/products');
       
       if (data.success) {
         setProducts(data.data || []);

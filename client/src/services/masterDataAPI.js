@@ -1,32 +1,8 @@
 // Master Data API Service for YarnFlow Frontend
+import { apiRequest as baseRequest } from './common.js';
 
-const API_BASE_URL = 'http://localhost:3020/api/master-data';
-
-// Generic API request handler
-const apiRequest = async (endpoint, options = {}) => {
-  try {
-    const url = `${API_BASE_URL}${endpoint}`;
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    };
-
-    const response = await fetch(url, config);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || `HTTP error! status: ${response.status}`);
-    }
-
-    return data;
-  } catch (error) {
-    console.error('API Request Error:', error);
-    throw error;
-  }
-};
+// Prefix all master data endpoints with '/master-data'
+const apiRequest = (endpoint, options = {}) => baseRequest(`/master-data${endpoint}`, options);
 
 // ============ MASTER DATA STATS ============
 export const getMasterDataStats = async () => {

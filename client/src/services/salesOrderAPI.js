@@ -1,31 +1,7 @@
 // Sales Order API Service
-const API_BASE_URL = 'http://localhost:3020/api';
+import { apiRequest } from './common.js';
 
-// Generic API request handler
-const apiRequest = async (endpoint, options = {}) => {
-  const url = `${API_BASE_URL}${endpoint}`;
-  
-  const config = {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    ...options,
-  };
-
-  try {
-    const response = await fetch(url, config);
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.message || `HTTP error! status: ${response.status}`);
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('API request failed:', error);
-    throw error;
-  }
-};
+// Generic API request handler moved to ./common.js
 
 // ============ SALES ORDER API SERVICE ============
 
@@ -92,36 +68,18 @@ export const salesOrderAPI = {
 
   // Ship sales order
   ship: async (id, shipmentData) => {
-    const response = await fetch(`${API_BASE_URL}/sales-orders/${id}/ship`, {
+    return await apiRequest(`/sales-orders/${id}/ship`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify(shipmentData)
     });
-
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to ship order');
-    }
-    return data;
   },
 
   // Mark as delivered
   markDelivered: async (id, deliveryData) => {
-    const response = await fetch(`${API_BASE_URL}/sales-orders/${id}/deliver`, {
+    return await apiRequest(`/sales-orders/${id}/deliver`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify(deliveryData)
     });
-
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.message || 'Failed to mark as delivered');
-    }
-    return data;
   },
 
   // Cancel sales order

@@ -1,32 +1,7 @@
 // GRN (Goods Receipt Note) API Service
-const API_BASE_URL = 'http://localhost:3020/api';
+import { apiRequest } from './common.js';
 
-// Generic API request handler
-const apiRequest = async (endpoint, options = {}) => {
-  const url = `${API_BASE_URL}${endpoint}`;
-  
-  const config = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  };
-
-  try {
-    const response = await fetch(url, config);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || `HTTP error! status: ${response.status}`);
-    }
-
-    return data;
-  } catch (error) {
-    console.error('API Request Error:', error);
-    throw error;
-  }
-};
+// Generic API request handler moved to ./common.js
 
 // Handle API errors consistently
 export const handleAPIError = (error, defaultMessage = 'An error occurred') => {
