@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { salesOrderAPI, salesOrderUtils } from '../services/salesOrderAPI';
-import { apiRequest } from '../services/common.js';
+import { salesOrderAPI, salesOrderUtils } from '../../services/salesOrderAPI.js';
+import { apiRequest } from '../../services/common.js';
 
 const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
   const [formData, setFormData] = useState({

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import Modal from './Modal';
+import Modal from '../../model/Modal';
 import SupplierForm from './SupplierForm';
-import { supplierAPI, formatters, handleAPIError } from '../services/masterDataAPI';
+import { supplierAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
 
 const SupplierManagement = ({ isOpen, onClose }) => {
   const [suppliers, setSuppliers] = useState([]);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { grnUtils } from '../services/grnAPI';
+import { grnUtils } from '../../services/grnAPI';
 
 const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
   const [loading, setLoading] = useState(false);

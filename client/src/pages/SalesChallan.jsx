@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { salesChallanAPI, salesChallanUtils } from '../services/salesChallanAPI';
-import CreateChallanModal from '../components/CreateChallanModal';
-import ChallanDetailModal from '../components/ChallanDetailModal';
-import ChallanStatusUpdateModal from '../components/ChallanStatusUpdateModal';
+import CreateChallanModal from '../components/SalesChallan/CreateChallanModal';
+import ChallanDetailModal from '../components/SalesChallan/ChallanDetailModal';
+import ChallanStatusUpdateModal from '../components/SalesChallan/ChallanStatusUpdateModal';
 
 const SalesChallan = () => {
   const location = useLocation();
@@ -81,11 +81,14 @@ const SalesChallan = () => {
       }
 
       if (challansRes.success) {
-        setChallans(challansRes.data);
-        setPagination(challansRes.pagination);
+        setChallans(challansRes?.data || []);
+        setPagination(challansRes?.pagination || {});
+      } else {
+        setChallans([]);
       }
     } catch (err) {
       setError(err.message || 'Failed to fetch data');
+      setChallans([]); // Set empty array on error
       console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
@@ -352,7 +355,7 @@ const SalesChallan = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {challans.map((challan) => (
+                {challans && challans.length > 0 ? challans.map((challan) => (
                   <tr key={challan._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {challan.challanNumber}
@@ -388,7 +391,13 @@ const SalesChallan = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                      No sales challans found
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

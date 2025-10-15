@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { salesChallanUtils } from '../services/salesChallanAPI';
+import { salesChallanUtils } from '../../services/salesChallanAPI';
 
 const ChallanStatusUpdateModal = ({ isOpen, onClose, challan, onSubmit }) => {
   const [formData, setFormData] = useState({

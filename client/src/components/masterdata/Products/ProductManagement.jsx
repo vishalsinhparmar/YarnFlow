@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import Modal from './Modal';
+import Modal from '../../../components/model/Modal';
 import ProductForm from './ProductForm';
-import { productAPI, categoryAPI, supplierAPI, formatters, handleAPIError } from '../services/masterDataAPI';
+import { productAPI, categoryAPI, supplierAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
 
 const ProductManagement = ({ isOpen, onClose }) => {
   const [products, setProducts] = useState([]);

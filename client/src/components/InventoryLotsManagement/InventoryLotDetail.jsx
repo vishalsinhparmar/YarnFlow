@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { inventoryAPI, inventoryUtils } from '../services/inventoryAPI';
+import { inventoryAPI, inventoryUtils } from '../../services/inventoryAPI';
 
 const InventoryLotDetail = ({ isOpen, onClose, lot, onRefresh }) => {
   const [lotDetail, setLotDetail] = useState(null);

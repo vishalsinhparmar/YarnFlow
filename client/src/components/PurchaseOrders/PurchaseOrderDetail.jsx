@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { poUtils } from '../services/purchaseOrderAPI';
+import { poUtils } from '../../services/purchaseOrderAPI';
 
 const PurchaseOrderDetail = ({ purchaseOrder, onStatusUpdate, onClose }) => {
   const [loading, setLoading] = useState(false);

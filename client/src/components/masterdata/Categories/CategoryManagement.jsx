@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import Modal from './Modal';
+import Modal from '../../model/Modal';
 import CategoryForm from './CategoryForm';
-import { categoryAPI, handleAPIError } from '../services/masterDataAPI';
+import { categoryAPI, handleAPIError } from '../../../services/masterDataAPI';
 
 const CategoryManagement = ({ isOpen, onClose }) => {
   const [categories, setCategories] = useState([]);

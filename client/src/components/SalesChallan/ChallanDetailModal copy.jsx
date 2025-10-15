@@ -1,5 +1,4 @@
-import React from 'react';
-import { salesChallanUtils } from '../services/salesChallanAPI';
+import { salesChallanUtils } from '../../services/salesChallanAPI';
 
 const ChallanDetailModal = ({ isOpen, onClose, challan, onStatusUpdate }) => {
   if (!isOpen || !challan) return null;

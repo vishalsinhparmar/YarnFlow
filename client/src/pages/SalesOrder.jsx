@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { salesOrderAPI, salesOrderUtils } from '../services/salesOrderAPI';
-import NewSalesOrderModal from '../components/NewSalesOrderModal';
-import SalesOrderDetailModal from '../components/SalesOrderDetailModal';
+import NewSalesOrderModal from '../components/SalesOrders/NewSalesOrderModal';
+import SalesOrderDetailModal from '../components/SalesOrders/SalesOrderDetailModal';
 import ShipOrderModal from '../components/ShipOrderModal';
 import StatusUpdateModal from '../components/StatusUpdateModal';
 
@@ -334,7 +334,7 @@ const SalesOrder = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {salesOrders.length > 0 ? (
+                {salesOrders && salesOrders.length > 0 ? (
                   salesOrders.map((order) => (
                     <tr key={order._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">

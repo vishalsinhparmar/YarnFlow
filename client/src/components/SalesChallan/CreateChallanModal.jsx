@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { salesOrderAPI } from '../services/salesOrderAPI';
+import { salesOrderAPI } from '../../services/salesOrderAPI';
 
 const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = null }) => {
   const [formData, setFormData] = useState({

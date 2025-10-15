@@ -12,9 +12,7 @@ const ENV_BASE = import.meta?.env?.VITE_API_BASE_URL;
 // - Else default to local dev backend
 export const API_BASE_URL =
   ENV_BASE ||
-  (typeof window !== 'undefined' && window.location?.origin
-    ? `${window.location.origin}/api`
-    : 'http://localhost:3050/api');
+  'http://localhost:3050/api';
 
 export const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;

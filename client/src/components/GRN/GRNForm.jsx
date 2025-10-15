@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { purchaseOrderAPI } from '../services/purchaseOrderAPI';
-import masterDataAPI from '../services/masterDataAPI';
+import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
+import masterDataAPI from '../../services/masterDataAPI';
 
 const GRNForm = ({ grn, onSubmit, onCancel }) => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);

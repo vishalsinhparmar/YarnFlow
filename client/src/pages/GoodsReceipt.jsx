@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { grnAPI, grnUtils } from '../services/grnAPI';
-import Modal from '../components/Modal';
-import GRNForm from '../components/GRNForm';
-import GRNDetail from '../components/GRNDetail';
-import GRNQualityCheck from '../components/GRNQualityCheck';
+import Modal from '../components/model/Modal';
+import GRNForm from '../components/GRN/GRNForm';
+import GRNDetail from '../components/GRN/GRNDetail';
+import GRNQualityCheck from '../components/GRN/GRNQualityCheck';
 
 const GoodsReceipt = () => {
   const [grns, setGRNs] = useState([]);
@@ -65,11 +65,12 @@ const GoodsReceipt = () => {
       };
       
       const response = await grnAPI.getAll(params);
-      setGRNs(response.data);
-      setPagination(response.pagination);
+      setGRNs(response?.data || []);
+      setPagination(response?.pagination || {});
       setError(null);
     } catch (err) {
       setError('Failed to fetch GRNs');
+      setGRNs([]); // Set empty array on error
       console.error('Error fetching GRNs:', err);
     } finally {
       setLoading(false);
@@ -291,7 +292,7 @@ const GoodsReceipt = () => {
               Retry
             </button>
           </div>
-        ) : grns.length === 0 ? (
+        ) : !grns || grns.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-gray-600">No GRNs found</p>
             <button 

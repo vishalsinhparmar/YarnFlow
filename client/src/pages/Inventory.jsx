@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { inventoryAPI, inventoryUtils } from '../services/inventoryAPI';
 import StockMovementModal from '../components/StockMovementModal';
 import StockTransferModal from '../components/StockTransferModal';
-import InventoryLotDetail from '../components/InventoryLotDetail';
+import InventoryLotDetail from '../components/InventoryLotsManagement/InventoryLotDetail';
 
 const Inventory = () => {
   const [inventoryStats, setInventoryStats] = useState(null);

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useMasterData } from '../hooks/useMasterData';
 import { formatters } from '../services/masterDataAPI';
-import CustomerManagement from '../components/CustomerManagement';
-import SupplierManagement from '../components/SupplierManagement';
-import CategoryManagement from '../components/CategoryManagement';
-import ProductManagement from '../components/ProductManagement';
+import CustomerManagement from '../components/masterdata/Customers/CustomerManagement';
+import SupplierManagement from '../components/masterdata/Suppliers/SupplierManagement';
+import CategoryManagement from '../components/masterdata/Categories/CategoryManagement';
+import ProductManagement from '../components/masterdata/Products/ProductManagement';
 
 const MasterData = () => {
   const {

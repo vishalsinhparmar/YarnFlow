@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
-import Modal from './Modal';
+import Modal from '../../model/Modal';
 import CustomerForm from './CustomerForm';
-import { customerAPI, formatters, handleAPIError } from '../services/masterDataAPI';
-import useToast from '../hooks/useToast';
+import { customerAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
+import useToast from '../../../hooks/useToast';
 
 const CustomerManagement = ({ isOpen, onClose }) => {
   const { customerToasts } = useToast();

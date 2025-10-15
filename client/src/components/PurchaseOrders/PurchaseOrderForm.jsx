@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useDropdownOptions } from '../hooks/useMasterData';
-import masterDataAPI from '../services/masterDataAPI';
+import { useDropdownOptions } from '../../hooks/useMasterData';
+import masterDataAPI from '../../services/masterDataAPI';
 
 const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const { options, loading: optionsLoading } = useDropdownOptions();

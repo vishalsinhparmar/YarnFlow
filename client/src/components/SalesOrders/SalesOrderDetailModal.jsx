@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { salesOrderUtils } from '../services/salesOrderAPI';
+import { salesOrderUtils } from '../../services/salesOrderAPI';
 
 const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
   const [activeTab, setActiveTab] = useState('details');

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { purchaseOrderAPI, poUtils } from '../services/purchaseOrderAPI';
-import Modal from '../components/Modal';
-import PurchaseOrderForm from '../components/PurchaseOrderForm';
-import PurchaseOrderDetail from '../components/PurchaseOrderDetail';
-import GoodsReceiptForm from '../components/GoodsReceiptForm';
+import Modal from '../components/model/Modal';
+import PurchaseOrderForm from '../components/PurchaseOrders/PurchaseOrderForm';
+import PurchaseOrderDetail from '../components/PurchaseOrders/PurchaseOrderDetail';
+import GoodsReceiptForm from '../components/GRN/GoodsReceiptForm';
 
 const PurchaseOrder = () => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -318,7 +318,8 @@ const PurchaseOrder = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {purchaseOrders.map((po) => (
+                  {purchaseOrders && purchaseOrders.length > 0 ? (
+                    purchaseOrders.map((po) => (
                     <tr key={po._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{po.poNumber}</div>
@@ -369,7 +370,14 @@ const PurchaseOrder = () => {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                        No purchase orders found
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
