@@ -156,7 +156,7 @@ const MasterData = () => {
             </button>
           </div>
           <div className="space-y-4">
-            {customers.length > 0 ? (
+            {customers && customers.length > 0 ? (
               customers.slice(0, 3).map((customer) => {
                 const initials = customer.companyName
                   .split(' ')
@@ -268,7 +268,7 @@ const MasterData = () => {
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {categories.length > 0 ? (
+          {categories && categories.length > 0 ? (
             categories.map((category) => {
               const categoryColors = {
                 'Cotton Yarn': 'bg-green-100 text-green-800',

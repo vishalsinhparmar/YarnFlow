@@ -58,7 +58,26 @@ const SalesChallan = () => {
       ]);
 
       if (statsRes.success) {
-        setStats(statsRes.data);
+        setStats(statsRes?.data || {
+          overview: {
+            totalChallans: 0,
+            thisMonth: 0,
+            inTransit: 0,
+            deliveredThisMonth: 0
+          },
+          statusBreakdown: []
+        });
+      } else {
+        // Set fallback stats on API failure
+        setStats({
+          overview: {
+            totalChallans: 0,
+            thisMonth: 0,
+            inTransit: 0,
+            deliveredThisMonth: 0
+          },
+          statusBreakdown: []
+        });
       }
 
       if (challansRes.success) {
@@ -139,7 +158,7 @@ const SalesChallan = () => {
 
   // Get status breakdown for overview
   const getStatusCount = (status) => {
-    const statusData = stats.statusBreakdown.find(s => s._id === status);
+    const statusData = stats?.statusBreakdown?.find(s => s._id === status);
     return statusData ? statusData.count : 0;
   };
 
@@ -174,7 +193,7 @@ const SalesChallan = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Challans</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.overview.totalChallans}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.overview?.totalChallans || 0}</p>
             </div>
             <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center">
               <span className="text-teal-600 text-xl">🚚</span>
@@ -186,7 +205,7 @@ const SalesChallan = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">In Transit</p>
-              <p className="text-2xl font-bold text-orange-600">{stats.overview.inTransit}</p>
+              <p className="text-2xl font-bold text-orange-600">{stats?.overview?.inTransit || 0}</p>
             </div>
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
               <span className="text-orange-600 text-xl">🚛</span>
@@ -198,7 +217,7 @@ const SalesChallan = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Delivered</p>
-              <p className="text-2xl font-bold text-green-600">{stats.overview.deliveredThisMonth}</p>
+              <p className="text-2xl font-bold text-green-600">{stats?.overview?.deliveredThisMonth || 0}</p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <span className="text-green-600 text-xl">✅</span>
@@ -210,7 +229,7 @@ const SalesChallan = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">This Month</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.overview.thisMonth}</p>
+              <p className="text-2xl font-bold text-blue-600">{stats?.overview?.thisMonth || 0}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-blue-600 text-xl">📅</span>

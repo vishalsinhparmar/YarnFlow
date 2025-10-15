@@ -33,9 +33,23 @@ const PurchaseOrder = () => {
   const fetchStats = async () => {
     try {
       const response = await purchaseOrderAPI.getStats();
-      setStats(response.data);
+      setStats(response?.data || {
+        totalPOs: 0,
+        statusBreakdown: [],
+        overduePOs: 0,
+        monthlyValue: 0,
+        pendingApprovals: 0
+      });
     } catch (err) {
       console.error('Error fetching PO stats:', err);
+      // Set fallback stats on error
+      setStats({
+        totalPOs: 0,
+        statusBreakdown: [],
+        overduePOs: 0,
+        monthlyValue: 0,
+        pendingApprovals: 0
+      });
     }
   };
 
@@ -138,7 +152,7 @@ const PurchaseOrder = () => {
 
   // Get status counts for display
   const getStatusCount = (status) => {
-    const statusItem = stats.statusBreakdown.find(item => item._id === status);
+    const statusItem = stats?.statusBreakdown?.find(item => item._id === status);
     return statusItem ? statusItem.count : 0;
   };
 
@@ -166,7 +180,7 @@ const PurchaseOrder = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total POs</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalPOs}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.totalPOs || 0}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-blue-600 text-xl">📋</span>
@@ -205,7 +219,7 @@ const PurchaseOrder = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Total Value</p>
               <p className="text-2xl font-bold text-gray-900">
-                {poUtils.formatCurrency(stats.monthlyValue)}
+                {poUtils.formatCurrency(stats?.monthlyValue || 0)}
               </p>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">

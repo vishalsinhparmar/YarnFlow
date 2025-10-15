@@ -30,11 +30,15 @@ export const useMasterData = () => {
     try {
       setLoading(true);
       const response = await masterDataAPI.customers.getAll(params);
-      setCustomers(response.data);
+      // Ensure we always set an array, even if response.data is undefined
+      setCustomers(response?.data || []);
       setError(null);
       return response;
     } catch (err) {
+      console.error('Error fetching customers:', err);
       setError(handleAPIError(err, 'Failed to fetch customers'));
+      // Set empty array on error to prevent undefined issues
+      setCustomers([]);
       return null;
     } finally {
       setLoading(false);
@@ -46,11 +50,13 @@ export const useMasterData = () => {
     try {
       setLoading(true);
       const response = await masterDataAPI.suppliers.getAll(params);
-      setSuppliers(response.data);
+      setSuppliers(response?.data || []);
       setError(null);
       return response;
     } catch (err) {
+      console.error('Error fetching suppliers:', err);
       setError(handleAPIError(err, 'Failed to fetch suppliers'));
+      setSuppliers([]);
       return null;
     } finally {
       setLoading(false);
@@ -62,11 +68,13 @@ export const useMasterData = () => {
     try {
       setLoading(true);
       const response = await masterDataAPI.categories.getAll();
-      setCategories(response.data);
+      setCategories(response?.data || []);
       setError(null);
       return response;
     } catch (err) {
+      console.error('Error fetching categories:', err);
       setError(handleAPIError(err, 'Failed to fetch categories'));
+      setCategories([]);
       return null;
     } finally {
       setLoading(false);

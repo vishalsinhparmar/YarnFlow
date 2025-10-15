@@ -33,9 +33,23 @@ const GoodsReceipt = () => {
   const fetchStats = async () => {
     try {
       const response = await grnAPI.getStats();
-      setStats(response.data);
+      setStats(response?.data || {
+        totalGRNs: 0,
+        statusBreakdown: [],
+        pendingReview: 0,
+        thisMonth: 0,
+        monthlyValue: 0
+      });
     } catch (err) {
       console.error('Error fetching GRN stats:', err);
+      // Set fallback stats on error
+      setStats({
+        totalGRNs: 0,
+        statusBreakdown: [],
+        pendingReview: 0,
+        thisMonth: 0,
+        monthlyValue: 0
+      });
     }
   };
 
@@ -153,7 +167,7 @@ const GoodsReceipt = () => {
 
   // Get status counts for display
   const getStatusCount = (status) => {
-    const statusItem = stats.statusBreakdown.find(item => item._id === status);
+    const statusItem = stats?.statusBreakdown?.find(item => item._id === status);
     return statusItem ? statusItem.count : 0;
   };
 
@@ -181,7 +195,7 @@ const GoodsReceipt = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total GRNs</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalGRNs}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.totalGRNs || 0}</p>
             </div>
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
               <span className="text-orange-600 text-xl">📦</span>
@@ -193,7 +207,7 @@ const GoodsReceipt = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Pending Review</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.pendingReview}</p>
+              <p className="text-2xl font-bold text-yellow-600">{stats?.pendingReview || 0}</p>
             </div>
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
               <span className="text-yellow-600 text-xl">👥</span>
@@ -217,7 +231,7 @@ const GoodsReceipt = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">This Month</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.thisMonth}</p>
+              <p className="text-2xl font-bold text-blue-600">{stats?.thisMonth || 0}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-blue-600 text-xl">📅</span>
