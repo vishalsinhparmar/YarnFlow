@@ -4,7 +4,7 @@
 //   VITE_API_BASE_URL=https://api.yourdomain.com/api
 //   VITE_API_BASE_URL=http://localhost:3020/api
 
-const ENV_BASE = import.meta?.env?.VITE_API_BASE_URL;
+const ENV_BASE = "https://yarnflow-production.up.railway.app/api" | import.meta?.env?.VITE_API_BASE_URL;
 
 // Fallback logic:
 // - If ENV_BASE exists, use it
@@ -12,7 +12,7 @@ const ENV_BASE = import.meta?.env?.VITE_API_BASE_URL;
 // - Else default to local dev backend
 export const API_BASE_URL =
   ENV_BASE ||
-  'http://localhost:3050/api';
+  'https://yarnflow-production.up.railway.app/api';
 
 export const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
