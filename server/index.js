@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './db.js';
 import authRoutes from './src/routes/authRoutes.js';
+import dashboardRoutes from './src/routes/dashboardRoutes.js';
 import masterDataRoutes from './src/routes/masterDataRoutes.js';
 import purchaseOrderRoutes from './src/routes/purchaseOrderRoutes.js';
 import grnRoutes from './src/routes/grnRoutes.js';
@@ -60,6 +61,7 @@ app.get('/', (req, res) => {
 
 // API Routes
 app.use('/auth', authRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/master-data', masterDataRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/grn', grnRoutes);
