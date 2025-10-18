@@ -250,7 +250,7 @@ const ProductForm = ({ product, categories, suppliers, onSubmit, onCancel, loadi
             <option value="">Select Supplier</option>
             {suppliers.map(supplier => (
               <option key={supplier._id} value={supplier._id}>
-                {supplier.companyName} ({supplier.supplierType})
+                {supplier.companyName}
               </option>
             ))}
           </select>

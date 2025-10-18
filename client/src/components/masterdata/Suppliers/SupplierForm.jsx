@@ -15,17 +15,6 @@ const SupplierForm = ({ supplier, onSubmit, onCancel, loading }) => {
     },
     gstNumber: '',
     panNumber: '',
-    supplierType: 'Cotton Yarn',
-    bankDetails: {
-      bankName: '',
-      accountNumber: '',
-      ifscCode: '',
-      accountHolderName: ''
-    },
-    paymentTerms: 'Credit-30',
-    verificationStatus: 'Pending',
-    status: 'Active',
-    rating: 3,
     notes: ''
   });
 
@@ -48,17 +37,6 @@ const SupplierForm = ({ supplier, onSubmit, onCancel, loading }) => {
         },
         gstNumber: supplier.gstNumber || '',
         panNumber: supplier.panNumber || '',
-        supplierType: supplier.supplierType || 'Cotton Yarn',
-        bankDetails: {
-          bankName: supplier.bankDetails?.bankName || '',
-          accountNumber: supplier.bankDetails?.accountNumber || '',
-          ifscCode: supplier.bankDetails?.ifscCode || '',
-          accountHolderName: supplier.bankDetails?.accountHolderName || ''
-        },
-        paymentTerms: supplier.paymentTerms || 'Credit-30',
-        verificationStatus: supplier.verificationStatus || 'Pending',
-        status: supplier.status || 'Active',
-        rating: supplier.rating || 3,
         notes: supplier.notes || ''
       });
     }
@@ -74,15 +52,6 @@ const SupplierForm = ({ supplier, onSubmit, onCancel, loading }) => {
         address: {
           ...prev.address,
           [addressField]: value
-        }
-      }));
-    } else if (name.startsWith('bankDetails.')) {
-      const bankField = name.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
-        bankDetails: {
-          ...prev.bankDetails,
-          [bankField]: value
         }
       }));
     } else {
@@ -149,30 +118,6 @@ const SupplierForm = ({ supplier, onSubmit, onCancel, loading }) => {
       onSubmit(formData);
     }
   };
-
-  const supplierTypes = [
-    'Cotton Yarn', 'Polyester', 'Blended Yarn', 'Raw Cotton', 'Chemicals', 'Other'
-  ];
-
-  const paymentTermsOptions = [
-    { value: 'Advance', label: 'Advance' },
-    { value: 'COD', label: 'Cash on Delivery' },
-    { value: 'Credit-15', label: 'Credit 15 Days' },
-    { value: 'Credit-30', label: 'Credit 30 Days' },
-    { value: 'Credit-45', label: 'Credit 45 Days' }
-  ];
-
-  const verificationStatusOptions = [
-    { value: 'Pending', label: 'Pending' },
-    { value: 'Verified', label: 'Verified' },
-    { value: 'Rejected', label: 'Rejected' }
-  ];
-
-  const statusOptions = [
-    { value: 'Active', label: 'Active' },
-    { value: 'Inactive', label: 'Inactive' },
-    { value: 'Blocked', label: 'Blocked' }
-  ];
 
   const indianStates = [
     'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -264,41 +209,6 @@ const SupplierForm = ({ supplier, onSubmit, onCancel, loading }) => {
           {errors.phone && (
             <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
           )}
-        </div>
-      </div>
-
-      {/* Supplier Type and Rating */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Supplier Type *
-          </label>
-          <select
-            name="supplierType"
-            value={formData.supplierType}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            {supplierTypes.map(type => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Rating (1-5)
-          </label>
-          <select
-            name="rating"
-            value={formData.rating}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            {[1, 2, 3, 4, 5].map(rating => (
-              <option key={rating} value={rating}>{rating} Star{rating > 1 ? 's' : ''}</option>
-            ))}
-          </select>
         </div>
       </div>
 
@@ -419,129 +329,6 @@ const SupplierForm = ({ supplier, onSubmit, onCancel, loading }) => {
             placeholder="AAAAA0000A"
             maxLength="10"
           />
-        </div>
-      </div>
-
-      {/* Bank Details */}
-      <div className="space-y-4">
-        <h4 className="text-md font-medium text-gray-900">Bank Details</h4>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Bank Name
-            </label>
-            <input
-              type="text"
-              name="bankDetails.bankName"
-              value={formData.bankDetails.bankName}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="State Bank of India"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Account Holder Name
-            </label>
-            <input
-              type="text"
-              name="bankDetails.accountHolderName"
-              value={formData.bankDetails.accountHolderName}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Account holder name"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Account Number
-            </label>
-            <input
-              type="text"
-              name="bankDetails.accountNumber"
-              value={formData.bankDetails.accountNumber}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="1234567890"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              IFSC Code
-            </label>
-            <input
-              type="text"
-              name="bankDetails.ifscCode"
-              value={formData.bankDetails.ifscCode}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="SBIN0001234"
-              maxLength="11"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Status and Terms */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Payment Terms
-          </label>
-          <select
-            name="paymentTerms"
-            value={formData.paymentTerms}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            {paymentTermsOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Verification Status
-          </label>
-          <select
-            name="verificationStatus"
-            value={formData.verificationStatus}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            {verificationStatusOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Status
-          </label>
-          <select
-            name="status"
-            value={formData.status}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            {statusOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 

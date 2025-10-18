@@ -11,8 +11,7 @@ const SupplierManagement = ({ isOpen, onClose }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [verificationFilter, setVerificationFilter] = useState('');
+  // Removed type and verification filters
   const [pagination, setPagination] = useState({
     current: 1,
     pages: 1,
@@ -32,8 +31,7 @@ const SupplierManagement = ({ isOpen, onClose }) => {
       };
       
       if (searchTerm) queryParams.search = searchTerm;
-      if (typeFilter) queryParams.supplierType = typeFilter;
-      if (verificationFilter) queryParams.verificationStatus = verificationFilter;
+      // No additional filters
       
       const response = await supplierAPI.getAll(queryParams);
       
@@ -53,22 +51,14 @@ const SupplierManagement = ({ isOpen, onClose }) => {
     if (isOpen) {
       fetchSuppliers();
     }
-  }, [isOpen, searchTerm, typeFilter, verificationFilter]);
+  }, [isOpen, searchTerm]);
 
   // Handle search
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
   };
 
-  // Handle type filter
-  const handleTypeFilter = (e) => {
-    setTypeFilter(e.target.value);
-  };
-
-  // Handle verification filter
-  const handleVerificationFilter = (e) => {
-    setVerificationFilter(e.target.value);
-  };
+  // Filters removed
 
   // Handle create supplier
   const handleCreateSupplier = async (supplierData) => {
@@ -146,8 +136,7 @@ const SupplierManagement = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const supplierTypes = ['Cotton Yarn', 'Polyester', 'Blended Yarn', 'Raw Cotton', 'Chemicals', 'Other'];
-  const verificationStatuses = ['Pending', 'Verified', 'Rejected'];
+  // Removed supplier types and verification statuses
 
   return (
     <Modal 
@@ -179,33 +168,6 @@ const SupplierManagement = ({ isOpen, onClose }) => {
                 />
               </div>
               
-              {/* Type Filter */}
-              <div>
-                <select
-                  value={typeFilter}
-                  onChange={handleTypeFilter}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">All Types</option>
-                  {supplierTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Verification Filter */}
-              <div>
-                <select
-                  value={verificationFilter}
-                  onChange={handleVerificationFilter}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">All Status</option>
-                  {verificationStatuses.map(status => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
-              </div>
             </div>
             
             {/* Add Supplier Button */}
@@ -244,17 +206,9 @@ const SupplierManagement = ({ isOpen, onClose }) => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contact
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
+                    
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Location
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Rating
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -289,55 +243,11 @@ const SupplierManagement = ({ isOpen, onClose }) => {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                            {supplier.supplierType}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
                             {supplier.address?.city}, {supplier.address?.state}
                           </div>
                           <div className="text-sm text-gray-500">
                             {supplier.address?.pincode}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="text-sm text-gray-900">
-                              {supplier.rating}/5
-                            </div>
-                            <div className="ml-2 flex">
-                              {[...Array(5)].map((_, i) => (
-                                <span
-                                  key={i}
-                                  className={`text-sm ${
-                                    i < supplier.rating ? 'text-yellow-400' : 'text-gray-300'
-                                  }`}
-                                >
-                                  ★
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="space-y-1">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              supplier.verificationStatus === 'Verified' ? 'bg-green-100 text-green-800' :
-                              supplier.verificationStatus === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {supplier.verificationStatus}
-                            </span>
-                            <div>
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                supplier.status === 'Active' ? 'bg-green-100 text-green-800' :
-                                supplier.status === 'Inactive' ? 'bg-gray-100 text-gray-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {supplier.status}
-                              </span>
-                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -358,7 +268,7 @@ const SupplierManagement = ({ isOpen, onClose }) => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
                         No suppliers found
                       </td>
                     </tr>

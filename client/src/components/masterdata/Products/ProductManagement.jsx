@@ -321,9 +321,6 @@ const ProductManagement = ({ isOpen, onClose }) => {
                             <div className="text-sm text-gray-900">
                               {product.supplier?.companyName || 'N/A'}
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {product.supplier?.supplierType}
-                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">

@@ -60,10 +60,7 @@ const sampleSuppliers = [
       pincode: '400001',
       country: 'India'
     },
-    gstNumber: '27ABCDE1234F1Z5',
-    supplierType: 'Cotton Yarn',
-    verificationStatus: 'Verified',
-    rating: 4
+    gstNumber: '27ABCDE1234F1Z5'
   },
   {
     companyName: 'XYZ Cotton Mills',
@@ -77,10 +74,7 @@ const sampleSuppliers = [
       pincode: '380001',
       country: 'India'
     },
-    gstNumber: '24XYZAB5678G2Z1',
-    supplierType: 'Cotton Yarn',
-    verificationStatus: 'Verified',
-    rating: 5
+    gstNumber: '24XYZAB5678G2Z1'
   },
   {
     companyName: 'Polyester Mills Inc.',
@@ -94,10 +88,7 @@ const sampleSuppliers = [
       pincode: '395001',
       country: 'India'
     },
-    gstNumber: '24POLYB9012H3Z2',
-    supplierType: 'Polyester',
-    verificationStatus: 'Pending',
-    rating: 3
+    gstNumber: '24POLYB9012H3Z2'
   }
 ];
 
