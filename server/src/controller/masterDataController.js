@@ -174,7 +174,7 @@ export const deleteCustomer = async (req, res) => {
 // Get all suppliers
 export const getAllSuppliers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, supplierType, verificationStatus } = req.query;
+    const { page = 1, limit = 10, search } = req.query;
     
     let query = {};
     
@@ -184,14 +184,6 @@ export const getAllSuppliers = async (req, res) => {
         { contactPerson: { $regex: search, $options: 'i' } },
         { supplierCode: { $regex: search, $options: 'i' } }
       ];
-    }
-    
-    if (supplierType) {
-      query.supplierType = supplierType;
-    }
-    
-    if (verificationStatus) {
-      query.verificationStatus = verificationStatus;
     }
     
     const suppliers = await Supplier.find(query)
@@ -414,7 +406,7 @@ export const getAllProducts = async (req, res) => {
     
     const products = await Product.find(query)
       .populate('category', 'categoryName categoryType')
-      .populate('supplier', 'companyName supplierCode supplierType')
+      .populate('supplier', 'companyName supplierCode')
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
@@ -485,7 +477,7 @@ export const getMasterDataStats = async (req, res) => {
       Product.countDocuments(),
       Category.countDocuments(),
       Customer.countDocuments({ status: 'Active' }),
-      Supplier.countDocuments({ verificationStatus: 'Verified' }),
+      Supplier.countDocuments(),
       Product.countDocuments({ 'inventory.availableStock': { $lte: 10 } })
     ]);
     

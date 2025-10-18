@@ -83,9 +83,7 @@ export const validateSupplier = [
     .isMobilePhone('en-IN')
     .withMessage('Please provide a valid Indian phone number'),
   
-  body('supplierType')
-    .isIn(['Cotton Yarn', 'Polyester', 'Blended Yarn', 'Raw Cotton', 'Chemicals', 'Other'])
-    .withMessage('Please select a valid supplier type'),
+  // supplierType removed
   
   body('address.street')
     .trim()
@@ -106,10 +104,7 @@ export const validateSupplier = [
     .isPostalCode('IN')
     .withMessage('Please provide a valid Indian pincode'),
   
-  body('rating')
-    .optional()
-    .isInt({ min: 1, max: 5 })
-    .withMessage('Rating must be between 1 and 5'),
+  // rating removed
   
   handleValidationErrors
 ];
@@ -252,15 +247,8 @@ export const validateSupplierUpdate = [
     .isMobilePhone('en-IN')
     .withMessage('Please provide a valid Indian phone number'),
   
-  body('supplierType')
-    .optional()
-    .isIn(['Cotton Yarn', 'Polyester', 'Blended Yarn', 'Raw Cotton', 'Chemicals', 'Other'])
-    .withMessage('Please select a valid supplier type'),
-  
-  body('rating')
-    .optional()
-    .isInt({ min: 1, max: 5 })
-    .withMessage('Rating must be between 1 and 5'),
+  // supplierType removed
+  // rating removed
   
   handleValidationErrors
 ];
