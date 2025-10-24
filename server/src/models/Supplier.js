@@ -58,38 +58,6 @@ const supplierSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  bankDetails: {
-    bankName: String,
-    accountNumber: String,
-    ifscCode: String,
-    accountHolderName: String
-  },
-  supplierType: {
-    type: String,
-    enum: ['Cotton Yarn', 'Polyester', 'Blended Yarn', 'Raw Cotton', 'Chemicals', 'Other'],
-    required: true
-  },
-  paymentTerms: {
-    type: String,
-    enum: ['Advance', 'COD', 'Credit-15', 'Credit-30', 'Credit-45'],
-    default: 'Credit-30'
-  },
-  verificationStatus: {
-    type: String,
-    enum: ['Pending', 'Verified', 'Rejected'],
-    default: 'Pending'
-  },
-  status: {
-    type: String,
-    enum: ['Active', 'Inactive', 'Blocked'],
-    default: 'Active'
-  },
-  rating: {
-    type: Number,
-    min: 1,
-    max: 5,
-    default: 3
-  },
   notes: {
     type: String,
     trim: true

@@ -92,7 +92,7 @@ const MasterData = () => {
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Suppliers</h3>
           <p className="text-sm text-gray-600 mb-3">
-            {stats?.suppliers?.verified || 0} verified suppliers
+            Total suppliers count
           </p>
           <button 
             onClick={() => setShowSupplierManagement(true)}
@@ -218,12 +218,6 @@ const MasterData = () => {
                   .substring(0, 2)
                   .toUpperCase();
                 
-                const statusColor = {
-                  'Verified': 'text-green-600',
-                  'Pending': 'text-yellow-600',
-                  'Rejected': 'text-red-600'
-                };
-                
                 return (
                   <div key={supplier._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center">
@@ -232,12 +226,10 @@ const MasterData = () => {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-900">{supplier.companyName}</p>
-                        <p className="text-xs text-gray-500">{supplier.supplierType}</p>
+                        <p className="text-xs text-gray-500">{supplier.address?.city}, {supplier.address?.state}</p>
                       </div>
                     </div>
-                    <span className={`text-xs font-medium ${statusColor[supplier.verificationStatus] || 'text-gray-400'}`}>
-                      {supplier.verificationStatus}
-                    </span>
+                    <span className="text-xs font-medium text-gray-400">Supplier</span>
                   </div>
                 );
               })
