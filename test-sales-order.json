@@ -1,0 +1,20 @@
+{
+  "customer": "507f1f77bcf86cd799439011",
+  "expectedDeliveryDate": "2025-10-25",
+  "items": [
+    {
+      "product": "507f1f77bcf86cd799439012",
+      "productName": "Test Product",
+      "productCode": "TEST001",
+      "orderedQuantity": 10,
+      "unit": "Pieces",
+      "unitPrice": 100,
+      "taxRate": 18
+    }
+  ],
+  "customerPONumber": "PO123",
+  "salesPerson": "John Doe",
+  "customerNotes": "Test order",
+  "internalNotes": "Internal test",
+  "createdBy": "Admin"
+}

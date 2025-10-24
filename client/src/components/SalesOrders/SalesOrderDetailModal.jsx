@@ -91,20 +91,6 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                       </div>
                     )}
                     <div className="flex justify-between">
-                      <span className="text-sm font-medium text-gray-600">Priority:</span>
-                      <span className={`text-sm px-2 py-1 rounded-full ${salesOrderUtils.getPriorityColor(order.priority)}`}>
-                        {salesOrderUtils.getPriorityIcon(order.priority)} {order.priority}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-gray-600">Order Type:</span>
-                      <span className="text-sm text-gray-900">{order.orderType}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-gray-600">Payment Terms:</span>
-                      <span className="text-sm text-gray-900">{order.paymentTerms}</span>
-                    </div>
-                    <div className="flex justify-between">
                       <span className="text-sm font-medium text-gray-600">Payment Status:</span>
                       <span className={`text-sm px-2 py-1 rounded-full ${salesOrderUtils.getPaymentStatusColor(order.paymentStatus)}`}>
                         {order.paymentStatus}
@@ -141,29 +127,6 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                         </p>
                       </div>
                     )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Financial Summary */}
-              <div className="bg-blue-50 rounded-lg p-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Financial Summary</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-blue-600">{salesOrderUtils.formatCurrency(order.subtotal)}</p>
-                    <p className="text-sm text-gray-600">Subtotal</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-green-600">{salesOrderUtils.formatCurrency(order.taxAmount)}</p>
-                    <p className="text-sm text-gray-600">Tax Amount</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-red-600">-{salesOrderUtils.formatCurrency(order.discountAmount)}</p>
-                    <p className="text-sm text-gray-600">Discount</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-purple-600">{salesOrderUtils.formatCurrency(order.totalAmount)}</p>
-                    <p className="text-sm text-gray-600">Total Amount</p>
                   </div>
                 </div>
               </div>
@@ -296,10 +259,6 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h4 className="text-md font-medium text-gray-900 mb-3">Shipping Details</h4>
                   <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-gray-600">Shipping Method:</span>
-                      <span className="text-sm text-gray-900">{order.shippingMethod || 'Standard'}</span>
-                    </div>
                     {order.trackingNumber && (
                       <div className="flex justify-between">
                         <span className="text-sm font-medium text-gray-600">Tracking Number:</span>
@@ -312,10 +271,6 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                         <span className="text-sm text-gray-900">{order.courierCompany}</span>
                       </div>
                     )}
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-gray-600">Shipping Charges:</span>
-                      <span className="text-sm text-gray-900">{salesOrderUtils.formatCurrency(order.shippingCharges || 0)}</span>
-                    </div>
                   </div>
                 </div>
 
@@ -380,10 +335,11 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end">
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+          <div></div>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md"
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200 shadow-sm"
           >
             Close
           </button>

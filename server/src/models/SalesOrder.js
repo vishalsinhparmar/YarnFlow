@@ -16,10 +16,10 @@ const salesOrderSchema = new mongoose.Schema({
     required: true
   },
   customerDetails: {
-    companyName: { type: String, required: true },
-    contactPerson: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String, required: true },
+    companyName: { type: String, default: 'Unknown Company' },
+    contactPerson: { type: String, default: 'Unknown Contact' },
+    email: { type: String, default: 'no-email@example.com' },
+    phone: { type: String, default: 'No Phone' },
     address: {
       street: String,
       city: String,
@@ -94,11 +94,6 @@ const salesOrderSchema = new mongoose.Schema({
   }],
 
   // Financial Information
-  subtotal: { type: Number, default: 0, min: 0 },
-  taxAmount: { type: Number, default: 0, min: 0 },
-  discountAmount: { type: Number, default: 0, min: 0 },
-  discountPercentage: { type: Number, default: 0, min: 0, max: 100 },
-  shippingCharges: { type: Number, default: 0, min: 0 },
   totalAmount: { type: Number, default: 0, min: 0 },
 
   // Order Status and Workflow
@@ -115,11 +110,6 @@ const salesOrderSchema = new mongoose.Schema({
     enum: ['Pending', 'Partial', 'Paid', 'Overdue', 'Cancelled'],
     default: 'Pending'
   },
-  paymentTerms: {
-    type: String,
-    enum: ['Advance', 'COD', 'Net_15', 'Net_30', 'Net_45', 'Net_60'],
-    default: 'Net_30'
-  },
   
   // Shipping Information
   shippingAddress: {
@@ -129,25 +119,9 @@ const salesOrderSchema = new mongoose.Schema({
     pincode: String,
     country: { type: String, default: 'India' }
   },
-  shippingMethod: {
-    type: String,
-    enum: ['Standard', 'Express', 'Overnight', 'Pickup'],
-    default: 'Standard'
-  },
   trackingNumber: String,
   courierCompany: String,
   
-  // Priority and Classification
-  priority: {
-    type: String,
-    enum: ['Low', 'Medium', 'High', 'Urgent'],
-    default: 'Medium'
-  },
-  orderType: {
-    type: String,
-    enum: ['Regular', 'Rush', 'Sample', 'Bulk', 'Export'],
-    default: 'Regular'
-  },
 
   // Workflow Tracking
   workflowHistory: [{
@@ -239,17 +213,8 @@ salesOrderSchema.pre('save', function(next) {
     item.taxAmount = (item.totalPrice * item.taxRate) / 100;
   });
   
-  // Calculate order totals
-  this.subtotal = this.items.reduce((sum, item) => sum + item.totalPrice, 0);
-  this.taxAmount = this.items.reduce((sum, item) => sum + item.taxAmount, 0);
-  
-  // Apply discount
-  const discountAmount = this.discountPercentage > 0 
-    ? (this.subtotal * this.discountPercentage) / 100 
-    : this.discountAmount;
-  
-  this.discountAmount = discountAmount;
-  this.totalAmount = this.subtotal + this.taxAmount - this.discountAmount + this.shippingCharges;
+  // Calculate simple total amount
+  this.totalAmount = this.items.reduce((sum, item) => sum + item.totalPrice + item.taxAmount, 0);
   
   next();
 });
@@ -337,41 +302,6 @@ salesOrderSchema.statics.getOrderStats = async function() {
   };
 };
 
-// Pre-save middleware to calculate totals automatically
-salesOrderSchema.pre('save', function(next) {
-  // Calculate item totals if not provided
-  this.items.forEach(item => {
-    if (!item.totalPrice || item.totalPrice === 0) {
-      const itemSubtotal = item.orderedQuantity * item.unitPrice;
-      const itemTaxAmount = (itemSubtotal * (item.taxRate || 18)) / 100;
-      item.totalPrice = itemSubtotal + itemTaxAmount;
-      item.taxAmount = itemTaxAmount;
-    }
-  });
-
-  // Calculate order totals if not provided
-  if (!this.subtotal || this.subtotal === 0) {
-    this.subtotal = this.items.reduce((sum, item) => {
-      return sum + (item.orderedQuantity * item.unitPrice);
-    }, 0);
-  }
-
-  if (!this.taxAmount || this.taxAmount === 0) {
-    this.taxAmount = this.items.reduce((sum, item) => {
-      return sum + (item.taxAmount || 0);
-    }, 0);
-  }
-
-  if (!this.totalAmount || this.totalAmount === 0) {
-    const calculatedDiscountAmount = this.discountPercentage > 0 
-      ? (this.subtotal * this.discountPercentage) / 100 
-      : this.discountAmount;
-    
-    this.totalAmount = this.subtotal + this.taxAmount - calculatedDiscountAmount + (this.shippingCharges || 0);
-  }
-
-  next();
-});
 
 const SalesOrder = mongoose.model('SalesOrder', salesOrderSchema);
 
