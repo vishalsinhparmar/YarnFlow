@@ -190,7 +190,7 @@ export const getInventoryLotById = async (req, res) => {
 
     const lot = await InventoryLot.findById(id)
       .populate('product', 'name code category specifications')
-      .populate('supplier', 'companyName contactPerson email phone')
+      .populate('supplier', 'companyName contactPerson phone')
       .populate('grn', 'grnNumber receiptDate invoiceNumber')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate');
 

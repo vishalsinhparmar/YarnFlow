@@ -13,7 +13,7 @@ export const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// Customer validation rules
+// Customer validation rules - Simplified for new form
 export const validateCustomer = [
   body('companyName')
     .trim()
@@ -22,45 +22,38 @@ export const validateCustomer = [
     .isLength({ min: 2, max: 100 })
     .withMessage('Company name must be between 2 and 100 characters'),
   
-  body('contactPerson')
+  body('gstNumber')
+    .optional()
     .trim()
-    .notEmpty()
-    .withMessage('Contact person is required')
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Contact person name must be between 2 and 50 characters'),
+    .isLength({ min: 15, max: 15 })
+    .withMessage('GST number must be exactly 15 characters')
+    .matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/)
+    .withMessage('Please provide a valid GST number format'),
   
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
-  
-  body('phone')
-    .isMobilePhone('en-IN')
-    .withMessage('Please provide a valid Indian phone number'),
-  
-  body('address.street')
+  body('panNumber')
+    .optional()
     .trim()
-    .notEmpty()
-    .withMessage('Street address is required'),
+    .isLength({ min: 10, max: 10 })
+    .withMessage('PAN number must be exactly 10 characters')
+    .matches(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/)
+    .withMessage('Please provide a valid PAN number format'),
   
   body('address.city')
+    .optional()
     .trim()
-    .notEmpty()
-    .withMessage('City is required'),
+    .isLength({ min: 2, max: 50 })
+    .withMessage('City must be between 2 and 50 characters'),
   
-  body('address.state')
+  body('notes')
+    .optional()
     .trim()
-    .notEmpty()
-    .withMessage('State is required'),
-  
-  body('address.pincode')
-    .isPostalCode('IN')
-    .withMessage('Please provide a valid Indian pincode'),
+    .isLength({ max: 500 })
+    .withMessage('Notes cannot exceed 500 characters'),
   
   handleValidationErrors
 ];
 
-// Supplier validation rules
+// Supplier validation rules - Simplified for new form
 export const validateSupplier = [
   body('companyName')
     .trim()
@@ -69,52 +62,58 @@ export const validateSupplier = [
     .isLength({ min: 2, max: 100 })
     .withMessage('Company name must be between 2 and 100 characters'),
   
-  body('contactPerson')
-    .trim()
-    .notEmpty()
-    .withMessage('Contact person is required'),
-  
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
-  
-  body('phone')
-    .isMobilePhone('en-IN')
-    .withMessage('Please provide a valid Indian phone number'),
-  
-  body('supplierType')
-    .isIn(['Cotton Yarn', 'Polyester', 'Blended Yarn', 'Raw Cotton', 'Chemicals', 'Other'])
-    .withMessage('Please select a valid supplier type'),
-  
-  body('address.street')
-    .trim()
-    .notEmpty()
-    .withMessage('Street address is required'),
-  
-  body('address.city')
-    .trim()
-    .notEmpty()
-    .withMessage('City is required'),
-  
-  body('address.state')
-    .trim()
-    .notEmpty()
-    .withMessage('State is required'),
-  
-  body('address.pincode')
-    .isPostalCode('IN')
-    .withMessage('Please provide a valid Indian pincode'),
-  
-  body('rating')
+  body('gstNumber')
     .optional()
-    .isInt({ min: 1, max: 5 })
-    .withMessage('Rating must be between 1 and 5'),
+    .trim()
+    .custom((value) => {
+      if (value && value.length > 0) {
+        if (value.length !== 15) {
+          throw new Error('GST number must be exactly 15 characters');
+        }
+        // More flexible GST format validation for production
+        if (!/^[0-9]{2}[A-Z0-9]{13}$/.test(value)) {
+          throw new Error('GST number format is invalid');
+        }
+      }
+      return true;
+    }),
+  
+  body('panNumber')
+    .optional()
+    .trim()
+    .custom((value) => {
+      if (value && value.length > 0) {
+        if (value.length !== 10) {
+          throw new Error('PAN number must be exactly 10 characters');
+        }
+        // Flexible PAN format validation for production
+        if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value)) {
+          throw new Error('PAN number format is invalid');
+        }
+      }
+      return true;
+    }),
+  
+  body('city')
+    .optional()
+    .trim()
+    .custom((value) => {
+      if (value && value.length > 0 && (value.length < 2 || value.length > 50)) {
+        throw new Error('City must be between 2 and 50 characters');
+      }
+      return true;
+    }),
+  
+  body('notes')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Notes cannot exceed 500 characters'),
   
   handleValidationErrors
 ];
 
-// Product validation rules
+// Product validation rules - Simplified for new form
 export const validateProduct = [
   body('productName')
     .trim()
@@ -127,82 +126,29 @@ export const validateProduct = [
     .isMongoId()
     .withMessage('Please provide a valid category ID'),
   
-  body('specifications.yarnCount')
-    .trim()
-    .notEmpty()
-    .withMessage('Yarn count is required'),
-  
-  body('specifications.material')
-    .isIn(['Cotton', 'Polyester', 'Cotton-Polyester', 'Viscose', 'Wool', 'Silk'])
-    .withMessage('Please select a valid material'),
-  
-  body('specifications.packingType')
-    .isIn(['Bags', 'Rolls', 'Cones', 'Hanks'])
-    .withMessage('Please select a valid packing type'),
-  
-  body('specifications.standardWeight')
-    .isNumeric()
-    .withMessage('Standard weight must be a number')
-    .custom((value) => {
-      if (value <= 0) {
-        throw new Error('Standard weight must be greater than 0');
-      }
-      return true;
-    }),
-  
-  body('pricing.basePrice')
-    .isNumeric()
-    .withMessage('Base price must be a number')
-    .custom((value) => {
-      if (value <= 0) {
-        throw new Error('Base price must be greater than 0');
-      }
-      return true;
-    }),
-  
-  body('pricing.priceUnit')
-    .isIn(['Per Kg', 'Per Bag', 'Per Roll', 'Per Piece'])
-    .withMessage('Please select a valid price unit'),
-  
-  body('inventory.reorderLevel')
+  body('description')
     .optional()
-    .isNumeric()
-    .withMessage('Reorder level must be a number'),
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Description cannot exceed 500 characters'),
   
   handleValidationErrors
 ];
 
-// Category validation rules
+// Category validation rules - Simplified for new form
 export const validateCategory = [
   body('categoryName')
     .trim()
     .notEmpty()
     .withMessage('Category name is required')
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Category name must be between 2 and 50 characters'),
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Category name must be between 2 and 100 characters'),
   
-  body('categoryType')
-    .isIn(['Cotton Yarn', 'Polyester', 'Blended Yarn', 'Raw Material', 'Finished Goods'])
-    .withMessage('Please select a valid category type'),
-  
-  body('specifications.unit')
-    .isIn(['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'])
-    .withMessage('Please select a valid unit'),
-  
-  body('specifications.standardWeight')
-    .isNumeric()
-    .withMessage('Standard weight must be a number')
-    .custom((value) => {
-      if (value <= 0) {
-        throw new Error('Standard weight must be greater than 0');
-      }
-      return true;
-    }),
-  
-  body('parentCategory')
+  body('description')
     .optional()
-    .isMongoId()
-    .withMessage('Please provide a valid parent category ID'),
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Description cannot exceed 500 characters'),
   
   handleValidationErrors
 ];

@@ -61,7 +61,7 @@ export const getAllGRNs = async (req, res) => {
     }
     
     const grns = await GoodsReceiptNote.find(query)
-      .populate('supplier', 'companyName supplierCode contactPerson email phone')
+      .populate('supplier', 'companyName supplierCode contactPerson phone')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
       .populate('items.product', 'productName productCode specifications')
       .limit(limit * 1)
@@ -96,7 +96,7 @@ export const getGRNById = async (req, res) => {
     const { id } = req.params;
     
     const grn = await GoodsReceiptNote.findById(id)
-      .populate('supplier', 'companyName supplierCode contactPerson email phone address')
+      .populate('supplier', 'companyName supplierCode contactPerson phone address')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate items')
       .populate('items.product', 'productName productCode specifications inventory');
     
@@ -205,7 +205,6 @@ export const createGRN = async (req, res) => {
       supplierDetails: {
         companyName: purchaseOrder.supplier.companyName,
         contactPerson: purchaseOrder.supplier.contactPerson,
-        email: purchaseOrder.supplier.email,
         phone: purchaseOrder.supplier.phone
       },
       receiptDate,
@@ -238,7 +237,7 @@ export const createGRN = async (req, res) => {
     
     // Populate the saved GRN for response
     const populatedGRN = await GoodsReceiptNote.findById(grn._id)
-      .populate('supplier', 'companyName supplierCode contactPerson email phone')
+      .populate('supplier', 'companyName supplierCode contactPerson phone')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
       .populate('items.product', 'productName productCode specifications');
     
@@ -290,7 +289,7 @@ export const updateGRN = async (req, res) => {
       { ...updateData, lastModifiedBy: updateData.lastModifiedBy || 'System' },
       { new: true, runValidators: true }
     )
-    .populate('supplier', 'companyName supplierCode contactPerson email phone')
+    .populate('supplier', 'companyName supplierCode contactPerson phone')
     .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
     .populate('items.product', 'productName productCode specifications');
     
@@ -369,7 +368,7 @@ export const updateGRNStatus = async (req, res) => {
       updateData,
       { new: true, runValidators: true }
     )
-    .populate('supplier', 'companyName supplierCode contactPerson email phone');
+    .populate('supplier', 'companyName supplierCode contactPerson phone');
     
     if (!updatedGRN) {
       return res.status(404).json({
@@ -470,7 +469,7 @@ export const approveGRN = async (req, res) => {
     }
     
     const populatedGRN = await GoodsReceiptNote.findById(grn._id)
-      .populate('supplier', 'companyName supplierCode contactPerson email phone')
+      .populate('supplier', 'companyName supplierCode contactPerson phone')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
       .populate('items.product', 'productName productCode specifications');
     

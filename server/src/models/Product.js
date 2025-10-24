@@ -6,6 +6,7 @@ const productSchema = new mongoose.Schema({
     unique: true,
     uppercase: true
   },
+  // Required fields for simplified form
   productName: {
     type: String,
     required: true,
@@ -20,10 +21,16 @@ const productSchema = new mongoose.Schema({
     ref: 'Category',
     required: true
   },
+  // Status field for management
+  status: {
+    type: String,
+    enum: ['Active', 'Inactive', 'Discontinued'],
+    default: 'Active'
+  },
+  // Keep these fields for backward compatibility but make them optional
   supplier: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Supplier',
-    required: true
+    ref: 'Supplier'
   },
   specifications: {
     yarnCount: {
@@ -75,11 +82,6 @@ const productSchema = new mongoose.Schema({
       default: 'Bags'
     }
   },
-  status: {
-    type: String,
-    enum: ['Active', 'Inactive', 'Discontinued'],
-    default: 'Active'
-  },
   tags: [String],
   notes: {
     type: String,
@@ -93,8 +95,22 @@ const productSchema = new mongoose.Schema({
 productSchema.pre('save', async function(next) {
   if (!this.productCode) {
     try {
-      const count = await mongoose.model('Product').countDocuments();
-      this.productCode = `PROD${String(count + 1).padStart(4, '0')}`;
+      // Find the highest existing product code number
+      const lastProduct = await mongoose.model('Product')
+        .findOne({}, { productCode: 1 })
+        .sort({ productCode: -1 })
+        .lean();
+      
+      let nextNumber = 1;
+      if (lastProduct && lastProduct.productCode) {
+        // Extract number from code like "PROD0001" -> 1
+        const match = lastProduct.productCode.match(/PROD(\d+)/);
+        if (match) {
+          nextNumber = parseInt(match[1]) + 1;
+        }
+      }
+      
+      this.productCode = `PROD${String(nextNumber).padStart(4, '0')}`;
     } catch (error) {
       return next(error);
     }

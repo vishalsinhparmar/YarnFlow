@@ -1,20 +1,14 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useMasterData } from '../hooks/useMasterData';
-import { formatters } from '../services/masterDataAPI';
+import { Link } from 'react-router-dom';
 
-const MasterData = () => {
-  const navigate = useNavigate();
+const MasterDataDashboard = () => {
   const {
     stats,
     customers,
     suppliers,
     categories,
     loading,
-    error,
-    fetchCustomers,
-    fetchSuppliers,
-    fetchStats
+    error
   } = useMasterData();
 
   if (loading && !stats) {
@@ -52,7 +46,7 @@ const MasterData = () => {
 
       {/* Master Data Categories */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer">
+        <Link to="/master-data/customers" className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer block">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-blue-600 text-xl">👥</span>
@@ -65,15 +59,12 @@ const MasterData = () => {
           <p className="text-sm text-gray-600 mb-3">
             {stats?.customers?.active || 0} active customers
           </p>
-          <button 
-            onClick={() => navigate('/master-data/customers')}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
+          <div className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center">
             Manage Customers
-          </button>
-        </div>
+          </div>
+        </Link>
 
-        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer">
+        <Link to="/master-data/suppliers" className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer block">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
               <span className="text-purple-600 text-xl">🏭</span>
@@ -86,15 +77,12 @@ const MasterData = () => {
           <p className="text-sm text-gray-600 mb-3">
             {stats?.suppliers?.verified || 0} verified suppliers
           </p>
-          <button 
-            onClick={() => navigate('/master-data/suppliers')}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
+          <div className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center">
             Manage Suppliers
-          </button>
-        </div>
+          </div>
+        </Link>
 
-        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer">
+        <Link to="/master-data/products" className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer block">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <span className="text-green-600 text-xl">🧶</span>
@@ -107,15 +95,12 @@ const MasterData = () => {
           <p className="text-sm text-gray-600 mb-3">
             {stats?.products?.lowStock || 0} low stock alerts
           </p>
-          <button 
-            onClick={() => navigate('/master-data/products')}
-            className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
+          <div className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center">
             Manage Products
-          </button>
-        </div>
+          </div>
+        </Link>
 
-        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer">
+        <Link to="/master-data/categories" className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer block">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
               <span className="text-orange-600 text-xl">📂</span>
@@ -126,26 +111,23 @@ const MasterData = () => {
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Categories</h3>
           <p className="text-sm text-gray-600 mb-3">Product categories and classifications</p>
-          <button 
-            onClick={() => navigate('/master-data/categories')}
-            className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
+          <div className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center">
             Manage Categories
-          </button>
-        </div>
+          </div>
+        </Link>
       </div>
 
-      {/* Recent Customers */}
+      {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Recent Customers</h2>
-            <button 
-              onClick={() => navigate('/master-data/customers')}
+            <Link 
+              to="/master-data/customers"
               className="text-blue-600 hover:text-blue-900 text-sm font-medium"
             >
               View All
-            </button>
+            </Link>
           </div>
           <div className="space-y-4">
             {customers && customers.length > 0 ? (
@@ -182,9 +164,9 @@ const MasterData = () => {
             ) : (
               <div className="text-center py-4">
                 <p className="text-gray-500">No customers found</p>
-                <button className="text-blue-600 hover:text-blue-900 text-sm mt-2">
+                <Link to="/master-data/customers" className="text-blue-600 hover:text-blue-900 text-sm mt-2 block">
                   Add First Customer
-                </button>
+                </Link>
               </div>
             )}
           </div>
@@ -193,12 +175,12 @@ const MasterData = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Recent Suppliers</h2>
-            <button 
-              onClick={() => navigate('/master-data/suppliers')}
+            <Link 
+              to="/master-data/suppliers"
               className="text-purple-600 hover:text-purple-900 text-sm font-medium"
             >
               View All
-            </button>
+            </Link>
           </div>
           <div className="space-y-4">
             {suppliers && suppliers.length > 0 ? (
@@ -236,32 +218,32 @@ const MasterData = () => {
             ) : (
               <div className="text-center py-4">
                 <p className="text-gray-500">No suppliers found</p>
-                <button 
-                  onClick={() => setShowSupplierManagement(true)}
-                  className="text-purple-600 hover:text-purple-900 text-sm mt-2"
+                <Link 
+                  to="/master-data/suppliers"
+                  className="text-purple-600 hover:text-purple-900 text-sm mt-2 block"
                 >
                   Add First Supplier
-                </button>
+                </Link>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Product Categories */}
+      {/* Product Categories Preview */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Product Categories</h2>
-          <button 
-            onClick={() => setShowCategoryManagement(true)}
+          <Link 
+            to="/master-data/categories"
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             Manage Categories
-          </button>
+          </Link>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {categories && categories.length > 0 ? (
-            categories.map((category) => {
+            categories.slice(0, 3).map((category) => {
               const categoryColors = {
                 'Cotton Yarn': 'bg-green-100 text-green-800',
                 'Polyester': 'bg-blue-100 text-blue-800',
@@ -283,65 +265,30 @@ const MasterData = () => {
                   <p className="text-sm text-gray-600 mb-3">
                     {category.description || 'No description available'}
                   </p>
-                  
-                  {/* Specifications */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-500">Unit:</span>
                       <span className="font-medium">{category.specifications?.unit}</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500">Standard Weight:</span>
-                      <span className="font-medium">{category.specifications?.standardWeight} kg</span>
-                    </div>
                   </div>
-                  
-                  {/* Yarn Counts */}
-                  {category.specifications?.yarnCount && category.specifications.yarnCount.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-xs text-gray-500 mb-2">Available Counts:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {category.specifications.yarnCount.slice(0, 4).map((count, index) => (
-                          <span key={index} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                            {count}
-                          </span>
-                        ))}
-                        {category.specifications.yarnCount.length > 4 && (
-                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                            +{category.specifications.yarnCount.length - 4} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Blend Ratio for blended yarns */}
-                  {category.specifications?.blendRatio && (
-                    <div className="mt-2">
-                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                        Blend: {category.specifications.blendRatio}
-                      </span>
-                    </div>
-                  )}
                 </div>
               );
             })
           ) : (
             <div className="col-span-3 text-center py-8">
               <p className="text-gray-500 mb-4">No categories found</p>
-              <button 
-                onClick={() => navigate('/master-data/categories')}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              <Link 
+                to="/master-data/categories"
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-block"
               >
                 Create First Category
-              </button>
+              </Link>
             </div>
           )}
         </div>
       </div>
-
     </div>
   );
 };
 
-export default MasterData;
+export default MasterDataDashboard;

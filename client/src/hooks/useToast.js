@@ -102,13 +102,37 @@ const useToast = () => {
         validationError: (message) => toastError(`📝 ${message}`)
     };
 
+    // Category specific toast messages
+    const categoryToasts = {
+        createSuccess: (name) => toastSuccess(`✅ Category "${name}" created successfully!`),
+        updateSuccess: (name) => toastSuccess(`✅ Category "${name}" updated successfully!`),
+        deleteSuccess: (name) => toastSuccess(`🗑️ Category "${name}" deleted successfully!`),
+        createError: () => toastError('❌ Failed to create category. Please try again.'),
+        updateError: () => toastError('❌ Failed to update category. Please try again.'),
+        deleteError: () => toastError('❌ Failed to delete category. Please try again.'),
+        loadError: () => toastError('❌ Failed to load categories. Please refresh the page.')
+    };
+
+    // Product specific toast messages
+    const productToasts = {
+        createSuccess: (name) => toastSuccess(`✅ Product "${name}" created successfully!`),
+        updateSuccess: (name) => toastSuccess(`✅ Product "${name}" updated successfully!`),
+        deleteSuccess: (name) => toastSuccess(`🗑️ Product "${name}" deleted successfully!`),
+        createError: () => toastError('❌ Failed to create product. Please try again.'),
+        updateError: () => toastError('❌ Failed to update product. Please try again.'),
+        deleteError: () => toastError('❌ Failed to delete product. Please try again.'),
+        loadError: () => toastError('❌ Failed to load products. Please refresh the page.')
+    };
+
     return { 
         toastSuccess, 
         toastError, 
         toastInfo, 
         toastWarning,
         customerToasts,
-        supplierToasts
+        supplierToasts,
+        categoryToasts,
+        productToasts
     };
 }
 
