@@ -62,41 +62,6 @@ export const validateSalesOrder = [
     .isLength({ max: 100 })
     .withMessage('Sales person name cannot exceed 100 characters'),
 
-  body('paymentTerms')
-    .optional()
-    .isIn(['Advance', 'COD', 'Net_15', 'Net_30', 'Net_45', 'Net_60'])
-    .withMessage('Invalid payment terms'),
-
-  body('priority')
-    .optional()
-    .isIn(['Low', 'Medium', 'High', 'Urgent'])
-    .withMessage('Invalid priority level'),
-
-  body('orderType')
-    .optional()
-    .isIn(['Regular', 'Rush', 'Sample', 'Bulk', 'Export'])
-    .withMessage('Invalid order type'),
-
-  body('shippingMethod')
-    .optional()
-    .isIn(['Standard', 'Express', 'Overnight', 'Pickup'])
-    .withMessage('Invalid shipping method'),
-
-  body('discountPercentage')
-    .optional()
-    .isFloat({ min: 0, max: 100 })
-    .withMessage('Discount percentage must be between 0 and 100'),
-
-  body('discountAmount')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Discount amount must be a positive number'),
-
-  body('shippingCharges')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Shipping charges must be a positive number'),
-
   body('customerNotes')
     .optional()
     .isLength({ max: 1000 })
@@ -204,41 +169,6 @@ export const validateSalesOrderUpdate = [
     .optional()
     .isLength({ max: 100 })
     .withMessage('Sales person name cannot exceed 100 characters'),
-
-  body('paymentTerms')
-    .optional()
-    .isIn(['Advance', 'COD', 'Net_15', 'Net_30', 'Net_45', 'Net_60'])
-    .withMessage('Invalid payment terms'),
-
-  body('priority')
-    .optional()
-    .isIn(['Low', 'Medium', 'High', 'Urgent'])
-    .withMessage('Invalid priority level'),
-
-  body('orderType')
-    .optional()
-    .isIn(['Regular', 'Rush', 'Sample', 'Bulk', 'Export'])
-    .withMessage('Invalid order type'),
-
-  body('shippingMethod')
-    .optional()
-    .isIn(['Standard', 'Express', 'Overnight', 'Pickup'])
-    .withMessage('Invalid shipping method'),
-
-  body('discountPercentage')
-    .optional()
-    .isFloat({ min: 0, max: 100 })
-    .withMessage('Discount percentage must be between 0 and 100'),
-
-  body('discountAmount')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Discount amount must be a positive number'),
-
-  body('shippingCharges')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Shipping charges must be a positive number'),
 
   body('customerNotes')
     .optional()

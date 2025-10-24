@@ -133,14 +133,7 @@ export const createSalesOrder = async (req, res) => {
       salesPerson,
       customerNotes,
       internalNotes,
-      paymentTerms,
       shippingAddress,
-      shippingMethod,
-      priority,
-      orderType,
-      discountPercentage,
-      discountAmount,
-      shippingCharges,
       createdBy
     } = req.body;
 
@@ -184,11 +177,11 @@ export const createSalesOrder = async (req, res) => {
       soNumber,
       customer: customerDoc._id,
       customerDetails: {
-        companyName: customerDoc.companyName,
-        contactPerson: customerDoc.contactPerson,
-        email: customerDoc.email,
-        phone: customerDoc.phone,
-        address: customerDoc.address
+        companyName: customerDoc.companyName || 'Unknown Company',
+        contactPerson: customerDoc.contactPerson || 'Unknown Contact',
+        email: customerDoc.email || 'no-email@example.com',
+        phone: customerDoc.phone || 'No Phone',
+        address: customerDoc.address || {}
       },
       expectedDeliveryDate,
       items: validatedItems,
@@ -196,14 +189,7 @@ export const createSalesOrder = async (req, res) => {
       salesPerson,
       customerNotes,
       internalNotes,
-      paymentTerms: paymentTerms || customerDoc.paymentTerms,
       shippingAddress: shippingAddress || customerDoc.address,
-      shippingMethod,
-      priority,
-      orderType,
-      discountPercentage: discountPercentage || 0,
-      discountAmount: discountAmount || 0,
-      shippingCharges: shippingCharges || 0,
       createdBy
     });
 

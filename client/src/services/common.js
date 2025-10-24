@@ -4,7 +4,7 @@
 //   VITE_API_BASE_URL=https://api.yourdomain.com/api
 //   VITE_API_BASE_URL=http://localhost:3020/api
 
-const ENV_BASE = import.meta?.env?.VITE_API_BASE_URL || "https://yarnflow-production.up.railway.app/api";
+const ENV_BASE = 'http://localhost:3050/api'|| "https://yarnflow-production.up.railway.app/api";
 
 // Fallback logic:
 // - If ENV_BASE exists, use it

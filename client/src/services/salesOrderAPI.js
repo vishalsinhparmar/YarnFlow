@@ -172,16 +172,6 @@ export const salesOrderUtils = {
     return statusColors[status] || 'bg-gray-100 text-gray-800';
   },
 
-  // Get priority color
-  getPriorityColor: (priority) => {
-    const priorityColors = {
-      'Low': 'bg-green-100 text-green-800',
-      'Medium': 'bg-yellow-100 text-yellow-800',
-      'High': 'bg-orange-100 text-orange-800',
-      'Urgent': 'bg-red-100 text-red-800'
-    };
-    return priorityColors[priority] || 'bg-gray-100 text-gray-800';
-  },
 
   // Get payment status color
   getPaymentStatusColor: (status) => {
@@ -210,16 +200,6 @@ export const salesOrderUtils = {
     return statusIcons[status] || '📋';
   },
 
-  // Get priority icon
-  getPriorityIcon: (priority) => {
-    const priorityIcons = {
-      'Low': '🟢',
-      'Medium': '🟡',
-      'High': '🟠',
-      'Urgent': '🔴'
-    };
-    return priorityIcons[priority] || '⚪';
-  },
 
   // Calculate completion percentage
   getCompletionPercentage: (salesOrder) => {
@@ -349,39 +329,6 @@ export const salesOrderUtils = {
     }
   },
 
-  // Calculate order totals
-  calculateTotals: (items, discountPercentage = 0, discountAmount = 0, shippingCharges = 0) => {
-    if (!items || items.length === 0) {
-      return {
-        subtotal: 0,
-        taxAmount: 0,
-        discountAmount: 0,
-        totalAmount: 0
-      };
-    }
-    
-    const subtotal = items.reduce((sum, item) => {
-      return sum + (item.orderedQuantity * item.unitPrice);
-    }, 0);
-    
-    const taxAmount = items.reduce((sum, item) => {
-      const itemTotal = item.orderedQuantity * item.unitPrice;
-      return sum + (itemTotal * (item.taxRate || 18) / 100);
-    }, 0);
-    
-    const calculatedDiscountAmount = discountPercentage > 0 
-      ? (subtotal * discountPercentage) / 100 
-      : discountAmount;
-    
-    const totalAmount = subtotal + taxAmount - calculatedDiscountAmount + shippingCharges;
-    
-    return {
-      subtotal,
-      taxAmount,
-      discountAmount: calculatedDiscountAmount,
-      totalAmount
-    };
-  }
 };
 
 export default salesOrderAPI;

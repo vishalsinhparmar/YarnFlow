@@ -163,7 +163,7 @@ const SalesOrder = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Total Orders</p>
               <p className="text-2xl font-bold text-gray-900">
-                {salesOrderStats?.overview?.totalOrders || '342'}
+                {salesOrderStats?.overview?.totalOrders || 0}
               </p>
             </div>
             <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
@@ -177,7 +177,7 @@ const SalesOrder = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Pending</p>
               <p className="text-2xl font-bold text-yellow-600">
-                {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Pending')?.count || '45'}
+                {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Pending')?.count || 0}
               </p>
             </div>
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -191,7 +191,7 @@ const SalesOrder = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Completed</p>
               <p className="text-2xl font-bold text-green-600">
-                {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Delivered')?.count || '267'}
+                {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Delivered')?.count || 0}
               </p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -205,7 +205,7 @@ const SalesOrder = () => {
             <div>
               <p className="text-sm font-medium text-gray-600">Revenue</p>
               <p className="text-2xl font-bold text-green-600">
-                {salesOrderUtils.formatCurrency(salesOrderStats?.overview?.totalRevenue || 1240000)}
+                {salesOrderUtils.formatCurrency(salesOrderStats?.overview?.totalRevenue || 0)}
               </p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -225,7 +225,7 @@ const SalesOrder = () => {
             </div>
             <p className="text-sm font-medium text-gray-900">Draft</p>
             <p className="text-2xl font-bold text-blue-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Draft')?.count || '8'}
+              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Draft')?.count || 0}
             </p>
           </div>
           <div className="text-center">
@@ -234,7 +234,7 @@ const SalesOrder = () => {
             </div>
             <p className="text-sm font-medium text-gray-900">Pending</p>
             <p className="text-2xl font-bold text-yellow-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Pending')?.count || '15'}
+              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Pending')?.count || 0}
             </p>
           </div>
           <div className="text-center">
@@ -243,7 +243,7 @@ const SalesOrder = () => {
             </div>
             <p className="text-sm font-medium text-gray-900">Processing</p>
             <p className="text-2xl font-bold text-purple-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Processing')?.count || '22'}
+              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Processing')?.count || 0}
             </p>
           </div>
           <div className="text-center">
@@ -252,7 +252,7 @@ const SalesOrder = () => {
             </div>
             <p className="text-sm font-medium text-gray-900">Shipping</p>
             <p className="text-2xl font-bold text-orange-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Shipped')?.count || '18'}
+              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Shipped')?.count || 0}
             </p>
           </div>
           <div className="text-center">
@@ -261,7 +261,7 @@ const SalesOrder = () => {
             </div>
             <p className="text-sm font-medium text-gray-900">Delivered</p>
             <p className="text-2xl font-bold text-green-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Delivered')?.count || '279'}
+              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Delivered')?.count || 0}
             </p>
           </div>
         </div>
@@ -328,7 +328,6 @@ const SalesOrder = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delivery Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -352,9 +351,6 @@ const SalesOrder = () => {
                           <span className="ml-1 text-red-500 text-xs">⚠️ Overdue</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {salesOrderUtils.formatCurrency(order.totalAmount)}
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${salesOrderUtils.getStatusColor(order.status)}`}>
                           {order.status}
@@ -377,7 +373,7 @@ const SalesOrder = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                       <div className="flex flex-col items-center">
                         <span className="text-4xl mb-4">📋</span>
                         <p className="text-lg font-medium mb-2">No sales orders found</p>

@@ -18,13 +18,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
     ],
     customerPONumber: '',
     salesPerson: '',
-    paymentTerms: 'Net_30',
-    priority: 'Medium',
-    orderType: 'Regular',
-    shippingMethod: 'Standard',
-    discountPercentage: 0,
-    discountAmount: 0,
-    shippingCharges: 0,
     customerNotes: '',
     internalNotes: '',
     createdBy: 'Admin'
@@ -58,13 +51,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
           ],
           customerPONumber: '',
           salesPerson: '',
-          paymentTerms: 'Net_30',
-          priority: 'Medium',
-          orderType: 'Regular',
-          shippingMethod: 'Standard',
-          discountPercentage: 0,
-          discountAmount: 0,
-          shippingCharges: 0,
           customerNotes: '',
           internalNotes: '',
           createdBy: 'Admin'
@@ -87,13 +73,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
           })),
           customerPONumber: order.customerPONumber || '',
           salesPerson: order.salesPerson || '',
-          paymentTerms: order.paymentTerms || 'Net_30',
-          priority: order.priority || 'Medium',
-          orderType: order.orderType || 'Regular',
-          shippingMethod: order.shippingMethod || 'Standard',
-          discountPercentage: order.discountPercentage || 0,
-          discountAmount: order.discountAmount || 0,
-          shippingCharges: order.shippingCharges || 0,
           customerNotes: order.customerNotes || '',
           internalNotes: order.internalNotes || '',
           createdBy: 'Admin'
@@ -112,9 +91,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
       } else {
         // Fallback to mock data if API fails
         const mockCustomers = [
-          { _id: '1', companyName: 'Fashion Hub Ltd.', contactPerson: 'Rajesh Kumar' },
-          { _id: '2', companyName: 'Textile World Co.', contactPerson: 'Priya Sharma' },
-          { _id: '3', companyName: 'Premium Fabrics Inc.', contactPerson: 'Amit Patel' }
+          { _id: '1', companyName: 'Fashion Hub Ltd.', contactPerson: 'Rajesh Kumar', email: 'rajesh@fashionhub.com', phone: '9876543210' },
+          { _id: '2', companyName: 'Textile World Co.', contactPerson: 'Priya Sharma', email: 'priya@textileworld.com', phone: '9876543211' },
+          { _id: '3', companyName: 'Premium Fabrics Inc.', contactPerson: 'Amit Patel', email: 'amit@premiumfabrics.com', phone: '9876543212' }
         ];
         setCustomers(mockCustomers);
       }
@@ -122,9 +101,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
       console.error('Error loading customers:', err);
       // Fallback to mock data
       const mockCustomers = [
-        { _id: '1', companyName: 'Fashion Hub Ltd.', contactPerson: 'Rajesh Kumar' },
-        { _id: '2', companyName: 'Textile World Co.', contactPerson: 'Priya Sharma' },
-        { _id: '3', companyName: 'Premium Fabrics Inc.', contactPerson: 'Amit Patel' }
+        { _id: '1', companyName: 'Fashion Hub Ltd.', contactPerson: 'Rajesh Kumar', email: 'rajesh@fashionhub.com', phone: '9876543210' },
+        { _id: '2', companyName: 'Textile World Co.', contactPerson: 'Priya Sharma', email: 'priya@textileworld.com', phone: '9876543211' },
+        { _id: '3', companyName: 'Premium Fabrics Inc.', contactPerson: 'Amit Patel', email: 'amit@premiumfabrics.com', phone: '9876543212' }
       ];
       setCustomers(mockCustomers);
     }
@@ -218,14 +197,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
     }
   };
 
-  const calculateTotals = () => {
-    return salesOrderUtils.calculateTotals(
-      formData.items,
-      formData.discountPercentage,
-      formData.discountAmount,
-      formData.shippingCharges
-    );
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -233,33 +204,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
     setError('');
 
     try {
-      // Validate form
-      if (!formData.customer) {
-        throw new Error('Please select a customer');
-      }
-      if (!formData.expectedDeliveryDate) {
-        throw new Error('Please select expected delivery date');
-      }
-      if (!formData.items || formData.items.length === 0) {
-        throw new Error('Please add at least one item');
-      }
-      
-      // Validate each item
-      for (let i = 0; i < formData.items.length; i++) {
-        const item = formData.items[i];
-        if (!item.product) {
-          throw new Error(`Please select product for item ${i + 1}`);
-        }
-        if (!item.orderedQuantity || parseFloat(item.orderedQuantity) <= 0) {
-          throw new Error(`Please enter valid quantity for item ${i + 1}`);
-        }
-        if (!item.unitPrice || parseFloat(item.unitPrice) <= 0) {
-          throw new Error(`Please enter valid unit price for item ${i + 1}`);
-        }
-        if (!item.unit) {
-          throw new Error(`Unit is missing for item ${i + 1}`);
-        }
-      }
 
       // Prepare data for API - backend will calculate totals automatically
       const orderData = {
@@ -280,13 +224,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
         }),
         customerPONumber: formData.customerPONumber || '',
         salesPerson: formData.salesPerson || '',
-        paymentTerms: formData.paymentTerms || 'Net_30',
-        priority: formData.priority || 'Medium',
-        orderType: formData.orderType || 'Regular',
-        shippingMethod: formData.shippingMethod || 'Standard',
-        discountPercentage: parseFloat(formData.discountPercentage || 0),
-        discountAmount: parseFloat(formData.discountAmount || 0),
-        shippingCharges: parseFloat(formData.shippingCharges || 0),
         customerNotes: formData.customerNotes || '',
         internalNotes: formData.internalNotes || '',
         createdBy: formData.createdBy || 'Admin'
@@ -310,8 +247,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
       setLoading(false);
     }
   };
-
-  const totals = calculateTotals();
 
   if (!isOpen) return null;
 
@@ -416,79 +351,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
             </div>
           </div>
 
-          {/* Order Details */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Payment Terms
-              </label>
-              <select
-                name="paymentTerms"
-                value={formData.paymentTerms}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Advance">Advance</option>
-                <option value="COD">COD</option>
-                <option value="Net_15">Net 15</option>
-                <option value="Net_30">Net 30</option>
-                <option value="Net_45">Net 45</option>
-                <option value="Net_60">Net 60</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Priority
-              </label>
-              <select
-                name="priority"
-                value={formData.priority}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Urgent">Urgent</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Order Type
-              </label>
-              <select
-                name="orderType"
-                value={formData.orderType}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Regular">Regular</option>
-                <option value="Rush">Rush</option>
-                <option value="Sample">Sample</option>
-                <option value="Bulk">Bulk</option>
-                <option value="Export">Export</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Shipping Method
-              </label>
-              <select
-                name="shippingMethod"
-                value={formData.shippingMethod}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Standard">Standard</option>
-                <option value="Express">Express</option>
-                <option value="Overnight">Overnight</option>
-                <option value="Pickup">Pickup</option>
-              </select>
-            </div>
-          </div>
 
           {/* Items Section */}
           <div>
@@ -583,89 +445,12 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
                     </div>
                   </div>
 
-                  <div className="mt-2 text-right text-sm text-gray-600">
-                    Total: {salesOrderUtils.formatCurrency((item.orderedQuantity || 0) * (item.unitPrice || 0))}
-                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Financial Details */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Discount %
-              </label>
-              <input
-                type="number"
-                name="discountPercentage"
-                value={formData.discountPercentage}
-                onChange={handleInputChange}
-                min="0"
-                max="100"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Discount Amount
-              </label>
-              <input
-                type="number"
-                name="discountAmount"
-                value={formData.discountAmount}
-                onChange={handleInputChange}
-                min="0"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Shipping Charges
-              </label>
-              <input
-                type="number"
-                name="shippingCharges"
-                value={formData.shippingCharges}
-                onChange={handleInputChange}
-                min="0"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Order Totals */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="text-lg font-medium text-gray-900 mb-3">Order Summary</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span>{salesOrderUtils.formatCurrency(totals.subtotal)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Tax Amount:</span>
-                <span>{salesOrderUtils.formatCurrency(totals.taxAmount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Discount:</span>
-                <span>-{salesOrderUtils.formatCurrency(totals.discountAmount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Shipping:</span>
-                <span>{salesOrderUtils.formatCurrency(formData.shippingCharges)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-lg border-t pt-2">
-                <span>Total Amount:</span>
-                <span>{salesOrderUtils.formatCurrency(totals.totalAmount)}</span>
-              </div>
-            </div>
-          </div>
 
           {/* Notes */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
