@@ -1,0 +1,45 @@
+# Copy and paste these commands one by one
+
+# ========================================
+# STEP 1: Create New Branch
+# ========================================
+git checkout -b feature/environment-config
+
+# ========================================
+# STEP 2: Check What Will Be Committed
+# ========================================
+git status
+
+# ========================================
+# STEP 3: Stage All Changes
+# ========================================
+git add .
+
+# ========================================
+# STEP 4: Commit Changes
+# ========================================
+git commit -m "feat: Add automatic environment detection for API URLs
+
+- Auto-detect development vs production environment
+- Add .env.development for local API (localhost:3050)
+- Add .env.production for Railway API
+- Update .gitignore to exclude .env files
+- Add Vercel deployment guide
+- Prevent accidental API URL commits"
+
+# ========================================
+# STEP 5: Push to GitHub
+# ========================================
+git push origin feature/environment-config
+
+# ========================================
+# STEP 6: Verify .env Files Are NOT Pushed
+# ========================================
+git ls-tree -r feature/environment-config --name-only | grep .env
+
+# Expected: Should only show .env.example
+# If you see .env.development or .env.production, run:
+# git rm --cached client/.env.development
+# git rm --cached client/.env.production
+# git commit -m "Remove .env files from git tracking"
+# git push origin feature/environment-config
