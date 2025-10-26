@@ -1,18 +1,22 @@
 // Centralized API config and request helper
-// Vite env: define VITE_API_BASE_URL during build/deploy
-// Examples:
-//   VITE_API_BASE_URL=https://api.yourdomain.com/api
-//   VITE_API_BASE_URL=http://localhost:3020/api
+// Automatically detects environment and uses correct API URL
 
-const ENV_BASE = 'http://localhost:3050/api'|| "https://yarnflow-production.up.railway.app/api";
+// Get environment variable from Vite (if set)
+const VITE_API_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Fallback logic:
-// - If ENV_BASE exists, use it
-// - Else if running in browser, try same-origin "/api"
-// - Else default to local dev backend
-export const API_BASE_URL =
-  ENV_BASE ||
-  'http://localhost:3050/api';
+// Detect if we're in development or production
+const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// Set API URLs
+const DEVELOPMENT_API = 'http://localhost:3050/api';
+const PRODUCTION_API = 'https://yarnflow-production.up.railway.app/api';
+
+// Automatic selection: Use VITE env var if set, otherwise auto-detect
+export const API_BASE_URL = VITE_API_URL || (isDevelopment ? DEVELOPMENT_API : PRODUCTION_API);
+
+// Log which API is being used (helpful for debugging)
+console.log(`🌐 API Mode: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
+console.log(`🔗 API URL: ${API_BASE_URL}`);
 
 export const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
