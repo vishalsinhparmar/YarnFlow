@@ -7,7 +7,11 @@ import GoodsReceipt from "./pages/GoodsReceipt";
 import Inventory from "./pages/Inventory";
 import SalesOrder from "./pages/SalesOrder";
 import SalesChallan from "./pages/SalesChallan";
-import MasterData from "./pages/MasterData";
+import MasterDataDashboard from "./pages/MasterDataDashboard";
+import CustomersPage from "./pages/CustomersPage";
+import SuppliersPage from "./pages/SuppliersPage";
+import ProductsPage from "./pages/ProductsPage";
+import CategoriesPage from "./pages/CategoriesPage";
 
 const App = () => {
   return (
@@ -23,7 +27,11 @@ const App = () => {
           <Route path="inventory" element={<Inventory />} />
           <Route path="sales-order" element={<SalesOrder />} />
           <Route path="sales-challan" element={<SalesChallan />} />
-          <Route path="master-data" element={<MasterData />} />
+          <Route path="master-data" element={<MasterDataDashboard />} />
+          <Route path="master-data/customers" element={<CustomersPage />} />
+          <Route path="master-data/suppliers" element={<SuppliersPage />} />
+          <Route path="master-data/products" element={<ProductsPage />} />
+          <Route path="master-data/categories" element={<CategoriesPage />} />
         </Route>
 
         {/* Test route outside main layout */}

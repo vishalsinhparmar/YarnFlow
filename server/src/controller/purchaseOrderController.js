@@ -59,7 +59,7 @@ export const getAllPurchaseOrders = async (req, res) => {
     }
     
     const purchaseOrders = await PurchaseOrder.find(query)
-      .populate('supplier', 'companyName supplierCode contactPerson email phone')
+      .populate('supplier', 'companyName supplierCode contactPerson phone')
       .populate('items.product', 'productName productCode specifications')
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -93,7 +93,7 @@ export const getPurchaseOrderById = async (req, res) => {
     const { id } = req.params;
     
     const purchaseOrder = await PurchaseOrder.findById(id)
-      .populate('supplier', 'companyName supplierCode contactPerson email phone address')
+      .populate('supplier', 'companyName supplierCode contactPerson phone address')
       .populate('items.product', 'productName productCode specifications inventory');
     
     if (!purchaseOrder) {
@@ -185,7 +185,6 @@ export const createPurchaseOrder = async (req, res) => {
       supplierDetails: {
         companyName: supplier.companyName,
         contactPerson: supplier.contactPerson,
-        email: supplier.email,
         phone: supplier.phone,
         address: supplier.address
       },
@@ -206,7 +205,7 @@ export const createPurchaseOrder = async (req, res) => {
     
     // Populate the saved PO for response
     const populatedPO = await PurchaseOrder.findById(purchaseOrder._id)
-      .populate('supplier', 'companyName supplierCode contactPerson email phone')
+      .populate('supplier', 'companyName supplierCode contactPerson phone')
       .populate('items.product', 'productName productCode specifications');
     
     res.status(201).json({
@@ -424,7 +423,7 @@ export const receiveItems = async (req, res) => {
     }
     
     const updatedPO = await PurchaseOrder.findById(id)
-      .populate('supplier', 'companyName supplierCode contactPerson email phone')
+      .populate('supplier', 'companyName supplierCode contactPerson phone')
       .populate('items.product', 'productName productCode specifications');
     
     res.status(200).json({

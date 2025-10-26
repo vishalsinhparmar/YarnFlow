@@ -111,6 +111,21 @@ export const categoryAPI = {
     });
   },
 
+  // Update category
+  update: async (categoryId, categoryData) => {
+    return apiRequest(`/categories/${categoryId}`, {
+      method: 'PUT',
+      body: JSON.stringify(categoryData),
+    });
+  },
+
+  // Delete category
+  delete: async (categoryId) => {
+    return apiRequest(`/categories/${categoryId}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Get categories by type
   getByType: async (categoryType) => {
     const response = await categoryAPI.getAll();
@@ -130,11 +145,31 @@ export const productAPI = {
     return apiRequest(endpoint);
   },
 
+  // Get product by ID
+  getById: async (id) => {
+    return apiRequest(`/products/${id}`);
+  },
+
   // Create new product
   create: async (productData) => {
     return apiRequest('/products', {
       method: 'POST',
       body: JSON.stringify(productData),
+    });
+  },
+
+  // Update product
+  update: async (id, productData) => {
+    return apiRequest(`/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(productData),
+    });
+  },
+
+  // Delete product
+  delete: async (id) => {
+    return apiRequest(`/products/${id}`, {
+      method: 'DELETE',
     });
   },
 
@@ -258,17 +293,36 @@ export const formatters = {
 
   // Format phone number
   phone: (phoneNumber) => {
-    if (!phoneNumber) return '';
+    if (!phoneNumber) return 'N/A';
     // Remove country code if present and format
-    const cleaned = phoneNumber.replace(/^\+91/, '');
+    const cleaned = phoneNumber.toString().replace(/^\+91/, '');
     return cleaned.replace(/(\d{5})(\d{5})/, '$1 $2');
+  },
+
+  // Format email
+  email: (email) => {
+    if (!email) return 'N/A';
+    return email.toLowerCase().trim();
   },
 
   // Format address
   address: (addressObj) => {
-    if (!addressObj) return '';
+    if (!addressObj) return 'N/A';
     const { street, city, state, pincode } = addressObj;
-    return `${street}, ${city}, ${state} - ${pincode}`;
+    const parts = [street, city, state, pincode].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : 'N/A';
+  },
+
+  // Format name (capitalize first letter of each word)
+  name: (name) => {
+    if (!name) return 'N/A';
+    return name.toString().toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  },
+
+  // Format status with proper casing
+  status: (status) => {
+    if (!status) return 'N/A';
+    return status.toString().charAt(0).toUpperCase() + status.slice(1).toLowerCase();
   },
 
   // Format stock status

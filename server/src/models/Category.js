@@ -6,6 +6,7 @@ const categorySchema = new mongoose.Schema({
     unique: true,
     uppercase: true
   },
+  // Required fields for simplified form
   categoryName: {
     type: String,
     required: true,
@@ -15,6 +16,13 @@ const categorySchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Status field for management
+  status: {
+    type: String,
+    enum: ['Active', 'Inactive'],
+    default: 'Active'
+  },
+  // Keep these fields for backward compatibility but make them optional
   parentCategory: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
@@ -23,27 +31,22 @@ const categorySchema = new mongoose.Schema({
   categoryType: {
     type: String,
     enum: ['Cotton Yarn', 'Polyester', 'Blended Yarn', 'Raw Material', 'Finished Goods'],
-    required: true
+    default: 'Cotton Yarn'
   },
   specifications: {
     unit: {
       type: String,
       enum: ['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'],
-      required: true
+      default: 'Bags'
     },
     standardWeight: {
-      type: Number, // in kg
-      required: true
+      type: Number,
+      default: 100
     },
-    yarnCount: [String], // e.g., ['20s', '30s', '40s']
-    blendRatio: String, // e.g., '60/40', '50/50'
+    yarnCount: [String],
+    blendRatio: String,
     color: [String],
     quality: [String]
-  },
-  status: {
-    type: String,
-    enum: ['Active', 'Inactive'],
-    default: 'Active'
   },
   sortOrder: {
     type: Number,
@@ -57,8 +60,22 @@ const categorySchema = new mongoose.Schema({
 categorySchema.pre('save', async function(next) {
   if (!this.categoryCode) {
     try {
-      const count = await mongoose.model('Category').countDocuments();
-      this.categoryCode = `CAT${String(count + 1).padStart(4, '0')}`;
+      // Find the highest existing category code number
+      const lastCategory = await mongoose.model('Category')
+        .findOne({}, { categoryCode: 1 })
+        .sort({ categoryCode: -1 })
+        .lean();
+      
+      let nextNumber = 1;
+      if (lastCategory && lastCategory.categoryCode) {
+        // Extract number from code like "CAT0001" -> 1
+        const match = lastCategory.categoryCode.match(/CAT(\d+)/);
+        if (match) {
+          nextNumber = parseInt(match[1]) + 1;
+        }
+      }
+      
+      this.categoryCode = `CAT${String(nextNumber).padStart(4, '0')}`;
     } catch (error) {
       return next(error);
     }
