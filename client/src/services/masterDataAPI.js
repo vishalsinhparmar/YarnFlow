@@ -90,15 +90,7 @@ export const supplierAPI = {
     });
   },
 
-  // Get suppliers by type
-  getByType: async (supplierType) => {
-    return supplierAPI.getAll({ supplierType });
-  },
-
-  // Get verified suppliers
-  getVerified: async () => {
-    return supplierAPI.getAll({ verificationStatus: 'Verified' });
-  },
+  // Removed helper filters tied to deprecated fields
 };
 
 // ============ CATEGORY API ============
@@ -227,8 +219,7 @@ export const getDropdownOptions = async () => {
       })),
       suppliers: suppliersResponse.data.map(sup => ({
         value: sup._id,
-        label: sup.companyName,
-        type: sup.supplierType
+        label: sup.companyName
       })),
       paymentTerms: [
         { value: 'Cash', label: 'Cash' },
