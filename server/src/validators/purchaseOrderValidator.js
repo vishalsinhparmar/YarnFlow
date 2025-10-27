@@ -21,18 +21,25 @@ export const validatePurchaseOrder = [
     .isMongoId()
     .withMessage('Invalid supplier ID'),
     
-  body('expectedDeliveryDate')
+  body('category')
     .notEmpty()
-    .withMessage('Expected delivery date is required')
+    .withMessage('Category is required')
+    .isMongoId()
+    .withMessage('Invalid category ID'),
+    
+  body('expectedDeliveryDate')
+    .optional()
     .isISO8601()
     .withMessage('Invalid date format')
     .custom((value) => {
-      const deliveryDate = new Date(value);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      if (deliveryDate < today) {
-        throw new Error('Expected delivery date cannot be in the past');
+      if (value) {
+        const deliveryDate = new Date(value);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (deliveryDate < today) {
+          throw new Error('Expected delivery date cannot be in the past');
+        }
       }
       return true;
     }),
@@ -51,49 +58,13 @@ export const validatePurchaseOrder = [
     .isFloat({ min: 0.01 })
     .withMessage('Quantity must be greater than 0'),
     
-  body('items.*.unitPrice')
-    .isFloat({ min: 0 })
-    .withMessage('Unit price must be a positive number'),
-    
   body('items.*.unit')
     .optional()
-    .isIn(['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'])
-    .withMessage('Invalid unit type'),
-    
-  body('items.*.deliveryDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid delivery date format'),
-    
-  body('taxRate')
-    .optional()
-    .isFloat({ min: 0, max: 100 })
-    .withMessage('Tax rate must be between 0 and 100'),
-    
-  body('discountAmount')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Discount amount must be positive'),
-    
-  body('priority')
-    .optional()
-    .isIn(['Low', 'Medium', 'High', 'Urgent'])
-    .withMessage('Invalid priority level'),
-    
-  body('shippingMethod')
-    .optional()
-    .isIn(['Pickup', 'Courier', 'Transport', 'Own_Vehicle'])
-    .withMessage('Invalid shipping method'),
-    
-  body('paymentTerms')
-    .optional()
-    .isIn(['Advance', 'Cash_on_Delivery', 'Credit_15', 'Credit_30', 'Credit_45', 'Credit_60'])
-    .withMessage('Invalid payment terms'),
-    
-  body('deliveryAddress.pincode')
-    .optional()
-    .matches(/^\d{6}$/)
-    .withMessage('Pincode must be 6 digits'),
+    .isString()
+    .withMessage('Unit must be a string')
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('Unit must be between 1 and 50 characters'),
     
   handleValidationErrors
 ];
@@ -129,11 +100,6 @@ export const validatePurchaseOrderUpdate = [
     .isFloat({ min: 0.01 })
     .withMessage('Quantity must be greater than 0'),
     
-  body('items.*.unitPrice')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Unit price must be a positive number'),
-    
   body('status')
     .optional()
     .isIn(['Draft', 'Sent', 'Acknowledged', 'Approved', 'Partially_Received', 'Fully_Received', 'Cancelled', 'Closed'])
@@ -143,16 +109,6 @@ export const validatePurchaseOrderUpdate = [
     .optional()
     .isIn(['Pending', 'Approved', 'Rejected'])
     .withMessage('Invalid approval status'),
-    
-  body('taxRate')
-    .optional()
-    .isFloat({ min: 0, max: 100 })
-    .withMessage('Tax rate must be between 0 and 100'),
-    
-  body('discountAmount')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Discount amount must be positive'),
     
   handleValidationErrors
 ];

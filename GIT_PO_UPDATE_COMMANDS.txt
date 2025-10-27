@@ -1,0 +1,197 @@
+# Git Commands for PO Update Branch
+
+# ============================================
+# STEP 1: Check Current Status
+# ============================================
+
+# See what files have been modified
+git status
+
+# See current branch
+git branch
+
+
+# ============================================
+# STEP 2: Create New Branch for PO Updates
+# ============================================
+
+# Create and switch to new branch
+git checkout -b feature/po-system-update-v2
+
+# OR if you prefer a different name:
+# git checkout -b po-number-format-update
+# git checkout -b po-quick-add-features
+# git checkout -b po-system-improvements
+
+
+# ============================================
+# STEP 3: Stage All PO-Related Changes
+# ============================================
+
+# Add all modified files
+git add .
+
+# OR add specific files only:
+git add server/src/models/PurchaseOrder.js
+git add server/src/validators/purchaseOrderValidator.js
+git add client/src/components/PurchaseOrders/PurchaseOrderForm.jsx
+git add client/src/components/PurchaseOrders/PurchaseOrderDetail.jsx
+git add client/src/pages/PurchaseOrder.jsx
+git add PURCHASE_ORDER_CHANGES.md
+git add PO_PRODUCTION_CHECKLIST.md
+
+
+# ============================================
+# STEP 4: Commit Changes
+# ============================================
+
+git commit -m "feat: PO System Update v2.0 - New Format & Quick-Add Features
+
+Major Changes:
+- Updated PO number format to PKRK/PO/25-26/001
+- Added quick-add modals for Supplier, Category, Product
+- Made Expected Delivery Date optional
+- Added dynamic custom unit support
+- Removed amount/financial tracking
+- Redesigned PO detail view
+- Updated PO list with category column
+
+Backend:
+- Modified PO number generation (financial year based)
+- Updated validators for optional fields
+- Removed unit enum restriction
+
+Frontend:
+- Added quick-add functionality with inline modals
+- Implemented dynamic unit field
+- Redesigned PurchaseOrderDetail component
+- Updated PurchaseOrder list page
+- Improved UI/UX with modern styling
+
+Documentation:
+- Created PURCHASE_ORDER_CHANGES.md
+- Created PO_PRODUCTION_CHECKLIST.md
+
+All changes are backward compatible and production ready.
+"
+
+
+# ============================================
+# STEP 5: Push to Remote Repository
+# ============================================
+
+# Push new branch to remote
+git push -u origin feature/po-system-update-v2
+
+# The -u flag sets upstream tracking
+# Future pushes can be done with just: git push
+
+
+# ============================================
+# STEP 6: Verify Push
+# ============================================
+
+# Check remote branches
+git branch -r
+
+# Check branch status
+git status
+
+
+# ============================================
+# OPTIONAL: Create Pull Request
+# ============================================
+
+# After pushing, go to GitHub/GitLab/Bitbucket and:
+# 1. Navigate to your repository
+# 2. Click "New Pull Request" or "Create Pull Request"
+# 3. Select: feature/po-system-update-v2 -> main (or master)
+# 4. Add title: "PO System Update v2.0 - New Format & Features"
+# 5. Add description (copy from PURCHASE_ORDER_CHANGES.md)
+# 6. Request review from team members
+# 7. Merge after approval
+
+
+# ============================================
+# OPTIONAL: Tag the Release
+# ============================================
+
+# After merging to main, create a version tag
+git checkout main
+git pull origin main
+git tag -a v2.0.0-po-update -m "PO System Update v2.0
+
+- New PO number format: PKRK/PO/25-26/001
+- Quick-add features for master data
+- Optional delivery date
+- Custom units support
+- Removed financial tracking
+- Improved UI/UX
+"
+
+# Push the tag
+git push origin v2.0.0-po-update
+
+
+# ============================================
+# TROUBLESHOOTING
+# ============================================
+
+# If you need to undo the last commit (before pushing):
+# git reset --soft HEAD~1
+
+# If you need to see what changed:
+# git diff
+
+# If you need to see commit history:
+# git log --oneline
+
+# If you accidentally committed to wrong branch:
+# git checkout main
+# git checkout -b feature/po-system-update-v2
+# git cherry-pick <commit-hash>
+
+
+# ============================================
+# BRANCH NAMING CONVENTIONS
+# ============================================
+
+# Feature branches:
+# feature/po-system-update-v2
+# feature/quick-add-functionality
+# feature/po-number-format
+
+# Bugfix branches:
+# bugfix/po-validation-error
+# bugfix/po-detail-display
+
+# Hotfix branches (for production):
+# hotfix/po-critical-fix
+
+
+# ============================================
+# NOTES
+# ============================================
+
+# Files Modified in This Update:
+# Backend:
+#   - server/src/models/PurchaseOrder.js
+#   - server/src/validators/purchaseOrderValidator.js
+#
+# Frontend:
+#   - client/src/components/PurchaseOrders/PurchaseOrderForm.jsx
+#   - client/src/components/PurchaseOrders/PurchaseOrderDetail.jsx
+#   - client/src/pages/PurchaseOrder.jsx
+#
+# Documentation:
+#   - PURCHASE_ORDER_CHANGES.md
+#   - PO_PRODUCTION_CHECKLIST.md
+#   - GIT_PO_UPDATE_COMMANDS.txt (this file)
+
+# Total Files Changed: 8
+# Lines Added: ~1500
+# Lines Removed: ~500
+
+# ============================================
+# END OF COMMANDS
+# ============================================

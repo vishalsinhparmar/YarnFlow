@@ -217,13 +217,13 @@ const PurchaseOrder = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Value</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {poUtils.formatCurrency(stats?.monthlyValue || 0)}
+              <p className="text-sm font-medium text-gray-600">Fully Received</p>
+              <p className="text-2xl font-bold text-green-600">
+                {getStatusCount('Fully_Received')}
               </p>
             </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-purple-600 text-xl">💰</span>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <span className="text-green-600 text-xl">📦</span>
             </div>
           </div>
         </div>
@@ -304,10 +304,10 @@ const PurchaseOrder = () => {
                       Supplier
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
+                      Category
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Amount
+                      Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
@@ -331,11 +331,11 @@ const PurchaseOrder = () => {
                         <div className="text-sm text-gray-900">{po.supplierDetails?.companyName}</div>
                         <div className="text-xs text-gray-500">{po.supplier?.supplierCode}</div>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {po.category?.categoryName || 'N/A'}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {poUtils.formatDate(po.orderDate)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {poUtils.formatCurrency(po.totalAmount)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${poUtils.getStatusColor(po.status)}`}>
