@@ -1,6 +1,7 @@
 import PurchaseOrder from '../models/PurchaseOrder.js';
 import Product from '../models/Product.js';
 import Supplier from '../models/Supplier.js';
+import Category from '../models/Category.js';
 
 // ============ PURCHASE ORDER CONTROLLERS ============
 
@@ -60,6 +61,7 @@ export const getAllPurchaseOrders = async (req, res) => {
     
     const purchaseOrders = await PurchaseOrder.find(query)
       .populate('supplier', 'companyName supplierCode contactPerson phone')
+      .populate('category', 'categoryName categoryCode')
       .populate('items.product', 'productName productCode specifications')
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -94,6 +96,7 @@ export const getPurchaseOrderById = async (req, res) => {
     
     const purchaseOrder = await PurchaseOrder.findById(id)
       .populate('supplier', 'companyName supplierCode contactPerson phone address')
+      .populate('category', 'categoryName categoryCode')
       .populate('items.product', 'productName productCode specifications inventory');
     
     if (!purchaseOrder) {
@@ -124,16 +127,9 @@ export const createPurchaseOrder = async (req, res) => {
     
     const {
       supplier: supplierId,
+      category: categoryId,
       expectedDeliveryDate,
       items,
-      taxRate = 18,
-      discountAmount = 0,
-      deliveryAddress,
-      shippingMethod,
-      paymentTerms,
-      terms,
-      notes,
-      priority = 'Medium',
       createdBy = 'System'
     } = req.body;
     
@@ -143,6 +139,15 @@ export const createPurchaseOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Supplier not found'
+      });
+    }
+
+    // Validate category exists
+    const category = await Category.findById(categoryId);
+    if (!category) {
+      return res.status(400).json({
+        success: false,
+        message: 'Category not found'
       });
     }
     
@@ -156,6 +161,15 @@ export const createPurchaseOrder = async (req, res) => {
           message: `Product not found: ${item.product}`
         });
       }
+
+      // Validate product belongs to selected category
+      const productCategoryId = product.category?._id?.toString() || product.category?.toString();
+      if (productCategoryId !== categoryId) {
+        return res.status(400).json({
+          success: false,
+          message: `Product "${product.productName}" does not belong to the selected category`
+        });
+      }
       
       const populatedItem = {
         product: product._id,
@@ -165,14 +179,11 @@ export const createPurchaseOrder = async (req, res) => {
           yarnCount: product.specifications?.yarnCount || item.specifications?.yarnCount || '',
           color: product.specifications?.color || item.specifications?.color || '',
           quality: product.specifications?.quality || item.specifications?.quality || '',
-          weight: product.specifications?.weight || item.specifications?.weight || 0,
+          weight: item.weight || product.specifications?.weight || 0,
           composition: product.specifications?.composition || item.specifications?.composition || ''
         },
         quantity: item.quantity,
         unit: item.unit || product.inventory?.unit || 'Bags',
-        unitPrice: item.unitPrice,
-        totalPrice: item.quantity * item.unitPrice,
-        deliveryDate: item.deliveryDate || expectedDeliveryDate,
         notes: item.notes || ''
       };
       
@@ -182,6 +193,7 @@ export const createPurchaseOrder = async (req, res) => {
     // Create purchase order
     const purchaseOrder = new PurchaseOrder({
       supplier: supplierId,
+      category: categoryId,
       supplierDetails: {
         companyName: supplier.companyName,
         contactPerson: supplier.contactPerson,
@@ -190,14 +202,6 @@ export const createPurchaseOrder = async (req, res) => {
       },
       expectedDeliveryDate,
       items: populatedItems,
-      taxRate,
-      discountAmount,
-      deliveryAddress,
-      shippingMethod,
-      paymentTerms,
-      terms,
-      notes,
-      priority,
       createdBy
     });
     
@@ -206,6 +210,7 @@ export const createPurchaseOrder = async (req, res) => {
     // Populate the saved PO for response
     const populatedPO = await PurchaseOrder.findById(purchaseOrder._id)
       .populate('supplier', 'companyName supplierCode contactPerson phone')
+      .populate('category', 'categoryName categoryCode')
       .populate('items.product', 'productName productCode specifications');
     
     res.status(201).json({

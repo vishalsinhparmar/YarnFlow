@@ -28,21 +28,8 @@ const purchaseOrderItemSchema = new mongoose.Schema({
   },
   unit: {
     type: String,
-    enum: ['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'],
-    default: 'Bags'
-  },
-  unitPrice: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  totalPrice: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  deliveryDate: {
-    type: Date
+    default: 'Bags',
+    trim: true
   },
   receivedQuantity: {
     type: Number,
@@ -68,6 +55,11 @@ const purchaseOrderSchema = new mongoose.Schema({
   supplier: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Supplier',
+    required: true
+  },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
     required: true
   },
   supplierDetails: {
@@ -101,44 +93,11 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   items: [purchaseOrderItemSchema],
   
-  // Financial Details
-  subtotal: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  taxRate: {
-    type: Number,
-    default: 18, // GST rate in percentage
-    min: 0,
-    max: 100
-  },
-  taxAmount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  discountAmount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  totalAmount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  
   // Status and Workflow
   status: {
     type: String,
     enum: ['Draft', 'Sent', 'Acknowledged', 'Approved', 'Partially_Received', 'Fully_Received', 'Cancelled', 'Closed'],
     default: 'Draft'
-  },
-  priority: {
-    type: String,
-    enum: ['Low', 'Medium', 'High', 'Urgent'],
-    default: 'Medium'
   },
   
   // Approval Workflow
@@ -157,41 +116,14 @@ const purchaseOrderSchema = new mongoose.Schema({
     trim: true
   },
   
-  // Delivery Information
-  deliveryAddress: {
-    street: String,
-    city: String,
-    state: String,
-    pincode: String,
-    landmark: String
-  },
-  shippingMethod: {
-    type: String,
-    enum: ['Pickup', 'Courier', 'Transport', 'Own_Vehicle'],
-    default: 'Transport'
-  },
-  
-  // Payment Terms
-  paymentTerms: {
-    type: String,
-    enum: ['Advance', 'Cash_on_Delivery', 'Credit_15', 'Credit_30', 'Credit_45', 'Credit_60'],
-    default: 'Credit_30'
-  },
+  // Payment Status
   paymentStatus: {
     type: String,
     enum: ['Pending', 'Partial', 'Paid'],
     default: 'Pending'
   },
   
-  // Additional Information
-  terms: {
-    type: String,
-    trim: true
-  },
-  notes: {
-    type: String,
-    trim: true
-  },
+  // Internal Notes
   internalNotes: {
     type: String,
     trim: true
@@ -237,18 +169,37 @@ const purchaseOrderSchema = new mongoose.Schema({
 purchaseOrderSchema.pre('save', async function(next) {
   if (!this.poNumber) {
     try {
-      const currentYear = new Date().getFullYear();
-      const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth(); // 0-11
       
-      // Count POs for current month
+      // Determine financial year (April to March)
+      let financialYearStart, financialYearEnd;
+      if (currentMonth >= 3) { // April (3) to December (11)
+        financialYearStart = currentYear;
+        financialYearEnd = currentYear + 1;
+      } else { // January (0) to March (2)
+        financialYearStart = currentYear - 1;
+        financialYearEnd = currentYear;
+      }
+      
+      const fyStart = String(financialYearStart).slice(-2); // Last 2 digits
+      const fyEnd = String(financialYearEnd).slice(-2);
+      
+      // Get start and end dates for current financial year
+      const fyStartDate = new Date(financialYearStart, 3, 1); // April 1st
+      const fyEndDate = new Date(financialYearEnd, 3, 1); // April 1st next year
+      
+      // Count POs for current financial year
       const count = await mongoose.model('PurchaseOrder').countDocuments({
         createdAt: {
-          $gte: new Date(currentYear, new Date().getMonth(), 1),
-          $lt: new Date(currentYear, new Date().getMonth() + 1, 1)
+          $gte: fyStartDate,
+          $lt: fyEndDate
         }
       });
       
-      this.poNumber = `PO${currentYear}${currentMonth}${String(count + 1).padStart(4, '0')}`;
+      // Generate PO number: PKRK/PO/25-26/001
+      this.poNumber = `PKRK/PO/${fyStart}-${fyEnd}/${String(count + 1).padStart(3, '0')}`;
     } catch (error) {
       return next(error);
     }
@@ -273,35 +224,6 @@ purchaseOrderSchema.pre('save', async function(next) {
   next();
 });
 
-// Calculate totals before saving
-purchaseOrderSchema.pre('save', function(next) {
-  // Ensure each item has required fields calculated
-  this.items.forEach(item => {
-    // Set delivery date to PO delivery date if not provided
-    if (!item.deliveryDate) {
-      item.deliveryDate = this.expectedDeliveryDate;
-    }
-    
-    // Calculate totalPrice if not provided
-    if (!item.totalPrice || item.totalPrice === 0) {
-      item.totalPrice = (item.quantity || 0) * (item.unitPrice || 0);
-    }
-  });
-  
-  // Calculate subtotal
-  this.subtotal = this.items.reduce((sum, item) => {
-    const itemTotal = item.totalPrice || ((item.quantity || 0) * (item.unitPrice || 0));
-    return sum + itemTotal;
-  }, 0);
-  
-  // Calculate tax amount
-  this.taxAmount = (this.subtotal * (this.taxRate || 0)) / 100;
-  
-  // Calculate total amount
-  this.totalAmount = this.subtotal + this.taxAmount - (this.discountAmount || 0);
-  
-  next();
-});
 
 // Indexes for better query performance
 purchaseOrderSchema.index({ poNumber: 1 });
