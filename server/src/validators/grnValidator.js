@@ -26,21 +26,6 @@ export const validateGRN = [
     .isISO8601()
     .withMessage('Invalid receipt date format'),
     
-  body('deliveryDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid delivery date format'),
-    
-  body('invoiceDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid invoice date format'),
-    
-  body('invoiceAmount')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Invoice amount must be a positive number'),
-    
   body('items')
     .isArray({ min: 1 })
     .withMessage('At least one item is required'),
@@ -70,22 +55,6 @@ export const validateGRN = [
     .isIn(['Pending', 'Approved', 'Rejected', 'Partial'])
     .withMessage('Invalid quality status'),
     
-  body('receivedBy')
-    .notEmpty()
-    .withMessage('Received by is required')
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Received by must be between 2 and 100 characters'),
-    
-  body('vehicleNumber')
-    .optional()
-    .matches(/^[A-Z0-9\s-]+$/i)
-    .withMessage('Invalid vehicle number format'),
-    
-  body('driverPhone')
-    .optional()
-    .matches(/^\d{10}$/)
-    .withMessage('Driver phone must be 10 digits'),
-    
   handleValidationErrors
 ];
 
@@ -99,21 +68,6 @@ export const validateGRNUpdate = [
     .optional()
     .isISO8601()
     .withMessage('Invalid receipt date format'),
-    
-  body('deliveryDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid delivery date format'),
-    
-  body('invoiceDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Invalid invoice date format'),
-    
-  body('invoiceAmount')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Invoice amount must be a positive number'),
     
   body('items.*.receivedQuantity')
     .optional()

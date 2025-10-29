@@ -32,10 +32,34 @@ const grnItemSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  orderedWeight: {
+    type: Number,
+    default: 0
+  },
+  previouslyReceived: {
+    type: Number,
+    default: 0
+  },
+  previousWeight: {
+    type: Number,
+    default: 0
+  },
   receivedQuantity: {
     type: Number,
     required: true,
     min: 0
+  },
+  receivedWeight: {
+    type: Number,
+    default: 0
+  },
+  pendingQuantity: {
+    type: Number,
+    default: 0
+  },
+  pendingWeight: {
+    type: Number,
+    default: 0
   },
   acceptedQuantity: {
     type: Number,
@@ -138,39 +162,6 @@ const grnSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  deliveryDate: {
-    type: Date
-  },
-  invoiceNumber: {
-    type: String,
-    trim: true
-  },
-  invoiceDate: {
-    type: Date
-  },
-  invoiceAmount: {
-    type: Number,
-    default: 0
-  },
-  
-  // Transport Details
-  vehicleNumber: {
-    type: String,
-    trim: true,
-    uppercase: true
-  },
-  driverName: {
-    type: String,
-    trim: true
-  },
-  driverPhone: {
-    type: String,
-    trim: true
-  },
-  transportCompany: {
-    type: String,
-    trim: true
-  },
   
   // Items Received
   items: [grnItemSchema],
@@ -180,6 +171,17 @@ const grnSchema = new mongoose.Schema({
     type: String,
     enum: ['Draft', 'Received', 'Under_Review', 'Approved', 'Rejected', 'Completed'],
     default: 'Draft'
+  },
+  
+  // Receipt Status
+  receiptStatus: {
+    type: String,
+    enum: ['Partial', 'Complete'],
+    default: 'Partial'
+  },
+  isPartialReceipt: {
+    type: Boolean,
+    default: false
   },
   
   // Quality Control
@@ -233,11 +235,6 @@ const grnSchema = new mongoose.Schema({
   },
   
   // Additional Information
-  receivedBy: {
-    type: String,
-    required: true,
-    trim: true
-  },
   checkedBy: {
     type: String,
     trim: true

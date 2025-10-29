@@ -207,11 +207,11 @@ const GoodsReceipt = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Pending Review</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats?.pendingReview || 0}</p>
+              <p className="text-sm font-medium text-gray-600">Pending</p>
+              <p className="text-2xl font-bold text-gray-600">{stats?.pending || 0}</p>
             </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <span className="text-yellow-600 text-xl">👥</span>
+            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+              <span className="text-gray-600 text-xl">⏳</span>
             </div>
           </div>
         </div>
@@ -219,8 +219,8 @@ const GoodsReceipt = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Approved</p>
-              <p className="text-2xl font-bold text-green-600">{getStatusCount('Approved') + getStatusCount('Completed')}</p>
+              <p className="text-sm font-medium text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-green-600">{stats?.completed || 0}</p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <span className="text-green-600 text-xl">✅</span>
@@ -260,12 +260,9 @@ const GoodsReceipt = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="">All Status</option>
-              <option value="Draft">Draft</option>
-              <option value="Received">Received</option>
-              <option value="Under_Review">Under Review</option>
-              <option value="Approved">Approved</option>
-              <option value="Completed">Completed</option>
-              <option value="Rejected">Rejected</option>
+              <option value="Pending">Pending</option>
+              <option value="Partial">Partial</option>
+              <option value="Complete">Complete</option>
             </select>
           </div>
         </div>
@@ -321,7 +318,7 @@ const GoodsReceipt = () => {
                       Received Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quantity
+                      Quantity & Weight
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
@@ -332,55 +329,81 @@ const GoodsReceipt = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {grns.map((grn) => (
-                    <tr key={grn._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{grn.grnNumber}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{grn.poNumber}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{grn.supplierDetails?.companyName}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {grnUtils.formatDate(grn.receiptDate)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {grn.items?.reduce((total, item) => total + item.receivedQuantity, 0)} 
-                        {grn.items?.[0]?.unit && ` ${grn.items[0].unit}`}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${grnUtils.getStatusColor(grn.status)}`}>
-                          {grnUtils.formatStatus(grn.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button 
-                          onClick={() => handleViewGRN(grn)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          View
-                        </button>
-                        {grn.status === 'Received' && (
+                  {grns.map((grn) => {
+                    const totalQty = grn.items?.reduce((total, item) => total + item.receivedQuantity, 0) || 0;
+                    
+                    // Calculate total weight - if receivedWeight is 0, calculate from quantity
+                    const totalWeight = grn.items?.reduce((total, item) => {
+                      let weight = item.receivedWeight || 0;
+                      
+                      // If weight is 0 but we have quantity, calculate it
+                      if (weight === 0 && item.receivedQuantity > 0 && item.orderedQuantity > 0 && item.orderedWeight > 0) {
+                        const weightPerUnit = item.orderedWeight / item.orderedQuantity;
+                        weight = item.receivedQuantity * weightPerUnit;
+                      }
+                      
+                      return total + weight;
+                    }, 0) || 0;
+                    
+                    const unit = grn.items?.[0]?.unit || '';
+                    
+                    // Calculate receipt status based on items
+                    let receiptStatus = 'Pending';
+                    if (grn.items && grn.items.length > 0) {
+                      const allComplete = grn.items.every(item => {
+                        const pending = (item.orderedQuantity || 0) - ((item.previouslyReceived || 0) + item.receivedQuantity);
+                        return pending <= 0;
+                      });
+                      const anyReceived = grn.items.some(item => item.receivedQuantity > 0);
+                      
+                      if (allComplete && anyReceived) {
+                        receiptStatus = 'Complete';
+                      } else if (anyReceived) {
+                        receiptStatus = 'Partial';
+                      }
+                    }
+                    
+                    // Use backend receiptStatus if available, otherwise use calculated
+                    const displayStatus = grn.receiptStatus || receiptStatus;
+                    
+                    return (
+                      <tr key={grn._id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{grn.grnNumber}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{grn.poNumber}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{grn.supplierDetails?.companyName}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {grnUtils.formatDate(grn.receiptDate)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {totalQty} {unit}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {totalWeight.toFixed(2)} kg
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={'inline-flex px-2 py-1 text-xs font-semibold rounded-full ' + (displayStatus === 'Complete' ? 'bg-green-100 text-green-800' : displayStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800')}>
+                            {displayStatus}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button 
-                            onClick={() => handleQualityCheck(grn)}
-                            className="text-yellow-600 hover:text-yellow-900 mr-3"
+                            onClick={() => handleViewGRN(grn)}
+                            className="text-blue-600 hover:text-blue-900"
                           >
-                            Review
+                            View
                           </button>
-                        )}
-                        {grnUtils.canApprove(grn.status, grn.qualityCheckStatus) && (
-                          <button 
-                            onClick={() => handleApproveGRN(grn._id, 'Manager', 'Approved via UI')}
-                            className="text-green-600 hover:text-green-900"
-                          >
-                            Approve
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
