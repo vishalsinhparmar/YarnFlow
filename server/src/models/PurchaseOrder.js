@@ -36,9 +36,23 @@ const purchaseOrderItemSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  receivedWeight: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   pendingQuantity: {
     type: Number,
     default: 0
+  },
+  pendingWeight: {
+    type: Number,
+    default: 0
+  },
+  receiptStatus: {
+    type: String,
+    enum: ['Pending', 'Partial', 'Complete'],
+    default: 'Pending'
   },
   notes: {
     type: String,
@@ -132,6 +146,18 @@ const purchaseOrderSchema = new mongoose.Schema({
   // Tracking
   sentDate: Date,
   acknowledgedDate: Date,
+  
+  // Receipt Tracking
+  totalGRNs: {
+    type: Number,
+    default: 0
+  },
+  completionPercentage: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100
+  },
   
   // File Attachments
   attachments: [{
@@ -241,8 +267,43 @@ purchaseOrderSchema.virtual('isOverdue').get(function() {
   return this.expectedDeliveryDate < new Date() && !['Fully_Received', 'Cancelled', 'Closed'].includes(this.status);
 });
 
-// Virtual for completion percentage
-purchaseOrderSchema.virtual('completionPercentage').get(function() {
+// Method to update receipt status and calculations
+purchaseOrderSchema.methods.updateReceiptStatus = function() {
+  // Update each item's status and pending quantities
+  this.items.forEach(item => {
+    // Calculate pending quantities
+    item.pendingQuantity = item.quantity - (item.receivedQuantity || 0);
+    item.pendingWeight = (item.specifications?.weight || 0) - (item.receivedWeight || 0);
+    
+    // Update item receipt status
+    if (item.receivedQuantity === 0) {
+      item.receiptStatus = 'Pending';
+    } else if (item.receivedQuantity < item.quantity) {
+      item.receiptStatus = 'Partial';
+    } else {
+      item.receiptStatus = 'Complete';
+    }
+  });
+  
+  // Calculate overall completion percentage
+  const totalQuantity = this.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  const receivedQuantity = this.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0);
+  this.completionPercentage = totalQuantity > 0 ? Math.round((receivedQuantity / totalQuantity) * 100) : 0;
+  
+  // Update overall PO status
+  const totalItems = this.items.length;
+  const completedItems = this.items.filter(item => item.receiptStatus === 'Complete').length;
+  const partialItems = this.items.filter(item => item.receiptStatus === 'Partial').length;
+  
+  if (completedItems === totalItems) {
+    this.status = 'Fully_Received';
+  } else if (partialItems > 0 || completedItems > 0) {
+    this.status = 'Partially_Received';
+  }
+};
+
+// Virtual for completion percentage (kept for backward compatibility)
+purchaseOrderSchema.virtual('completionPercent').get(function() {
   // Safety check for items array
   if (!this.items || !Array.isArray(this.items)) {
     return 0;

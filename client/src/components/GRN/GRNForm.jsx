@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
 import masterDataAPI from '../../services/masterDataAPI';
+import PurchaseOrderForm from '../PurchaseOrders/PurchaseOrderForm';
 
 const GRNForm = ({ grn, onSubmit, onCancel }) => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -8,19 +10,11 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
   const [loading, setLoading] = useState(false);
   const [loadingPOs, setLoadingPOs] = useState(true);
   const [errors, setErrors] = useState({});
+  const [showPOModal, setShowPOModal] = useState(false);
 
   const [formData, setFormData] = useState({
     purchaseOrder: '',
     receiptDate: new Date().toISOString().split('T')[0],
-    deliveryDate: '',
-    invoiceNumber: '',
-    invoiceDate: '',
-    invoiceAmount: 0,
-    vehicleNumber: '',
-    driverName: '',
-    driverPhone: '',
-    transportCompany: '',
-    receivedBy: '',
     warehouseLocation: '',
     generalNotes: '',
     items: []
@@ -60,15 +54,6 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
       setFormData({
         purchaseOrder: grn.purchaseOrder?._id || '',
         receiptDate: grn.receiptDate ? new Date(grn.receiptDate).toISOString().split('T')[0] : '',
-        deliveryDate: grn.deliveryDate ? new Date(grn.deliveryDate).toISOString().split('T')[0] : '',
-        invoiceNumber: grn.invoiceNumber || '',
-        invoiceDate: grn.invoiceDate ? new Date(grn.invoiceDate).toISOString().split('T')[0] : '',
-        invoiceAmount: grn.invoiceAmount || 0,
-        vehicleNumber: grn.vehicleNumber || '',
-        driverName: grn.driverName || '',
-        driverPhone: grn.driverPhone || '',
-        transportCompany: grn.transportCompany || '',
-        receivedBy: grn.receivedBy || '',
         warehouseLocation: grn.warehouseLocation || '',
         generalNotes: grn.generalNotes || '',
         items: grn.items?.map(item => ({
@@ -77,15 +62,9 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
           productCode: item.productCode,
           orderedQuantity: item.orderedQuantity,
           receivedQuantity: item.receivedQuantity || 0,
-          acceptedQuantity: item.acceptedQuantity || 0,
-          rejectedQuantity: item.rejectedQuantity || 0,
           unit: item.unit,
-          qualityStatus: item.qualityStatus || 'Pending',
-          qualityNotes: item.qualityNotes || '',
+          specifications: item.specifications || {},
           warehouseLocation: item.warehouseLocation || '',
-          batchNumber: item.batchNumber || '',
-          damageQuantity: item.damageQuantity || 0,
-          damageNotes: item.damageNotes || '',
           notes: item.notes || ''
         })) || []
       });
@@ -115,7 +94,11 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
   const handlePOSelection = async (poId) => {
     if (!poId) {
       setSelectedPO(null);
-      setFormData(prev => ({ ...prev, items: [] }));
+      setFormData(prev => ({
+        ...prev,
+        purchaseOrder: '',
+        items: []
+      }));
       return;
     }
 
@@ -124,24 +107,50 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
       const po = response.data;
       setSelectedPO(po);
       
-      // Populate items from PO
-      const items = po.items.map(item => ({
-        purchaseOrderItem: item._id,
-        productName: item.productName,
-        productCode: item.productCode,
-        orderedQuantity: item.quantity,
-        receivedQuantity: 0,
-        acceptedQuantity: 0,
-        rejectedQuantity: 0,
-        unit: item.unit,
-        qualityStatus: 'Pending',
-        qualityNotes: '',
-        warehouseLocation: formData.warehouseLocation,
-        batchNumber: '',
-        damageQuantity: 0,
-        damageNotes: '',
-        notes: ''
-      }));
+      // Populate items from PO with receipt tracking
+      const items = po.items.map(item => {
+        const orderedWeight = item.specifications?.weight || 0;
+        const receivedQty = item.receivedQuantity || 0;
+        
+        // Calculate received weight from backend OR calculate from quantity
+        let receivedWt = item.receivedWeight || 0;
+        if (receivedWt === 0 && receivedQty > 0 && item.quantity > 0 && orderedWeight > 0) {
+          // If backend doesn't have receivedWeight, calculate it
+          const weightPerUnit = orderedWeight / item.quantity;
+          receivedWt = receivedQty * weightPerUnit;
+        }
+        
+        const pendingQty = item.quantity - receivedQty;
+        const pendingWt = orderedWeight - receivedWt;
+        
+        return {
+          purchaseOrderItem: item._id,
+          productName: item.productName,
+          productCode: item.productCode,
+          
+          // Ordered
+          orderedQuantity: item.quantity,
+          orderedWeight: orderedWeight,
+          
+          // Previously received (from other GRNs)
+          previouslyReceived: receivedQty,
+          previousWeight: receivedWt,
+          
+          // Receiving now (user will input)
+          receivedQuantity: 0,
+          receivedWeight: 0,
+          
+          // Pending (auto-calculated)
+          pendingQuantity: pendingQty,
+          pendingWeight: pendingWt,
+          
+          unit: item.unit,
+          specifications: item.specifications || {},
+          receiptStatus: item.receiptStatus || 'Pending',
+          warehouseLocation: formData.warehouseLocation,
+          notes: ''
+        };
+      });
       
       setFormData(prev => ({
         ...prev,
@@ -160,19 +169,6 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
       ...updatedItems[index],
       [field]: value
     };
-    
-    // Auto-calculate accepted quantity if not manually set
-    if (field === 'receivedQuantity' || field === 'rejectedQuantity' || field === 'damageQuantity') {
-      const item = updatedItems[index];
-      const received = Number(item.receivedQuantity) || 0;
-      const rejected = Number(item.rejectedQuantity) || 0;
-      const damaged = Number(item.damageQuantity) || 0;
-      
-      if (field === 'receivedQuantity') {
-        // Auto-set accepted quantity to received minus rejected and damaged
-        updatedItems[index].acceptedQuantity = Math.max(0, received - rejected - damaged);
-      }
-    }
     
     setFormData(prev => ({
       ...prev,
@@ -197,33 +193,27 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
       newErrors.purchaseOrder = 'Purchase Order is required';
     }
 
-    if (!formData.receivedBy) {
-      newErrors.receivedBy = 'Received by is required';
-    }
-
     if (!formData.receiptDate) {
       newErrors.receiptDate = 'Receipt date is required';
     }
 
     // Item validations
+    let hasAtLeastOneItem = false;
     formData.items.forEach((item, index) => {
-      if (!item.receivedQuantity || item.receivedQuantity <= 0) {
-        newErrors[`items.${index}.receivedQuantity`] = 'Received quantity is required';
-      }
-      
-      const received = Number(item.receivedQuantity) || 0;
-      const accepted = Number(item.acceptedQuantity) || 0;
-      const rejected = Number(item.rejectedQuantity) || 0;
-      const damaged = Number(item.damageQuantity) || 0;
-      
-      if (accepted + rejected + damaged > received) {
-        newErrors[`items.${index}.quantities`] = 'Accepted + Rejected + Damaged cannot exceed received quantity';
+      if (item.receivedQuantity > 0) {
+        hasAtLeastOneItem = true;
+        
+        // Check if receiving more than pending
+        const maxAllowed = item.orderedQuantity - item.previouslyReceived;
+        if (item.receivedQuantity > maxAllowed) {
+          newErrors['items.' + index + '.receivedQuantity'] = 
+            'Cannot receive more than pending (' + maxAllowed + ' ' + item.unit + ')';
+        }
       }
     });
-
-    // Driver phone validation
-    if (formData.driverPhone && !/^\d{10}$/.test(formData.driverPhone)) {
-      newErrors.driverPhone = 'Driver phone must be 10 digits';
+    
+    if (!hasAtLeastOneItem) {
+      newErrors.items = 'Please enter received quantity for at least one item';
     }
 
     setErrors(newErrors);
@@ -243,13 +233,9 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
       // Prepare data for submission
       const submitData = {
         ...formData,
-        invoiceAmount: Number(formData.invoiceAmount),
         items: formData.items.map(item => ({
           ...item,
-          receivedQuantity: Number(item.receivedQuantity),
-          acceptedQuantity: Number(item.acceptedQuantity),
-          rejectedQuantity: Number(item.rejectedQuantity),
-          damageQuantity: Number(item.damageQuantity)
+          receivedQuantity: Number(item.receivedQuantity)
         }))
       };
 
@@ -263,6 +249,7 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
   };
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-6">
       {errors.submit && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
@@ -276,9 +263,20 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Purchase Order *
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">
+                Purchase Order *
+              </label>
+              {!grn && (
+                <button
+                  type="button"
+                  onClick={() => setShowPOModal(true)}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                >
+                  <span className="text-lg">+</span> Add PO
+                </button>
+              )}
+            </div>
             <select
               name="purchaseOrder"
               value={formData.purchaseOrder}
@@ -330,157 +328,6 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Delivery Date
-            </label>
-            <input
-              type="date"
-              name="deliveryDate"
-              value={formData.deliveryDate}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Received By *
-            </label>
-            <input
-              type="text"
-              name="receivedBy"
-              value={formData.receivedBy}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                errors.receivedBy ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Name of person who received goods"
-            />
-            {errors.receivedBy && (
-              <p className="text-red-500 text-xs mt-1">{errors.receivedBy}</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Invoice Information */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Invoice Information</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Invoice Number
-            </label>
-            <input
-              type="text"
-              name="invoiceNumber"
-              value={formData.invoiceNumber}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder="Supplier invoice number"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Invoice Date
-            </label>
-            <input
-              type="date"
-              name="invoiceDate"
-              value={formData.invoiceDate}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Invoice Amount (₹)
-            </label>
-            <input
-              type="number"
-              name="invoiceAmount"
-              value={formData.invoiceAmount}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Transport Information */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Transport Information</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Vehicle Number
-            </label>
-            <input
-              type="text"
-              name="vehicleNumber"
-              value={formData.vehicleNumber}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder="GJ01AB1234"
-              style={{ textTransform: 'uppercase' }}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Transport Company
-            </label>
-            <input
-              type="text"
-              name="transportCompany"
-              value={formData.transportCompany}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder="Transport company name"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Driver Name
-            </label>
-            <input
-              type="text"
-              name="driverName"
-              value={formData.driverName}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-              placeholder="Driver name"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Driver Phone
-            </label>
-            <input
-              type="text"
-              name="driverPhone"
-              value={formData.driverPhone}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                errors.driverPhone ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="10-digit phone number"
-              maxLength="10"
-            />
-            {errors.driverPhone && (
-              <p className="text-red-500 text-xs mt-1">{errors.driverPhone}</p>
-            )}
-          </div>
         </div>
       </div>
 
@@ -518,102 +365,136 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Ordered
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Received *
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-50">
+                    Prev. Received
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-green-50">
+                    Receiving Now *
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-orange-50">
+                    Pending
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Accepted
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Rejected
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Damaged
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Quality Status
+                    Progress
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {formData.items.map((item, index) => (
-                  <tr key={index}>
-                    <td className="px-4 py-4">
-                      <div className="text-sm font-medium text-gray-900">{item.productName}</div>
-                      <div className="text-sm text-gray-500">{item.productCode}</div>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-gray-900">
-                      {item.orderedQuantity} {item.unit}
-                    </td>
-                    <td className="px-4 py-4">
-                      <input
-                        type="number"
-                        value={item.receivedQuantity}
-                        onChange={(e) => handleItemChange(index, 'receivedQuantity', e.target.value)}
-                        className={`w-20 px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                          errors[`items.${index}.receivedQuantity`] ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        min="0"
-                        step="1"
-                      />
-                      {errors[`items.${index}.receivedQuantity`] && (
-                        <p className="text-red-500 text-xs mt-1">{errors[`items.${index}.receivedQuantity`]}</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-4">
-                      <input
-                        type="number"
-                        value={item.acceptedQuantity}
-                        onChange={(e) => handleItemChange(index, 'acceptedQuantity', e.target.value)}
-                        className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                        min="0"
-                        step="1"
-                      />
-                    </td>
-                    <td className="px-4 py-4">
-                      <input
-                        type="number"
-                        value={item.rejectedQuantity}
-                        onChange={(e) => handleItemChange(index, 'rejectedQuantity', e.target.value)}
-                        className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                        min="0"
-                        step="1"
-                      />
-                    </td>
-                    <td className="px-4 py-4">
-                      <input
-                        type="number"
-                        value={item.damageQuantity}
-                        onChange={(e) => handleItemChange(index, 'damageQuantity', e.target.value)}
-                        className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                        min="0"
-                        step="1"
-                      />
-                    </td>
-                    <td className="px-4 py-4">
-                      <select
-                        value={item.qualityStatus}
-                        onChange={(e) => handleItemChange(index, 'qualityStatus', e.target.value)}
-                        className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="Approved">Approved</option>
-                        <option value="Rejected">Rejected</option>
-                        <option value="Partial">Partial</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                {formData.items.map((item, index) => {
+                  const completionPercentage = item.orderedQuantity > 0 
+                    ? Math.round(((item.previouslyReceived + Number(item.receivedQuantity || 0)) / item.orderedQuantity) * 100)
+                    : 0;
+                  
+                  return (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-4 py-4">
+                        <div className="text-sm font-medium text-gray-900">{item.productName}</div>
+                        <div className="text-sm text-gray-500">{item.productCode}</div>
+                      </td>
+                      
+                      <td className="px-4 py-4">
+                        <div className="text-sm font-medium text-gray-900">
+                          {item.orderedQuantity} {item.unit}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {item.orderedWeight > 0 ? item.orderedWeight + ' kg' : '-'}
+                        </div>
+                      </td>
+                      
+                      <td className="px-4 py-4 bg-blue-50">
+                        <div className="text-sm font-medium text-blue-700">
+                          {item.previouslyReceived || 0} {item.unit}
+                        </div>
+                        <div className="text-xs text-blue-600">
+                          {(item.previousWeight || 0).toFixed(2)} kg
+                        </div>
+                      </td>
+                      
+                      <td className="px-4 py-4 bg-green-50">
+                        <div className="space-y-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={item.receivedQuantity}
+                                onChange={(e) => {
+                                  const qty = Number(e.target.value) || 0;
+                                  const maxAllowed = item.orderedQuantity - item.previouslyReceived;
+                                  
+                                  const updatedItems = [...formData.items];
+                                  updatedItems[index].receivedQuantity = qty;
+                                  
+                                  if (item.orderedQuantity > 0 && item.orderedWeight > 0) {
+                                    const weightPerUnit = item.orderedWeight / item.orderedQuantity;
+                                    updatedItems[index].receivedWeight = qty * weightPerUnit;
+                                    updatedItems[index].pendingQuantity = item.orderedQuantity - item.previouslyReceived - qty;
+                                    updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - (qty * weightPerUnit);
+                                  }
+                                  
+                                  setFormData(prev => ({ ...prev, items: updatedItems }));
+                                }}
+                                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                                min="0"
+                                step="1"
+                                placeholder="0"
+                              />
+                              <span className="text-sm text-gray-600">{item.unit}</span>
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              Max: {item.orderedQuantity - item.previouslyReceived} {item.unit}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              value={item.receivedWeight || 0}
+                              onChange={(e) => {
+                                const weight = Number(e.target.value) || 0;
+                                const updatedItems = [...formData.items];
+                                updatedItems[index].receivedWeight = weight;
+                                updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - weight;
+                                setFormData(prev => ({ ...prev, items: updatedItems }));
+                              }}
+                              className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                              min="0"
+                              step="0.01"
+                            />
+                            <span className="text-xs text-gray-600">kg</span>
+                          </div>
+                          
+                          {errors['items.' + index + '.receivedQuantity'] && (
+                            <p className="text-red-500 text-xs">{errors['items.' + index + '.receivedQuantity']}</p>
+                          )}
+                        </div>
+                      </td>
+                      
+                      <td className="px-4 py-4 bg-orange-50">
+                        <div className="text-sm font-medium text-orange-700">
+                          {Math.max(0, item.pendingQuantity || 0)} {item.unit}
+                        </div>
+                        <div className="text-xs text-orange-600">
+                          {Math.max(0, item.pendingWeight || 0).toFixed(2)} kg
+                        </div>
+                      </td>
+                      
+                      <td className="px-4 py-4">
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div 
+                            className={'h-2.5 rounded-full transition-all ' + (completionPercentage === 100 ? 'bg-green-600' : completionPercentage > 0 ? 'bg-blue-600' : 'bg-gray-400')}
+                            style={{ width: completionPercentage + '%' }}
+                          />
+                        </div>
+                        <div className="text-xs text-center text-gray-600 mt-1">
+                          {completionPercentage}%
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          
-          {/* Show quantity validation errors */}
-          {formData.items.some((_, index) => errors[`items.${index}.quantities`]) && (
-            <div className="bg-red-50 border border-red-200 rounded-md p-4">
-              <p className="text-red-600 text-sm">Please check item quantities - Accepted + Rejected + Damaged cannot exceed received quantity</p>
-            </div>
-          )}
         </div>
       )}
 
@@ -654,6 +535,78 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
         </button>
       </div>
     </form>
+    
+    {/* PO Quick-Add Modal - Rendered outside form using Portal */}
+    {showPOModal && createPortal(
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4"
+        onClick={(e) => {
+          // Close modal if clicking on overlay
+          if (e.target === e.currentTarget) {
+            setShowPOModal(false);
+          }
+        }}
+      >
+        <div 
+          className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
+            <h3 className="text-lg font-semibold text-gray-900">Create New Purchase Order</h3>
+            <button
+              type="button"
+              onClick={() => setShowPOModal(false)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <span className="text-2xl leading-none">×</span>
+            </button>
+          </div>
+          <div className="p-6">
+            <PurchaseOrderForm
+              isModal={true}
+              onSubmit={async (poData) => {
+                try {
+                  console.log('Creating PO from GRN modal...');
+                  const response = await purchaseOrderAPI.create(poData);
+                  console.log('PO created:', response.data);
+                  
+                  if (!response || !response.data || !response.data._id) {
+                    throw new Error('Invalid response from server');
+                  }
+                  
+                  const newPOId = response.data._id;
+                  
+                  // Close modal
+                  setShowPOModal(false);
+                  
+                  // Refresh PO list
+                  const posResponse = await purchaseOrderAPI.getAll({ limit: 100 });
+                  if (posResponse && posResponse.data) {
+                    console.log('Refreshed PO list, found:', posResponse.data.length, 'POs');
+                    setPurchaseOrders(posResponse.data);
+                    
+                    // Auto-select the newly created PO
+                    console.log('Auto-selecting new PO:', newPOId);
+                    await handlePOSelection(newPOId);
+                    
+                    alert('✅ Purchase Order created and selected successfully!');
+                  }
+                } catch (error) {
+                  console.error('Error creating PO:', error);
+                  alert('❌ Failed to create Purchase Order: ' + (error.message || 'Unknown error'));
+                }
+              }}
+              onCancel={() => {
+                console.log('PO creation cancelled');
+                setShowPOModal(false);
+              }}
+            />
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 };
 

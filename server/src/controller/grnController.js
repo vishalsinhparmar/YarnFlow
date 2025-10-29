@@ -38,9 +38,9 @@ export const getAllGRNs = async (req, res) => {
       query.supplier = supplier;
     }
     
-    // Filter by status
+    // Filter by receipt status (Pending, Partial, Complete)
     if (status) {
-      query.status = status;
+      query.receiptStatus = status;
     }
     
     // Filter by quality status
@@ -175,6 +175,30 @@ export const createGRN = async (req, res) => {
         });
       }
       
+      // Get ordered weight from PO item specifications
+      const orderedWeight = poItem.specifications?.weight || 0;
+      
+      // Calculate previously received (from PO's receivedQuantity, excluding this GRN)
+      const previouslyReceived = poItem.receivedQuantity || 0;
+      
+      // Calculate previous weight
+      let previousWeight = poItem.receivedWeight || 0;
+      if (previousWeight === 0 && previouslyReceived > 0 && poItem.quantity > 0 && orderedWeight > 0) {
+        const weightPerUnit = orderedWeight / poItem.quantity;
+        previousWeight = previouslyReceived * weightPerUnit;
+      }
+      
+      // Calculate received weight for this GRN
+      let receivedWeight = item.receivedWeight || 0;
+      if (receivedWeight === 0 && item.receivedQuantity > 0 && poItem.quantity > 0 && orderedWeight > 0) {
+        const weightPerUnit = orderedWeight / poItem.quantity;
+        receivedWeight = item.receivedQuantity * weightPerUnit;
+      }
+      
+      // Calculate pending
+      const pendingQuantity = Math.max(0, poItem.quantity - (previouslyReceived + item.receivedQuantity));
+      const pendingWeight = Math.max(0, orderedWeight - (previousWeight + receivedWeight));
+      
       validatedItems.push({
         purchaseOrderItem: item.purchaseOrderItem,
         product: product._id,
@@ -182,7 +206,13 @@ export const createGRN = async (req, res) => {
         productCode: product.productCode,
         specifications: product.specifications || {},
         orderedQuantity: poItem.quantity,
+        orderedWeight: orderedWeight,
+        previouslyReceived: previouslyReceived,
+        previousWeight: previousWeight,
         receivedQuantity: item.receivedQuantity,
+        receivedWeight: receivedWeight,
+        pendingQuantity: pendingQuantity,
+        pendingWeight: pendingWeight,
         acceptedQuantity: item.acceptedQuantity || item.receivedQuantity,
         rejectedQuantity: item.rejectedQuantity || 0,
         unit: poItem.unit || product.inventory?.unit || 'Bags',
@@ -196,6 +226,19 @@ export const createGRN = async (req, res) => {
         notes: item.notes || ''
       });
     }
+    
+    // Calculate receipt status
+    const allItemsComplete = validatedItems.every(item => item.pendingQuantity === 0);
+    const anyItemReceived = validatedItems.some(item => item.receivedQuantity > 0);
+    
+    let receiptStatus = 'Pending';
+    if (allItemsComplete && anyItemReceived) {
+      receiptStatus = 'Complete';
+    } else if (anyItemReceived) {
+      receiptStatus = 'Partial';
+    }
+    
+    const isPartialReceipt = validatedItems.some(item => item.previouslyReceived > 0 || item.pendingQuantity > 0);
     
     // Create GRN
     const grn = new GoodsReceiptNote({
@@ -220,19 +263,28 @@ export const createGRN = async (req, res) => {
       receivedBy,
       warehouseLocation,
       generalNotes,
-      createdBy
+      createdBy,
+      receiptStatus,
+      isPartialReceipt
     });
     
     await grn.save();
     
-    // Update PO with received quantities
+    // Update PO with received quantities and weights
     for (const grnItem of grn.items) {
       const poItem = purchaseOrder.items.find(pi => pi._id.toString() === grnItem.purchaseOrderItem.toString());
       if (poItem) {
         poItem.receivedQuantity = (poItem.receivedQuantity || 0) + grnItem.receivedQuantity;
+        poItem.receivedWeight = (poItem.receivedWeight || 0) + grnItem.receivedWeight;
+        
+        // Calculate pending
+        const orderedWeight = poItem.specifications?.weight || 0;
+        poItem.pendingWeight = Math.max(0, orderedWeight - poItem.receivedWeight);
       }
     }
     
+    // Update PO receipt status
+    await purchaseOrder.updateReceiptStatus();
     await purchaseOrder.save();
     
     // Populate the saved GRN for response
@@ -498,14 +550,19 @@ export const getGRNStats = async (req, res) => {
       // Total GRNs
       GoodsReceiptNote.countDocuments(),
       
-      // GRNs by status
+      // GRNs by receipt status (Pending, Partial, Complete)
       GoodsReceiptNote.aggregate([
-        { $group: { _id: '$status', count: { $sum: 1 } } }
+        { $group: { _id: '$receiptStatus', count: { $sum: 1 } } }
       ]),
       
-      // Pending review GRNs
+      // Pending GRNs (receiptStatus = Pending)
       GoodsReceiptNote.countDocuments({
-        qualityCheckStatus: 'Pending'
+        receiptStatus: 'Pending'
+      }),
+      
+      // Completed GRNs (receiptStatus = Complete)
+      GoodsReceiptNote.countDocuments({
+        receiptStatus: 'Complete'
       }),
       
       // This month's GRNs
@@ -533,14 +590,15 @@ export const getGRNStats = async (req, res) => {
       ])
     ]);
     
-    const [totalGRNs, statusCounts, pendingReview, thisMonth, monthlyValue] = stats;
+    const [totalGRNs, statusCounts, pendingCount, completedCount, thisMonth, monthlyValue] = stats;
     
     res.status(200).json({
       success: true,
       data: {
         totalGRNs,
         statusBreakdown: statusCounts,
-        pendingReview,
+        pending: pendingCount,
+        completed: completedCount,
         thisMonth,
         monthlyValue: monthlyValue[0]?.totalValue || 0
       }
