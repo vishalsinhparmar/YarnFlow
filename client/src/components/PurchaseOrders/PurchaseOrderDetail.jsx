@@ -190,15 +190,21 @@ const PurchaseOrderDetail = ({ purchaseOrder, onStatusUpdate, onClose }) => {
                   <label className="block text-sm font-medium text-gray-500 mb-1">Quantity</label>
                   <p className="text-base text-gray-900">{item.quantity} {item.unit}</p>
                   {item.receivedQuantity > 0 && (
-                    <p className="text-sm text-green-600">Received: {item.receivedQuantity}</p>
+                    <p className="text-sm text-green-600">Received: {item.receivedQuantity} {item.unit}</p>
                   )}
-                  {item.pendingQuantity > 0 && (
-                    <p className="text-sm text-orange-600">Pending: {item.pendingQuantity}</p>
+                  {(item.pendingQuantity > 0 || (item.quantity - (item.receivedQuantity || 0)) > 0) && (
+                    <p className="text-sm text-orange-600">Pending: {item.pendingQuantity || (item.quantity - (item.receivedQuantity || 0))} {item.unit}</p>
                   )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-1">Weight</label>
-                  <p className="text-base text-gray-900">{item.weight || 0} Kg</p>
+                  <p className="text-base text-gray-900">{(item.specifications?.weight || item.weight || 0)} Kg</p>
+                  {item.receivedWeight > 0 && (
+                    <p className="text-sm text-green-600">Received: {item.receivedWeight.toFixed(2)} Kg</p>
+                  )}
+                  {((item.specifications?.weight || item.weight || 0) - (item.receivedWeight || 0)) > 0 && (
+                    <p className="text-sm text-orange-600">Pending: {((item.specifications?.weight || item.weight || 0) - (item.receivedWeight || 0)).toFixed(2)} Kg</p>
+                  )}
                 </div>
               </div>
             </div>

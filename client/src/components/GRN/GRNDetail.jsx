@@ -17,8 +17,16 @@ const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
     const fetchPOData = async () => {
       if (grn.purchaseOrder) {
         try {
-          const response = await purchaseOrderAPI.getById(grn.purchaseOrder);
-          setPOData(response.data);
+          // Extract ID if purchaseOrder is an object, otherwise use as-is
+          const poId = typeof grn.purchaseOrder === 'object' && grn.purchaseOrder !== null
+            ? grn.purchaseOrder._id || grn.purchaseOrder
+            : grn.purchaseOrder;
+          
+          // Only fetch if we have a valid ID string
+          if (poId && typeof poId === 'string') {
+            const response = await purchaseOrderAPI.getById(poId);
+            setPOData(response.data);
+          }
         } catch (error) {
           console.error('Error fetching PO data:', error);
         }
@@ -493,11 +501,27 @@ const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
       </div>
 
 
-      {/* Notes */}
+      {/* Warehouse Information */}
+      {grn.warehouseLocation && (
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Warehouse Information</h3>
+          
+          <div>
+            <span className="text-sm font-medium text-gray-500">Warehouse Location</span>
+            <p className="text-base text-gray-900 mt-1">{grn.warehouseLocation}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Additional Information */}
       {grn.generalNotes && (
         <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Notes</h3>
-          <p className="text-gray-900">{grn.generalNotes}</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
+          
+          <div>
+            <span className="text-sm font-medium text-gray-500">General Notes</span>
+            <p className="text-base text-gray-900 mt-1 whitespace-pre-wrap">{grn.generalNotes}</p>
+          </div>
         </div>
       )}
 
