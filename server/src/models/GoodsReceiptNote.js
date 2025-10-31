@@ -109,6 +109,19 @@ const grnItemSchema = new mongoose.Schema({
     default: 0
   },
   
+  // Manual Completion (for partial qty acceptance)
+  manuallyCompleted: {
+    type: Boolean,
+    default: false
+  },
+  completionReason: {
+    type: String,
+    trim: true
+  },
+  completedAt: {
+    type: Date
+  },
+  
   // Damage/Issues
   damageQuantity: {
     type: Number,

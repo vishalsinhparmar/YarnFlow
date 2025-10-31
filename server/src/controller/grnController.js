@@ -223,22 +223,43 @@ export const createGRN = async (req, res) => {
         batchNumber: item.batchNumber || '',
         damageQuantity: item.damageQuantity || 0,
         damageNotes: item.damageNotes || '',
-        notes: item.notes || ''
+        notes: item.notes || '',
+        // Manual completion support
+        manuallyCompleted: item.markAsComplete || false,
+        completionReason: item.markAsComplete ? 'Marked as complete by user (losses/damages accepted)' : '',
+        completedAt: item.markAsComplete ? new Date() : null
       });
     }
     
-    // Calculate receipt status
-    const allItemsComplete = validatedItems.every(item => item.pendingQuantity === 0);
-    const anyItemReceived = validatedItems.some(item => item.receivedQuantity > 0);
+    // Calculate receipt status (consider manual completion)
+    const allItemsComplete = validatedItems.every(item => 
+      item.pendingQuantity === 0 || item.manuallyCompleted
+    );
+    const anyItemReceived = validatedItems.some(item => 
+      item.receivedQuantity > 0 || item.manuallyCompleted
+    );
+    
+    console.log(`📊 GRN Status Calculation:`);
+    console.log(`   allItemsComplete: ${allItemsComplete}`);
+    console.log(`   anyItemReceived: ${anyItemReceived}`);
+    validatedItems.forEach(item => {
+      console.log(`   - ${item.productName}: pending=${item.pendingQuantity}, manuallyCompleted=${item.manuallyCompleted}`);
+    });
     
     let receiptStatus = 'Pending';
     if (allItemsComplete && anyItemReceived) {
       receiptStatus = 'Complete';
+      console.log(`✅ GRN Status: Complete`);
     } else if (anyItemReceived) {
       receiptStatus = 'Partial';
+      console.log(`⚠️  GRN Status: Partial`);
+    } else {
+      console.log(`ℹ️  GRN Status: Pending`);
     }
     
-    const isPartialReceipt = validatedItems.some(item => item.previouslyReceived > 0 || item.pendingQuantity > 0);
+    const isPartialReceipt = validatedItems.some(item => 
+      !item.manuallyCompleted && (item.previouslyReceived > 0 || item.pendingQuantity > 0)
+    );
     
     // Create GRN
     const grn = new GoodsReceiptNote({
@@ -280,12 +301,48 @@ export const createGRN = async (req, res) => {
         // Calculate pending
         const orderedWeight = poItem.specifications?.weight || 0;
         poItem.pendingWeight = Math.max(0, orderedWeight - poItem.receivedWeight);
+        
+        // Mark as manually completed if user checked the box
+        if (grnItem.manuallyCompleted) {
+          console.log(`✅ Marking PO item as manually completed: ${poItem.productName}`);
+          poItem.manuallyCompleted = true;
+          poItem.completionReason = grnItem.completionReason;
+          poItem.completedAt = grnItem.completedAt;
+        } else {
+          console.log(`ℹ️  PO item NOT manually completed: ${poItem.productName}, flag: ${grnItem.manuallyCompleted}`);
+        }
       }
     }
     
+    // Mark items array as modified (important for Mongoose to save nested changes)
+    purchaseOrder.markModified('items');
+    
     // Update PO receipt status
     await purchaseOrder.updateReceiptStatus();
+    console.log(`📦 PO Status after update: ${purchaseOrder.status}`);
+    console.log(`📦 PO Completion: ${purchaseOrder.completionPercentage}%`);
+    console.log(`📦 PO Items:`, purchaseOrder.items.map(i => ({
+      name: i.productName,
+      status: i.receiptStatus,
+      manuallyCompleted: i.manuallyCompleted,
+      received: i.receivedQuantity,
+      pending: i.pendingQuantity
+    })));
+    
     await purchaseOrder.save();
+    console.log(`💾 PO saved successfully`);
+    
+    // Verify the save by re-fetching from database
+    const verifyPO = await PurchaseOrder.findById(purchaseOrder._id);
+    console.log(`🔍 Verification - PO from DB:`);
+    console.log(`   Status: ${verifyPO.status}`);
+    console.log(`   Items:`, verifyPO.items.map(i => ({
+      name: i.productName,
+      status: i.receiptStatus,
+      manuallyCompleted: i.manuallyCompleted,
+      received: i.receivedQuantity,
+      pending: i.pendingQuantity
+    })));
     
     // Populate the saved GRN for response
     const populatedGRN = await GoodsReceiptNote.findById(grn._id)
@@ -866,6 +923,78 @@ export const getInventoryProducts = async (req, res) => {
       message: 'Failed to fetch inventory products',
       error: error.message,
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// ============ MANUAL COMPLETION CONTROLLER ============
+
+// Mark GRN item as manually completed (even if qty doesn't match)
+export const markItemAsComplete = async (req, res) => {
+  try {
+    const { grnId } = req.params;
+    const { itemId, reason } = req.body;
+
+    if (!itemId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item ID is required'
+      });
+    }
+
+    // Find the GRN
+    const grn = await GoodsReceiptNote.findById(grnId);
+    if (!grn) {
+      return res.status(404).json({
+        success: false,
+        message: 'GRN not found'
+      });
+    }
+
+    // Find the item in GRN
+    const item = grn.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item not found in GRN'
+      });
+    }
+
+    // Mark as manually completed
+    item.manuallyCompleted = true;
+    item.completionReason = reason || 'Manually marked as complete';
+    item.completedAt = new Date();
+
+    // Save the GRN
+    await grn.save();
+
+    // Recalculate GRN receipt status
+    const allItemsComplete = grn.items.every(item => {
+      if (item.manuallyCompleted) return true;
+      const pending = (item.orderedQuantity || 0) - ((item.previouslyReceived || 0) + item.receivedQuantity);
+      return pending <= 0;
+    });
+
+    if (allItemsComplete) {
+      grn.receiptStatus = 'Complete';
+    } else {
+      const anyReceived = grn.items.some(item => item.receivedQuantity > 0 || item.manuallyCompleted);
+      grn.receiptStatus = anyReceived ? 'Partial' : 'Pending';
+    }
+
+    await grn.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Item marked as complete',
+      data: grn
+    });
+  } catch (error) {
+    console.error('Error marking item as complete:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark item as complete',
+      error: error.message
     });
   }
 };

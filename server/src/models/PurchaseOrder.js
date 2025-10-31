@@ -57,6 +57,18 @@ const purchaseOrderItemSchema = new mongoose.Schema({
   notes: {
     type: String,
     trim: true
+  },
+  // Manual completion fields
+  manuallyCompleted: {
+    type: Boolean,
+    default: false
+  },
+  completionReason: {
+    type: String,
+    trim: true
+  },
+  completedAt: {
+    type: Date
   }
 });
 
@@ -275,10 +287,17 @@ purchaseOrderSchema.methods.updateReceiptStatus = function() {
     item.pendingQuantity = item.quantity - (item.receivedQuantity || 0);
     item.pendingWeight = (item.specifications?.weight || 0) - (item.receivedWeight || 0);
     
-    // Update item receipt status
-    if (item.receivedQuantity === 0) {
+    // Update item receipt status (consider manual completion)
+    if (item.manuallyCompleted) {
+      // If manually completed, mark as Complete regardless of qty
+      console.log(`✅ Item ${item.productName} manually completed - setting status to Complete`);
+      item.receiptStatus = 'Complete';
+      item.pendingQuantity = 0;  // No pending if manually completed
+      item.pendingWeight = 0;
+    } else if (item.receivedQuantity === 0) {
       item.receiptStatus = 'Pending';
     } else if (item.receivedQuantity < item.quantity) {
+      console.log(`ℹ️  Item ${item.productName} partial: ${item.receivedQuantity}/${item.quantity}, manuallyCompleted: ${item.manuallyCompleted}`);
       item.receiptStatus = 'Partial';
     } else {
       item.receiptStatus = 'Complete';
