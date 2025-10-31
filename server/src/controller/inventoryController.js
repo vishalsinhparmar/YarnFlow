@@ -17,6 +17,7 @@ export const getAllInventoryLots = async (req, res) => {
       supplier,
       warehouse,
       qualityStatus,
+      productCategory,
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
@@ -48,7 +49,7 @@ export const getAllInventoryLots = async (req, res) => {
     const sortOptions = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
 
     // Get lots with population
-    const lots = await InventoryLot.find(filter)
+    let query = InventoryLot.find(filter)
       .populate('product', 'name code category')
       .populate('supplier', 'companyName contactPerson')
       .populate('grn', 'grnNumber receiptDate')
@@ -57,12 +58,32 @@ export const getAllInventoryLots = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
+    const lots = await query;
+
+    // Filter by product category after population (if needed)
+    let filteredLots = lots;
+    if (productCategory) {
+      filteredLots = lots.filter(lot => 
+        lot.product && lot.product.category && 
+        lot.product.category.toString() === productCategory
+      );
+    }
+
     // Get total count for pagination
-    const total = await InventoryLot.countDocuments(filter);
+    let total = await InventoryLot.countDocuments(filter);
+    
+    // If filtering by category, we need to count differently
+    if (productCategory) {
+      const allLots = await InventoryLot.find(filter).populate('product', 'category');
+      total = allLots.filter(lot => 
+        lot.product && lot.product.category && 
+        lot.product.category.toString() === productCategory
+      ).length;
+    }
 
     res.json({
       success: true,
-      data: lots,
+      data: filteredLots,
       pagination: {
         current: parseInt(page),
         pages: Math.ceil(total / parseInt(limit)),

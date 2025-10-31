@@ -635,3 +635,237 @@ export const getGRNsByPO = async (req, res) => {
     });
   }
 };
+
+// Get inventory products from completed GRNs (product-level completion)
+export const getInventoryProducts = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      category,
+      sortBy = 'latestReceiptDate',
+      sortOrder = 'desc'
+    } = req.query;
+
+    console.log('Fetching inventory products with params:', { page, limit, search, category, sortBy, sortOrder });
+
+    // Get all GRNs (not just completed ones)
+    let grns = await GoodsReceiptNote.find({})
+      .populate('supplier', 'companyName')
+      .populate('purchaseOrder', 'poNumber')
+      .populate({
+        path: 'items.product',
+        select: 'productName productCode category',
+        populate: {
+          path: 'category',
+          select: 'categoryName'
+        }
+      })
+      .lean();
+
+    console.log(`Found ${grns.length} GRNs`);
+
+    // Get all POs to check ordered quantities
+    const poIds = [...new Set(grns.map(grn => grn.purchaseOrder?._id).filter(Boolean))];
+    const purchaseOrders = await PurchaseOrder.find({ _id: { $in: poIds } })
+      .populate('items.product')
+      .lean();
+
+    // Create a map of PO items: { poId_productId_itemId: { ordered, unit } }
+    // Use item._id to differentiate multiple line items of same product
+    const poItemsMap = {};
+    purchaseOrders.forEach(po => {
+      if (!po.items) return;
+      po.items.forEach(item => {
+        if (!item.product || !item.product._id) return;
+        // Use item._id to uniquely identify each PO line item
+        const key = `${po._id}_${item.product._id}_${item._id}`;
+        poItemsMap[key] = {
+          orderedQuantity: item.quantity || 0,
+          orderedWeight: item.totalWeight || 0,
+          unit: item.unit || 'Units',
+          poNumber: po.poNumber,
+          supplier: po.supplier,
+          poItemId: item._id
+        };
+      });
+    });
+
+    // Aggregate received quantities per PO line item (not just per product)
+    const productAggregation = {};
+    
+    grns.forEach(grn => {
+      if (!grn.items || !grn.purchaseOrder) return;
+      
+      grn.items.forEach(item => {
+        if (!item.product || !item.product._id) return;
+        
+        // Use purchaseOrderItem to track each PO line item separately
+        const poItemId = item.purchaseOrderItem || item._id;
+        const key = `${grn.purchaseOrder._id}_${item.product._id}_${poItemId}`;
+        
+        if (!productAggregation[key]) {
+          productAggregation[key] = {
+            productId: item.product._id,
+            productName: item.product.productName || 'Unknown Product',
+            productCode: item.product.productCode || 'N/A',
+            categoryName: item.product.category?.categoryName || 'Uncategorized',
+            categoryId: item.product.category?._id,
+            poId: grn.purchaseOrder._id,
+            poNumber: grn.purchaseOrder.poNumber || 'N/A',
+            supplierName: grn.supplier?.companyName || 'Unknown Supplier',
+            unit: item.unit || 'Units',
+            totalReceivedQuantity: 0,
+            totalReceivedWeight: 0,
+            grns: [],
+            latestReceiptDate: null,
+            poItemId: poItemId
+          };
+        }
+        
+        productAggregation[key].totalReceivedQuantity += item.receivedQuantity || 0;
+        productAggregation[key].totalReceivedWeight += item.receivedWeight || 0;
+        productAggregation[key].grns.push({
+          grnNumber: grn.grnNumber || 'N/A',
+          grnId: grn._id,
+          receiptDate: grn.receiptDate,
+          receivedQuantity: item.receivedQuantity || 0,
+          receivedWeight: item.receivedWeight || 0,
+          receiptStatus: grn.receiptStatus || 'Unknown'
+        });
+        
+        // Track latest receipt date
+        if (grn.receiptDate) {
+          if (!productAggregation[key].latestReceiptDate || 
+              new Date(grn.receiptDate) > new Date(productAggregation[key].latestReceiptDate)) {
+            productAggregation[key].latestReceiptDate = grn.receiptDate;
+          }
+        }
+      });
+    });
+
+    // Filter to show only fully received PO line items
+    let fullyReceivedProducts = [];
+    
+    Object.entries(productAggregation).forEach(([key, product]) => {
+      const poItem = poItemsMap[key];
+      
+      if (poItem) {
+        const orderedQty = poItem.orderedQuantity;
+        const receivedQty = product.totalReceivedQuantity;
+        const completionPercentage = Math.min(100, Math.round((receivedQty / orderedQty) * 100));
+        
+        console.log(`Checking ${product.productName} (${product.productCode}): Ordered=${orderedQty}, Received=${receivedQty}, Complete=${completionPercentage}%`);
+        
+        // Check if this PO line item is fully received (100% complete)
+        if (receivedQty >= orderedQty) {
+          fullyReceivedProducts.push({
+            ...product,
+            orderedQuantity: orderedQty,
+            orderedWeight: poItem.orderedWeight,
+            completionPercentage: completionPercentage,
+            isFullyReceived: true,
+            grnCount: product.grns.length
+          });
+        }
+      }
+    });
+
+    console.log(`Total fully received line items: ${fullyReceivedProducts.length}`);
+
+    // Search filter (apply before grouping)
+    if (search) {
+      const searchLower = search.toLowerCase();
+      fullyReceivedProducts = fullyReceivedProducts.filter(p => 
+        p.productName.toLowerCase().includes(searchLower) ||
+        p.productCode.toLowerCase().includes(searchLower) ||
+        p.poNumber?.toLowerCase().includes(searchLower) ||
+        p.supplierName?.toLowerCase().includes(searchLower) ||
+        p.grns.some(grn => grn.grnNumber.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Group products by category
+    const groupedByCategory = {};
+    
+    fullyReceivedProducts.forEach(product => {
+      const categoryKey = product.categoryId?.toString() || 'uncategorized';
+      const categoryName = product.categoryName || 'Uncategorized';
+      
+      if (!groupedByCategory[categoryKey]) {
+        groupedByCategory[categoryKey] = {
+          categoryId: product.categoryId,
+          categoryName: categoryName,
+          products: [],
+          totalProducts: 0
+        };
+      }
+      
+      groupedByCategory[categoryKey].products.push(product);
+      groupedByCategory[categoryKey].totalProducts++;
+    });
+
+    // Convert to array and sort categories
+    let categorizedProducts = Object.values(groupedByCategory);
+    
+    // Sort products within each category by latest receipt date
+    categorizedProducts.forEach(category => {
+      category.products.sort((a, b) => {
+        const dateA = new Date(a.latestReceiptDate);
+        const dateB = new Date(b.latestReceiptDate);
+        return dateB - dateA; // Latest first
+      });
+    });
+
+    // Sort categories by name
+    categorizedProducts.sort((a, b) => 
+      a.categoryName.localeCompare(b.categoryName)
+    );
+
+    // Filter by specific category if requested
+    if (category) {
+      categorizedProducts = categorizedProducts.filter(cat => 
+        cat.categoryId && cat.categoryId.toString() === category
+      );
+    }
+
+    // Calculate totals
+    const totalProducts = fullyReceivedProducts.length;
+    const totalCategories = categorizedProducts.length;
+
+    // Limit products per category to first 10 (for initial load)
+    // Frontend will handle "Load More" for each category
+    const productsPerCategoryLimit = 10;
+    categorizedProducts.forEach(category => {
+      category.displayedProducts = category.products.length;
+      category.hasMore = category.products.length > productsPerCategoryLimit;
+      // Don't slice here - send all products, let frontend handle pagination
+    });
+
+    // Apply pagination to categories (not individual products)
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const paginatedCategories = categorizedProducts.slice(skip, skip + parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      data: paginatedCategories,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(totalCategories / parseInt(limit)),
+        total: totalCategories,
+        totalProducts: totalProducts,
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching inventory products:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inventory products',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};

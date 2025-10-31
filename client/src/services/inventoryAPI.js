@@ -1,12 +1,12 @@
 // Inventory API Service
 import { apiRequest } from './common.js';
 
-// Generic API request handler moved to ./common.js
-
 // ============ INVENTORY API SERVICE ============
+// Note: Inventory is now GRN-based (single source of truth)
+// This file maintains backward compatibility while redirecting to GRN endpoints
 
 export const inventoryAPI = {
-  // Get all inventory lots with filtering and pagination
+  // Get all inventory (now fetches from GRN-based inventory)
   getAll: async (params = {}) => {
     const queryParams = new URLSearchParams();
     
@@ -17,89 +17,90 @@ export const inventoryAPI = {
     });
     
     const queryString = queryParams.toString();
+    // Redirect to GRN-based inventory endpoint
     return apiRequest(`/inventory${queryString ? `?${queryString}` : ''}`);
   },
 
-  // Get inventory statistics for dashboard
+  // ============ DEPRECATED METHODS ============
+  // The following methods are deprecated and will be removed in future versions
+  // They are kept for backward compatibility only
+
+  // Get inventory statistics for dashboard (DEPRECATED)
   getStats: async () => {
-    return apiRequest('/inventory/stats');
+    console.warn('inventoryAPI.getStats() is deprecated. Use GRN-based stats instead.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Get single inventory lot by ID
+  // Get single inventory lot by ID (DEPRECATED)
   getById: async (id) => {
-    return apiRequest(`/inventory/${id}`);
+    console.warn('inventoryAPI.getById() is deprecated. Use GRN details instead.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Update inventory lot
+  // Update inventory lot (DEPRECATED)
   update: async (id, data) => {
-    return apiRequest(`/inventory/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
+    console.warn('inventoryAPI.update() is deprecated. Update GRN status instead.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Record stock movement
+  // Record stock movement (DEPRECATED)
   recordMovement: async (id, movementData) => {
-    return apiRequest(`/inventory/${id}/movement`, {
-      method: 'POST',
-      body: JSON.stringify(movementData),
-    });
+    console.warn('inventoryAPI.recordMovement() is deprecated. Stock movements are tracked through GRNs.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Transfer stock between lots or locations
+  // Transfer stock between lots or locations (DEPRECATED)
   transferStock: async (transferData) => {
-    return apiRequest('/inventory/transfer', {
-      method: 'POST',
-      body: JSON.stringify(transferData),
-    });
+    console.warn('inventoryAPI.transferStock() is deprecated. Stock transfers are managed through GRNs.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Get low stock alerts
+  // Get low stock alerts (DEPRECATED)
   getLowStockAlerts: async (threshold = 50) => {
-    return apiRequest(`/inventory/alerts/low-stock?threshold=${threshold}`);
+    console.warn('inventoryAPI.getLowStockAlerts() is deprecated.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Get expiry alerts
+  // Get expiry alerts (DEPRECATED)
   getExpiryAlerts: async (days = 30) => {
-    return apiRequest(`/inventory/alerts/expiry?days=${days}`);
+    console.warn('inventoryAPI.getExpiryAlerts() is deprecated.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Acknowledge alert
+  // Acknowledge alert (DEPRECATED)
   acknowledgeAlert: async (lotId, alertId) => {
-    return apiRequest(`/inventory/${lotId}/alerts/${alertId}/acknowledge`, {
-      method: 'PUT',
-    });
+    console.warn('inventoryAPI.acknowledgeAlert() is deprecated.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Get movement history for a lot
+  // Get movement history for a lot (DEPRECATED)
   getMovementHistory: async (id, params = {}) => {
-    const queryParams = new URLSearchParams(params);
-    const queryString = queryParams.toString();
-    return apiRequest(`/inventory/${id}/movements${queryString ? `?${queryString}` : ''}`);
+    console.warn('inventoryAPI.getMovementHistory() is deprecated. Use GRN history instead.');
+    return { success: false, message: 'This endpoint has been deprecated' };
   },
 
-  // Search lots
+  // Search lots (DEPRECATED)
   search: async (searchTerm, filters = {}) => {
     const params = { search: searchTerm, ...filters };
     return inventoryAPI.getAll(params);
   },
 
-  // Get lots by status
+  // Get lots by status (DEPRECATED)
   getByStatus: async (status, params = {}) => {
     return inventoryAPI.getAll({ status, ...params });
   },
 
-  // Get lots by product
+  // Get lots by product (DEPRECATED)
   getByProduct: async (productId, params = {}) => {
     return inventoryAPI.getAll({ product: productId, ...params });
   },
 
-  // Get lots by supplier
+  // Get lots by supplier (DEPRECATED)
   getBySupplier: async (supplierId, params = {}) => {
     return inventoryAPI.getAll({ supplier: supplierId, ...params });
   },
 
-  // Get lots by warehouse
+  // Get lots by warehouse (DEPRECATED)
   getByWarehouse: async (warehouse, params = {}) => {
     return inventoryAPI.getAll({ warehouse, ...params });
   }
