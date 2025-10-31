@@ -1,120 +1,136 @@
 import React, { useState, useEffect } from 'react';
-import { inventoryAPI, inventoryUtils } from '../services/inventoryAPI';
-import StockMovementModal from '../components/StockMovementModal';
-import StockTransferModal from '../components/StockTransferModal';
-import InventoryLotDetail from '../components/InventoryLotsManagement/InventoryLotDetail';
+import { inventoryAPI } from '../services/inventoryAPI';
+import { categoryAPI } from '../services/masterDataAPI';
 
 const Inventory = () => {
-  const [inventoryStats, setInventoryStats] = useState(null);
-  const [inventoryLots, setInventoryLots] = useState([]);
-  const [lowStockAlerts, setLowStockAlerts] = useState([]);
-  const [recentMovements, setRecentMovements] = useState([]);
+  const [categorizedProducts, setCategorizedProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Modal states
-  const [showStockInModal, setShowStockInModal] = useState(false);
-  const [showStockOutModal, setShowStockOutModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [showLotDetail, setShowLotDetail] = useState(false);
-  const [selectedLot, setSelectedLot] = useState(null);
+  const [expandedCategories, setExpandedCategories] = useState({});
+  const [categoryProductLimits, setCategoryProductLimits] = useState({});
   
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState(null);
 
-  // Fetch all data on component mount
+  // Fetch categories on mount
   useEffect(() => {
-    fetchAllData();
-  }, [currentPage, searchTerm, statusFilter]);
+    fetchCategories();
+  }, []);
 
-  const fetchAllData = async () => {
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page on search
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fetch inventory data when filters change
+  useEffect(() => {
+    if (!categoriesLoading) {
+      fetchInventoryData();
+    }
+  }, [currentPage, debouncedSearchTerm, categoryFilter, categoriesLoading]);
+
+  const fetchCategories = async () => {
+    try {
+      setCategoriesLoading(true);
+      const response = await categoryAPI.getAll();
+      if (response.success) {
+        setCategories(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  const fetchInventoryData = async () => {
     try {
       setLoading(true);
+      setError('');
       
-      // Fetch all data in parallel
-      const [statsRes, lotsRes, alertsRes] = await Promise.all([
-        inventoryAPI.getStats(),
-        inventoryAPI.getAll({
-          page: currentPage,
-          limit: 10,
-          search: searchTerm,
-          status: statusFilter
-        }),
-        inventoryAPI.getLowStockAlerts(50)
-      ]);
+      // Build query parameters for fully received products
+      const params = {
+        page: currentPage,
+        limit: 20,
+        search: debouncedSearchTerm,
+        sortBy: 'latestReceiptDate',
+        sortOrder: 'desc'
+      };
 
-      if (statsRes.success) {
-        setInventoryStats(statsRes.data);
-        setRecentMovements(statsRes.data.recentMovements || []);
+      // Add category filter if selected
+      if (categoryFilter) {
+        params.category = categoryFilter;
       }
-      
-      if (lotsRes.success) {
-        setInventoryLots(lotsRes.data);
-        setPagination(lotsRes.pagination);
-      }
-      
-      if (alertsRes.success) {
-        setLowStockAlerts(alertsRes.data);
+
+      // Fetch fully received products from inventory endpoint
+      const response = await inventoryAPI.getAll(params);
+
+      if (response.success) {
+        const categorizedData = response.data || [];
+        setCategorizedProducts(categorizedData);
+        setPagination(response.pagination || null);
+        
+        // Auto-expand all categories on first load or when filtering
+        const expanded = {};
+        const limits = {};
+        categorizedData.forEach(cat => {
+          const catKey = cat.categoryId || 'uncategorized';
+          expanded[catKey] = true;
+          limits[catKey] = 10; // Show first 10 products per category
+        });
+        setExpandedCategories(expanded);
+        setCategoryProductLimits(limits);
+      } else {
+        setError(response.message || 'Failed to load inventory data');
+        setCategorizedProducts([]);
       }
       
     } catch (error) {
       console.error('Error fetching inventory data:', error);
-      setError('Failed to load inventory data');
+      setError(error.message || 'Failed to load inventory data. Please try again.');
+      setCategorizedProducts([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStockMovement = async (movementData) => {
-    try {
-      const response = await inventoryAPI.recordMovement(selectedLot._id, movementData);
-      if (response.success) {
-        fetchAllData(); // Refresh data
-        setShowStockInModal(false);
-        setShowStockOutModal(false);
-        setSelectedLot(null);
-      }
-    } catch (error) {
-      console.error('Error recording stock movement:', error);
-    }
+  const toggleCategory = (categoryId) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryId]: !prev[categoryId]
+    }));
   };
 
-  const handleStockTransfer = async (transferData) => {
-    try {
-      const response = await inventoryAPI.transferStock(transferData);
-      if (response.success) {
-        fetchAllData(); // Refresh data
-        setShowTransferModal(false);
-      }
-    } catch (error) {
-      console.error('Error transferring stock:', error);
-    }
+  const loadMoreProducts = (categoryId) => {
+    setCategoryProductLimits(prev => ({
+      ...prev,
+      [categoryId]: (prev[categoryId] || 10) + 10
+    }));
   };
 
-  const handleViewLot = (lot) => {
-    setSelectedLot(lot);
-    setShowLotDetail(true);
+  const highlightText = (text, search) => {
+    if (!search || !text) return text;
+    const parts = text.toString().split(new RegExp(`(${search})`, 'gi'));
+    return parts.map((part, index) => 
+      part.toLowerCase() === search.toLowerCase() ? 
+        <mark key={index} className="bg-yellow-200 px-1 rounded">{part}</mark> : 
+        part
+    );
   };
 
-  const handleQuickAction = (action, lot = null) => {
-    setSelectedLot(lot);
-    switch (action) {
-      case 'stock-in':
-        setShowStockInModal(true);
-        break;
-      case 'stock-out':
-        setShowStockOutModal(true);
-        break;
-      case 'transfer':
-        setShowTransferModal(true);
-        break;
-    }
-  };
 
-  if (loading && !inventoryStats) {
+  if (loading && categorizedProducts.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -122,357 +138,255 @@ const Inventory = () => {
     );
   }
 
+  const totalProducts = pagination?.totalProducts || 0;
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Inventory Lots Management</h1>
-            <p className="text-gray-600">Track yarn bags, polyester rolls, and textile inventory lots</p>
-          </div>
-          <div className="flex space-x-3">
-            <button 
-              onClick={() => handleQuickAction('stock-in')}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-            >
-              + Add Lot
-            </button>
-            <button 
-              onClick={() => handleQuickAction('transfer')}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-            >
-              📦 Lot Transfer
-            </button>
-            <button className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-              📊 Reports
-            </button>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Inventory Management</h1>
+          <p className="text-gray-600">Track and manage inventory lots from approved Goods Receipt Notes</p>
         </div>
       </div>
 
-      {/* Stats Cards - Real Data from Backend */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Cotton Yarn Bags</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {inventoryStats?.productTypeBreakdown?.find(p => p._id?.includes('Cotton'))?.quantity || '850'}
-              </p>
-              <p className="text-xs text-gray-500">120kg each</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">🧶</span>
-            </div>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Polyester Rolls</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {inventoryStats?.productTypeBreakdown?.find(p => p._id?.includes('Polyester'))?.quantity || '395'}
-              </p>
-              <p className="text-xs text-gray-500">75kg each</p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-blue-600 text-xl">🎯</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Active Lots</p>
-              <p className="text-2xl font-bold text-green-600">
-                {inventoryStats?.overview?.activeLots || '89'}
-              </p>
-              <p className="text-xs text-gray-500">Different batches</p>
-            </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <span className="text-yellow-600 text-xl">🏷️</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Value</p>
-              <p className="text-2xl font-bold text-purple-600">
-                {inventoryUtils.formatCurrency(inventoryStats?.overview?.totalValue || 890000)}
-              </p>
-              <p className="text-xs text-gray-500">Current stock</p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-purple-600 text-xl">💎</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Search and Filter Bar */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex-1 max-w-md">
-            <input
-              type="text"
-              placeholder="Search lots, products, suppliers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="flex gap-3">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Status</option>
-              <option value="Active">Available</option>
-              <option value="Reserved">Reserved</option>
-              <option value="Consumed">Consumed</option>
-              <option value="Expired">Expired</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Actions, Alerts, and Recent Movements */}
+      {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-          <div className="space-y-3">
-            <button 
-              onClick={() => handleQuickAction('stock-in')}
-              className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center">
-                <span className="text-lg mr-3">📥</span>
-                <span className="font-medium">Stock In</span>
-              </div>
-            </button>
-            <button 
-              onClick={() => handleQuickAction('stock-out')}
-              className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center">
-                <span className="text-lg mr-3">📤</span>
-                <span className="font-medium">Stock Out</span>
-              </div>
-            </button>
-            <button 
-              onClick={() => handleQuickAction('transfer')}
-              className="w-full text-left p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center">
-                <span className="text-lg mr-3">🔄</span>
-                <span className="font-medium">Stock Transfer</span>
-              </div>
-            </button>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Products</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {totalProducts}
+              </p>
+            </div>
+            <div className="text-4xl">📦</div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Low Stock Alerts</h3>
-          <div className="space-y-3">
-            {lowStockAlerts.length > 0 ? (
-              lowStockAlerts.slice(0, 3).map((alert, index) => (
-                <div key={index} className="p-3 bg-red-50 rounded-lg border border-red-200">
-                  <p className="text-sm font-medium text-red-800">{alert.productName}</p>
-                  <p className="text-xs text-red-600">
-                    Only {alert.currentQuantity} {alert.unit} remaining
-                  </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Active Categories</p>
+              <p className="text-2xl font-bold text-blue-600 mt-1">
+                {pagination?.total || categorizedProducts.length}
+              </p>
+            </div>
+            <div className="text-4xl">🏷️</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Fully Received</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">
+                {totalProducts}
+              </p>
+            </div>
+            <div className="text-4xl">✅</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search and Category Filter */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex-1 max-w-md">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search products, PO numbers, suppliers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+              {loading && debouncedSearchTerm !== searchTerm && (
+                <div className="absolute right-3 top-2.5">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                <p className="text-sm">No low stock alerts</p>
-                <p className="text-xs">All inventory levels are healthy</p>
-              </div>
+              )}
+            </div>
+            {searchTerm && (
+              <p className="text-xs text-gray-500 mt-1">
+                {debouncedSearchTerm === searchTerm ? 
+                  `Searching for "${searchTerm}"...` : 
+                  'Typing...'}
+              </p>
             )}
           </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Movements</h3>
-          <div className="space-y-3">
-            {recentMovements.length > 0 ? (
-              recentMovements.slice(0, 3).map((movement, index) => (
-                <div key={index} className="flex items-center justify-between p-2">
-                  <div className="flex items-center">
-                    <span className="mr-2">{inventoryUtils.getMovementTypeIcon(movement.movements?.type)}</span>
-                    <div>
-                      <p className="text-sm font-medium">{movement.productName}</p>
-                      <p className="text-xs text-gray-500">
-                        {movement.movements?.type === 'Received' ? '+' : '-'}{movement.movements?.quantity} {movement.unit || 'units'}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-400">
-                    {inventoryUtils.formatRelativeTime(movement.movements?.date)}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                <p className="text-sm">No recent movements</p>
-                <p className="text-xs">Stock movements will appear here</p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Category:</span>
+            <select
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              disabled={categoriesLoading}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px] bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+            >
+              <option value="">
+                {categoriesLoading ? 'Loading categories...' : 'All Categories'}
+              </option>
+              {categories.map(category => (
+                <option key={category._id} value={category._id}>
+                  {category.categoryName}
+                </option>
+              ))}
+            </select>
+            {categoryFilter && !categoriesLoading && (
+              <button
+                onClick={() => {
+                  setCategoryFilter('');
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Clear filter"
+              >
+                ✕
+              </button>
+            )}
+            {loading && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                Loading...
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Inventory Lots Table */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Inventory Lots Tracking</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lot Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight/Unit</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {inventoryLots.length > 0 ? (
-                inventoryLots.map((lot) => (
-                  <tr key={lot._id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {lot.lotNumber}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {lot.productName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
-                        lot.unit === 'Bags' ? 'bg-green-100 text-green-800' :
-                        lot.unit === 'Rolls' ? 'bg-blue-100 text-blue-800' :
-                        lot.unit === 'Kg' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {inventoryUtils.getUnitIcon(lot.unit)} {lot.unit}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {inventoryUtils.formatQuantity(lot.currentQuantity, lot.unit)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {lot.unitCost ? `₹${lot.unitCost} each` : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {lot.supplierName || 'Unknown'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        inventoryUtils.getStatusColor(lot.status)
-                      }`}>
-                        {inventoryUtils.formatStatus(lot.status)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button 
-                        onClick={() => handleViewLot(lot)}
-                        className="text-blue-600 hover:text-blue-900 mr-3"
-                      >
-                        View
-                      </button>
-                      <button 
-                        onClick={() => handleQuickAction('stock-out', lot)}
-                        className="text-red-600 hover:text-red-900 mr-3"
-                      >
-                        Issue
-                      </button>
-                      <button 
-                        onClick={() => handleQuickAction('transfer', lot)}
-                        className="text-purple-600 hover:text-purple-900"
-                      >
-                        Transfer
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                // Fallback data when no real data is available
-                <>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">LOT-2024-001</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Cotton Yarn 2s</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
-                        🧶 Bags
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">100 bags</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">50.2 kg avg</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">ABC Textiles</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Available</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button className="text-blue-600 hover:text-blue-900 mr-3">View</button>
-                      <button className="text-red-600 hover:text-red-900 mr-3">Issue</button>
-                      <button className="text-purple-600 hover:text-purple-900">Transfer</button>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">LOT-2024-002</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Polyester 3s</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
-                        🎯 Rolls
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">75 rolls</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">75 kg each</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">XYZ Mills</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Available</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button className="text-blue-600 hover:text-blue-900 mr-3">View</button>
-                      <button className="text-red-600 hover:text-red-900 mr-3">Issue</button>
-                      <button className="text-purple-600 hover:text-purple-900">Transfer</button>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">LOT-2024-003</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Cotton Yarn 20s</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
-                        🧶 Bags
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">25 bags</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">49.8 kg avg</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Premium Cotton Ltd</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Partial</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button className="text-blue-600 hover:text-blue-900 mr-3">View</button>
-                      <button className="text-red-600 hover:text-red-900 mr-3">Issue</button>
-                      <button className="text-orange-600 hover:text-orange-900">Transfer</button>
-                    </td>
-                  </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
+
+      {/* Products Grouped by Category */}
+      <div className="space-y-4">
+        {loading && categorizedProducts.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="text-gray-600 mt-4">Loading inventory...</p>
+          </div>
+        ) : categorizedProducts.length > 0 ? (
+          categorizedProducts.map((category) => {
+            const categoryKey = category.categoryId || 'uncategorized';
+            const isExpanded = expandedCategories[categoryKey];
+            const productLimit = categoryProductLimits[categoryKey] || 10;
+            const displayedProducts = category.products.slice(0, productLimit);
+            const hasMore = category.products.length > productLimit;
+            
+            return (
+              <div key={categoryKey} className="bg-white rounded-lg shadow-sm overflow-hidden">
+                {/* Category Header - Sticky */}
+                <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
+                  <button
+                    onClick={() => toggleCategory(categoryKey)}
+                    className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className="text-2xl">{isExpanded ? '▼' : '▶'}</span>
+                      <div className="text-left">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {highlightText(category.categoryName, debouncedSearchTerm)}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {category.products.length} product(s)
+                          {isExpanded && productLimit < category.products.length && 
+                            ` • Showing ${productLimit} of ${category.products.length}`
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                      {category.categoryName}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Category Products */}
+                {isExpanded && (
+                  <div>
+                    <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PO Number</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Received</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Weight</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">GRNs</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {displayedProducts.map((product, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                              <td className="px-6 py-4">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {highlightText(product.productName, debouncedSearchTerm)}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {highlightText(product.productCode, debouncedSearchTerm)}
+                                </div>
+                                <div className="text-xs text-green-600 mt-1">
+                                  ✓ Fully Received ({product.orderedQuantity} {product.unit})
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {highlightText(product.poNumber, debouncedSearchTerm)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {product.totalReceivedQuantity} {product.unit}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  of {product.orderedQuantity} {product.unit}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {product.totalReceivedWeight ? `${product.totalReceivedWeight.toFixed(2)} Kg` : '-'}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-sm text-gray-900">{product.grnCount} GRN(s)</div>
+                                <div className="text-xs text-gray-500">
+                                  {product.grns.map(grn => highlightText(grn.grnNumber, debouncedSearchTerm)).reduce((prev, curr, i) => 
+                                    i === 0 ? [curr] : [...prev, ', ', curr], []
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {highlightText(product.supplierName || 'N/A', debouncedSearchTerm)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    {/* Load More Button */}
+                    {hasMore && (
+                      <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 text-center">
+                        <button
+                          onClick={() => loadMoreProducts(categoryKey)}
+                          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                          Load More ({category.products.length - productLimit} remaining)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <div className="text-gray-500">
+              <p className="text-lg font-medium mb-2">No fully received products found</p>
+              <p className="text-sm">Products that are 100% received from POs will appear here</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Pagination */}
@@ -531,46 +445,6 @@ const Inventory = () => {
         </div>
       )}
 
-      {/* Modals */}
-      {showStockInModal && (
-        <StockMovementModal
-          isOpen={showStockInModal}
-          onClose={() => setShowStockInModal(false)}
-          onSubmit={handleStockMovement}
-          movementType="Received"
-          lot={selectedLot}
-          title="Stock In - Add Inventory"
-        />
-      )}
-
-      {showStockOutModal && (
-        <StockMovementModal
-          isOpen={showStockOutModal}
-          onClose={() => setShowStockOutModal(false)}
-          onSubmit={handleStockMovement}
-          movementType="Issued"
-          lot={selectedLot}
-          title="Stock Out - Issue Inventory"
-        />
-      )}
-
-      {showTransferModal && (
-        <StockTransferModal
-          isOpen={showTransferModal}
-          onClose={() => setShowTransferModal(false)}
-          onSubmit={handleStockTransfer}
-          sourceLot={selectedLot}
-        />
-      )}
-
-      {showLotDetail && selectedLot && (
-        <InventoryLotDetail
-          isOpen={showLotDetail}
-          onClose={() => setShowLotDetail(false)}
-          lot={selectedLot}
-          onRefresh={fetchAllData}
-        />
-      )}
     </div>
   );
 };
