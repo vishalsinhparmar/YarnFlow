@@ -282,27 +282,38 @@ purchaseOrderSchema.virtual('isOverdue').get(function() {
 // Method to update receipt status and calculations
 purchaseOrderSchema.methods.updateReceiptStatus = function() {
   // Update each item's status and pending quantities
-  this.items.forEach(item => {
-    // Calculate pending quantities
-    item.pendingQuantity = item.quantity - (item.receivedQuantity || 0);
-    item.pendingWeight = (item.specifications?.weight || 0) - (item.receivedWeight || 0);
+  // Use direct index access to force Mongoose to track changes
+  for (let i = 0; i < this.items.length; i++) {
+    const item = this.items[i];
     
-    // Update item receipt status (consider manual completion)
+    // Update item receipt status (consider manual completion FIRST)
     if (item.manuallyCompleted) {
       // If manually completed, mark as Complete regardless of qty
       console.log(`✅ Item ${item.productName} manually completed - setting status to Complete`);
-      item.receiptStatus = 'Complete';
-      item.pendingQuantity = 0;  // No pending if manually completed
-      item.pendingWeight = 0;
-    } else if (item.receivedQuantity === 0) {
-      item.receiptStatus = 'Pending';
-    } else if (item.receivedQuantity < item.quantity) {
-      console.log(`ℹ️  Item ${item.productName} partial: ${item.receivedQuantity}/${item.quantity}, manuallyCompleted: ${item.manuallyCompleted}`);
-      item.receiptStatus = 'Partial';
+      
+      // Use set() method to ensure Mongoose tracks the change
+      this.items[i].set('receiptStatus', 'Complete');
+      this.items[i].set('pendingQuantity', 0);
+      this.items[i].set('pendingWeight', 0);
     } else {
-      item.receiptStatus = 'Complete';
+      // Calculate pending quantities only if NOT manually completed
+      const pendingQty = item.quantity - (item.receivedQuantity || 0);
+      const pendingWt = (item.specifications?.weight || 0) - (item.receivedWeight || 0);
+      
+      this.items[i].set('pendingQuantity', pendingQty);
+      this.items[i].set('pendingWeight', pendingWt);
+      
+      // Set status based on received quantity
+      if (item.receivedQuantity === 0) {
+        this.items[i].set('receiptStatus', 'Pending');
+      } else if (item.receivedQuantity < item.quantity) {
+        console.log(`ℹ️  Item ${item.productName} partial: ${item.receivedQuantity}/${item.quantity}, manuallyCompleted: ${item.manuallyCompleted}`);
+        this.items[i].set('receiptStatus', 'Partial');
+      } else {
+        this.items[i].set('receiptStatus', 'Complete');
+      }
     }
-  });
+  }
   
   // Calculate overall completion percentage
   const totalQuantity = this.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
@@ -319,6 +330,11 @@ purchaseOrderSchema.methods.updateReceiptStatus = function() {
   } else if (partialItems > 0 || completedItems > 0) {
     this.status = 'Partially_Received';
   }
+  
+  // Mark all modified fields explicitly for Mongoose
+  this.markModified('status');
+  this.markModified('completionPercentage');
+  this.markModified('items');
 };
 
 // Virtual for completion percentage (kept for backward compatibility)

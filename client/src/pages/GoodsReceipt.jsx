@@ -69,12 +69,21 @@ const GoodsReceipt = () => {
       const poKey = grn.purchaseOrder?._id || grn.poNumber || 'unknown';
       
       if (!grouped[poKey]) {
-        // Get category from first product in PO items
+        // Get category from PO or first product
         let category = 'Uncategorized';
-        if (grn.purchaseOrder?.items && grn.purchaseOrder.items.length > 0) {
+        
+        // Try to get from PO's category field first
+        if (grn.purchaseOrder?.category?.categoryName) {
+          category = grn.purchaseOrder.category.categoryName;
+        } else if (grn.purchaseOrder?.category && typeof grn.purchaseOrder.category === 'string') {
+          category = grn.purchaseOrder.category;
+        } else if (grn.purchaseOrder?.items && grn.purchaseOrder.items.length > 0) {
+          // Fallback: get from first product
           const firstItem = grn.purchaseOrder.items[0];
           if (firstItem.product?.category?.categoryName) {
             category = firstItem.product.category.categoryName;
+          } else if (firstItem.product?.category && typeof firstItem.product.category === 'string') {
+            category = firstItem.product.category;
           }
         }
         
@@ -515,17 +524,16 @@ const GoodsReceipt = () => {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {po.grns.slice(0, poGRNLimits[poKey] || 5).map((grn) => {
-                          // Calculate GRN status
-                          let grnStatus = 'Pending';
-                          if (grn.items && grn.items.length > 0) {
-                            const allComplete = grn.items.every(item => {
-                              const pending = (item.orderedQuantity || 0) - ((item.previouslyReceived || 0) + item.receivedQuantity);
-                              return pending <= 0;
-                            });
-                            const anyReceived = grn.items.some(item => item.receivedQuantity > 0);
-                            if (allComplete && anyReceived) grnStatus = 'Complete';
-                            else if (anyReceived) grnStatus = 'Partial';
-                          }
+                          // Use GRN status from backend (considers manual completion)
+                          let grnStatus = grn.receiptStatus || 'Pending';
+                          
+                          // Map backend status to display status
+                          const grnStatusMap = {
+                            'Complete': 'Complete',
+                            'Partial': 'Partial',
+                            'Pending': 'Pending'
+                          };
+                          grnStatus = grnStatusMap[grnStatus] || grnStatus;
                           
                           return (
                             <tr key={grn._id} className="hover:bg-gray-50">
