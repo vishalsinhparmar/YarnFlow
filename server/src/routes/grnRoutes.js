@@ -8,7 +8,8 @@ import {
   updateGRNStatus,
   approveGRN,
   getGRNStats,
-  getGRNsByPO
+  getGRNsByPO,
+  markItemAsComplete
 } from '../controller/grnController.js';
 
 import {
@@ -40,5 +41,9 @@ router.patch('/:id/status', updateGRNStatus);
 
 // Approval
 router.patch('/:id/approve', approveGRN);
+
+// Manual Completion
+router.patch('/:grnId/item/:itemId/complete', markItemAsComplete);
+
 
 export default router;

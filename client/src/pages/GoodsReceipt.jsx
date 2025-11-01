@@ -7,6 +7,9 @@ import GRNQualityCheck from '../components/GRN/GRNQualityCheck';
 
 const GoodsReceipt = () => {
   const [grns, setGRNs] = useState([]);
+  const [groupedByPO, setGroupedByPO] = useState([]);
+  const [expandedPOs, setExpandedPOs] = useState({});
+  const [poGRNLimits, setPOGRNLimits] = useState({}); // Pagination per PO
   const [stats, setStats] = useState({
     totalGRNs: 0,
     statusBreakdown: [],
@@ -22,12 +25,17 @@ const GoodsReceipt = () => {
   const [showGRNDetail, setShowGRNDetail] = useState(false);
   const [showQualityCheck, setShowQualityCheck] = useState(false);
   const [selectedGRN, setSelectedGRN] = useState(null);
+  const [selectedPO, setSelectedPO] = useState(null);
   
   // Filters and search
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
+  
+  // PO-level pagination
+  const [currentPOPage, setCurrentPOPage] = useState(1);
+  const [posPerPage] = useState(5); // Show 5 POs per page
 
   // Fetch GRN statistics
   const fetchStats = async () => {
@@ -53,24 +61,147 @@ const GoodsReceipt = () => {
     }
   };
 
+  // Group GRNs by Purchase Order
+  const groupGRNsByPO = (grnList) => {
+    const grouped = {};
+    
+    grnList.forEach(grn => {
+      const poKey = grn.purchaseOrder?._id || grn.poNumber || 'unknown';
+      
+      if (!grouped[poKey]) {
+        // Get category from first product in PO items
+        let category = 'Uncategorized';
+        if (grn.purchaseOrder?.items && grn.purchaseOrder.items.length > 0) {
+          const firstItem = grn.purchaseOrder.items[0];
+          if (firstItem.product?.category?.categoryName) {
+            category = firstItem.product.category.categoryName;
+          }
+        }
+        
+        grouped[poKey] = {
+          poId: grn.purchaseOrder?._id,
+          poNumber: grn.poNumber || 'N/A',
+          supplier: grn.supplierDetails?.companyName || 'Unknown',
+          category: category,
+          grns: [],
+          totalItems: 0,
+          completedItems: 0,
+          poStatus: 'Pending',
+          purchaseOrder: grn.purchaseOrder // Store full PO for reference
+        };
+      }
+      
+      grouped[poKey].grns.push(grn);
+    });
+    
+    // Determine PO status from actual PO data and sort GRNs
+    Object.values(grouped).forEach(po => {
+      // Use actual PO status from backend if available
+      if (po.purchaseOrder && po.purchaseOrder.status) {
+        // Map backend status to display status
+        const statusMap = {
+          'Fully_Received': 'Complete',
+          'Partially_Received': 'Partial',
+          'Pending': 'Pending',
+          'Draft': 'Pending'
+        };
+        po.poStatus = statusMap[po.purchaseOrder.status] || 'Pending';
+        
+        // Calculate completion from PO items
+        if (po.purchaseOrder.items) {
+          po.totalItems = po.purchaseOrder.items.length;
+          po.completedItems = po.purchaseOrder.items.filter(item => 
+            item.receiptStatus === 'Complete' || item.manuallyCompleted
+          ).length;
+        }
+      } else {
+        // Fallback: Calculate from GRN items if PO data not available
+        po.totalItems = 0;
+        po.completedItems = 0;
+        const itemsMap = new Map();
+        
+        po.grns.forEach(grn => {
+          grn.items?.forEach(item => {
+            const itemKey = item.purchaseOrderItem || item.productCode;
+            if (!itemsMap.has(itemKey)) {
+              itemsMap.set(itemKey, {
+                ordered: item.orderedQuantity || 0,
+                received: 0,
+                manuallyCompleted: false
+              });
+            }
+            const tracked = itemsMap.get(itemKey);
+            tracked.received += item.receivedQuantity || 0;
+            if (item.manuallyCompleted) {
+              tracked.manuallyCompleted = true;
+            }
+          });
+        });
+        
+        itemsMap.forEach(item => {
+          po.totalItems++;
+          if (item.received >= item.ordered || item.manuallyCompleted) {
+            po.completedItems++;
+          }
+        });
+        
+        if (po.completedItems === 0) {
+          po.poStatus = 'Pending';
+        } else if (po.completedItems < po.totalItems) {
+          po.poStatus = 'Partial';
+        } else {
+          po.poStatus = 'Complete';
+        }
+      }
+      
+      // Sort GRNs by date (latest first)
+      po.grns.sort((a, b) => new Date(b.receiptDate) - new Date(a.receiptDate));
+    });
+    
+    // Sort POs by latest GRN date (latest PO first)
+    return Object.values(grouped).sort((a, b) => {
+      const latestDateA = a.grns.length > 0 ? new Date(a.grns[0].receiptDate) : new Date(0);
+      const latestDateB = b.grns.length > 0 ? new Date(b.grns[0].receiptDate) : new Date(0);
+      return latestDateB - latestDateA;
+    });
+  };
+
   // Fetch GRNs
   const fetchGRNs = async (page = 1, search = '', status = '') => {
     try {
       setLoading(true);
       const params = {
         page,
-        limit: 10,
+        limit: 50, // Fetch more to group properly
         ...(search && { search }),
         ...(status && { status })
       };
       
       const response = await grnAPI.getAll(params);
-      setGRNs(response?.data || []);
+      const grnData = response?.data || [];
+      setGRNs(grnData);
+      
+      // Group by PO
+      const grouped = groupGRNsByPO(grnData);
+      setGroupedByPO(grouped);
+      
+      // Auto-expand all POs and set initial pagination
+      const expanded = {};
+      const limits = {};
+      grouped.forEach(po => {
+        const poKey = po.poId || po.poNumber;
+        expanded[poKey] = true;
+        limits[poKey] = 5; // Show first 5 GRNs per PO
+      });
+      setExpandedPOs(expanded);
+      setPOGRNLimits(limits);
+      
       setPagination(response?.pagination || {});
       setError(null);
     } catch (err) {
       setError('Failed to fetch GRNs');
-      setGRNs([]); // Set empty array on error
+      setGRNs([]);
+      setGroupedByPO([]);
       console.error('Error fetching GRNs:', err);
     } finally {
       setLoading(false);
@@ -172,6 +303,28 @@ const GoodsReceipt = () => {
     return statusItem ? statusItem.count : 0;
   };
 
+  // Toggle PO expansion
+  const togglePO = (poKey) => {
+    setExpandedPOs(prev => ({
+      ...prev,
+      [poKey]: !prev[poKey]
+    }));
+  };
+
+  // Handle create GRN for specific PO
+  const handleCreateGRNForPO = (po) => {
+    setSelectedPO(po);
+    setShowCreateGRN(true);
+  };
+
+  // Load more GRNs for a specific PO
+  const loadMoreGRNs = (poKey) => {
+    setPOGRNLimits(prev => ({
+      ...prev,
+      [poKey]: (prev[poKey] || 5) + 5
+    }));
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -268,181 +421,215 @@ const GoodsReceipt = () => {
         </div>
       </div>
 
-      {/* GRN Table */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Recent Goods Receipt Notes</h2>
-        </div>
-        
+ 
+      <div className="space-y-4">
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-            <p className="mt-2 text-gray-600">Loading GRNs...</p>
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+            <p className="text-gray-600 mt-4">Loading GRNs...</p>
           </div>
         ) : error ? (
-          <div className="p-8 text-center">
-            <p className="text-red-600">{error}</p>
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <p className="text-red-600 mb-4">{error}</p>
             <button 
               onClick={() => fetchGRNs(currentPage, searchTerm, statusFilter)}
-              className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
             >
               Retry
             </button>
           </div>
-        ) : !grns || grns.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-gray-600">No GRNs found</p>
+        ) : groupedByPO.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <p className="text-gray-600 mb-4">No GRNs found</p>
             <button 
               onClick={() => setShowCreateGRN(true)}
-              className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
             >
               Create First GRN
             </button>
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      GRN Number
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      PO Reference
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Supplier
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Received Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quantity & Weight
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {grns.map((grn) => {
-                    const totalQty = grn.items?.reduce((total, item) => total + item.receivedQuantity, 0) || 0;
-                    
-                    // Calculate total weight - if receivedWeight is 0, calculate from quantity
-                    const totalWeight = grn.items?.reduce((total, item) => {
-                      let weight = item.receivedWeight || 0;
-                      
-                      // If weight is 0 but we have quantity, calculate it
-                      if (weight === 0 && item.receivedQuantity > 0 && item.orderedQuantity > 0 && item.orderedWeight > 0) {
-                        const weightPerUnit = item.orderedWeight / item.orderedQuantity;
-                        weight = item.receivedQuantity * weightPerUnit;
-                      }
-                      
-                      return total + weight;
-                    }, 0) || 0;
-                    
-                    const unit = grn.items?.[0]?.unit || '';
-                    
-                    // Calculate receipt status based on items
-                    let receiptStatus = 'Pending';
-                    if (grn.items && grn.items.length > 0) {
-                      const allComplete = grn.items.every(item => {
-                        const pending = (item.orderedQuantity || 0) - ((item.previouslyReceived || 0) + item.receivedQuantity);
-                        return pending <= 0;
-                      });
-                      const anyReceived = grn.items.some(item => item.receivedQuantity > 0);
-                      
-                      if (allComplete && anyReceived) {
-                        receiptStatus = 'Complete';
-                      } else if (anyReceived) {
-                        receiptStatus = 'Partial';
-                      }
-                    }
-                    
-                    // Use backend receiptStatus if available, otherwise use calculated
-                    const displayStatus = grn.receiptStatus || receiptStatus;
-                    
-                    return (
-                      <tr key={grn._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{grn.grnNumber}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{grn.poNumber}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{grn.supplierDetails?.companyName}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {grnUtils.formatDate(grn.receiptDate)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {totalQty} {unit}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {totalWeight.toFixed(2)} kg
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={'inline-flex px-2 py-1 text-xs font-semibold rounded-full ' + (displayStatus === 'Complete' ? 'bg-green-100 text-green-800' : displayStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800')}>
-                            {displayStatus}
+            {/* Paginated POs */}
+            {groupedByPO
+              .slice((currentPOPage - 1) * posPerPage, currentPOPage * posPerPage)
+              .map((po) => {
+            const poKey = po.poId || po.poNumber;
+            const isExpanded = expandedPOs[poKey];
+            
+            return (
+              <div key={poKey} className="bg-white rounded-lg shadow-sm overflow-hidden">
+                {/* PO Header */}
+                <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
+                  <div className="px-6 py-4 flex items-center justify-between">
+                    <button
+                      onClick={() => togglePO(poKey)}
+                      className="flex items-center gap-4 flex-1 text-left hover:bg-gray-50 -mx-2 px-2 py-2 rounded transition-colors"
+                    >
+                      <span className="text-2xl">{isExpanded ? '▼' : '▶'}</span>
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold text-gray-900">{po.poNumber}</h3>
+                          <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                            po.poStatus === 'Complete' ? 'bg-green-100 text-green-800' :
+                            po.poStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {po.poStatus}
                           </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button 
-                            onClick={() => handleViewGRN(grn)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {po.category}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Supplier: {po.supplier} • {po.grns.length} GRN(s) • {po.completedItems}/{po.totalItems} items completed
+                        </p>
+                      </div>
+                    </button>
+                    {/* Only show Add GRN button if PO is not Complete */}
+                    {po.poStatus !== 'Complete' && (
+                      <button
+                        onClick={() => handleCreateGRNForPO(po)}
+                        className="ml-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                      >
+                        <span>+</span>
+                        <span>Add GRN</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-            {/* Pagination */}
-            {pagination.pages > 1 && (
-              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                {/* GRNs List */}
+                {isExpanded && (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">GRN Number</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Received Date</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Products</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity & Weight</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">GRN Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {po.grns.slice(0, poGRNLimits[poKey] || 5).map((grn) => {
+                          // Calculate GRN status
+                          let grnStatus = 'Pending';
+                          if (grn.items && grn.items.length > 0) {
+                            const allComplete = grn.items.every(item => {
+                              const pending = (item.orderedQuantity || 0) - ((item.previouslyReceived || 0) + item.receivedQuantity);
+                              return pending <= 0;
+                            });
+                            const anyReceived = grn.items.some(item => item.receivedQuantity > 0);
+                            if (allComplete && anyReceived) grnStatus = 'Complete';
+                            else if (anyReceived) grnStatus = 'Partial';
+                          }
+                          
+                          return (
+                            <tr key={grn._id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">{grn.grnNumber}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {grnUtils.formatDate(grn.receiptDate)}
+                              </td>
+                              <td className="px-6 py-4">
+                                {grn.items?.map((item, idx) => (
+                                  <div key={idx} className="text-sm mb-1">
+                                    <span className="font-medium text-gray-900">{item.productName}</span>
+                                    <span className="text-gray-500 ml-2">({item.productCode})</span>
+                                  </div>
+                                ))}
+                              </td>
+                              <td className="px-6 py-4">
+                                {grn.items?.map((item, idx) => {
+                                  let weight = item.receivedWeight || 0;
+                                  if (weight === 0 && item.receivedQuantity > 0 && item.orderedQuantity > 0 && item.orderedWeight > 0) {
+                                    weight = item.receivedQuantity * (item.orderedWeight / item.orderedQuantity);
+                                  }
+                                  return (
+                                    <div key={idx} className="text-sm mb-1">
+                                      <div className="font-medium text-gray-900">
+                                        {item.receivedQuantity} {item.unit}
+                                      </div>
+                                      <div className="text-xs text-gray-500">
+                                        {weight.toFixed(2)} kg
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                  grnStatus === 'Complete' ? 'bg-green-100 text-green-800' :
+                                  grnStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {grnStatus}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <button 
+                                  onClick={() => handleViewGRN(grn)}
+                                  className="text-blue-600 hover:text-blue-900"
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    
+                    {/* Load More Button */}
+                    {po.grns.length > (poGRNLimits[poKey] || 5) && (
+                      <div className="px-6 py-4 border-t border-gray-200 text-center">
+                        <button
+                          onClick={() => loadMoreGRNs(poKey)}
+                          className="px-4 py-2 text-sm font-medium text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
+                        >
+                          Load More ({po.grns.length - (poGRNLimits[poKey] || 5)} remaining)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          
+          {/* PO Pagination */}
+          {groupedByPO.length > posPerPage && (
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-700">
-                  Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} results
+                  Showing {((currentPOPage - 1) * posPerPage) + 1} to {Math.min(currentPOPage * posPerPage, groupedByPO.length)} of {groupedByPO.length} Purchase Orders
                 </div>
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => {
-                      const newPage = currentPage - 1;
-                      setCurrentPage(newPage);
-                      fetchGRNs(newPage, searchTerm, statusFilter);
-                    }}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    onClick={() => setCurrentPOPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPOPage === 1}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                   >
                     Previous
                   </button>
-                  <span className="px-3 py-1 text-sm text-gray-700">
-                    Page {currentPage} of {pagination.pages}
+                  <span className="px-4 py-2 text-sm text-gray-700">
+                    Page {currentPOPage} of {Math.ceil(groupedByPO.length / posPerPage)}
                   </span>
                   <button
-                    onClick={() => {
-                      const newPage = currentPage + 1;
-                      setCurrentPage(newPage);
-                      fetchGRNs(newPage, searchTerm, statusFilter);
-                    }}
-                    disabled={currentPage === pagination.pages}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    onClick={() => setCurrentPOPage(prev => Math.min(Math.ceil(groupedByPO.length / posPerPage), prev + 1))}
+                    disabled={currentPOPage === Math.ceil(groupedByPO.length / posPerPage)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                   >
                     Next
                   </button>
                 </div>
               </div>
-            )}
+            </div>
+          )}
           </>
         )}
       </div>
@@ -451,13 +638,21 @@ const GoodsReceipt = () => {
       {showCreateGRN && (
         <Modal
           isOpen={showCreateGRN}
-          onClose={() => setShowCreateGRN(false)}
-          title="Create New GRN"
+          onClose={() => {
+            setShowCreateGRN(false);
+            setSelectedPO(null);
+          }}
+          title={selectedPO ? `Create New GRN for ${selectedPO.poNumber}` : "Create New GRN"}
           size="xl"
         >
           <GRNForm
             onSubmit={handleCreateGRN}
-            onCancel={() => setShowCreateGRN(false)}
+            onCancel={() => {
+              setShowCreateGRN(false);
+              setSelectedPO(null);
+            }}
+            preSelectedPO={selectedPO?.poId}
+            purchaseOrderData={selectedPO?.purchaseOrder}
           />
         </Modal>
       )}

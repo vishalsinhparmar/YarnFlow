@@ -4,7 +4,7 @@ import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
 import masterDataAPI from '../../services/masterDataAPI';
 import PurchaseOrderForm from '../PurchaseOrders/PurchaseOrderForm';
 
-const GRNForm = ({ grn, onSubmit, onCancel }) => {
+const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [selectedPO, setSelectedPO] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -47,6 +47,15 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
     };
     fetchPurchaseOrders();
   }, []);
+
+  // Handle pre-selected PO (when clicking "+ Add GRN" from PO section)
+  useEffect(() => {
+    if (preSelectedPO) {
+      console.log('Pre-selected PO:', preSelectedPO);
+      // Just trigger the normal PO selection
+      handlePOSelection(preSelectedPO);
+    }
+  }, [preSelectedPO]);
 
   // Populate form if editing
   useEffect(() => {
@@ -136,9 +145,9 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
           previouslyReceived: receivedQty,
           previousWeight: receivedWt,
           
-          // Receiving now (user will input)
-          receivedQuantity: 0,
-          receivedWeight: 0,
+          // Receiving now (pre-fill with pending qty)
+          receivedQuantity: pendingQty > 0 ? pendingQty : 0,
+          receivedWeight: pendingWt > 0 ? pendingWt : 0,
           
           // Pending (auto-calculated)
           pendingQuantity: pendingQty,
@@ -148,9 +157,12 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
           specifications: item.specifications || {},
           receiptStatus: item.receiptStatus || 'Pending',
           warehouseLocation: formData.warehouseLocation,
-          notes: ''
+          notes: '',
+          
+          // Track if item is already completed
+          isCompleted: pendingQty <= 0
         };
-      });
+      }).filter(item => !item.isCompleted); // Only show items with pending qty
       
       setFormData(prev => ({
         ...prev,
@@ -200,20 +212,23 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
     // Item validations
     let hasAtLeastOneItem = false;
     formData.items.forEach((item, index) => {
-      if (item.receivedQuantity > 0) {
+      // Allow if received qty > 0 OR marked as complete
+      if (item.receivedQuantity > 0 || item.markAsComplete) {
         hasAtLeastOneItem = true;
         
-        // Check if receiving more than pending
-        const maxAllowed = item.orderedQuantity - item.previouslyReceived;
-        if (item.receivedQuantity > maxAllowed) {
-          newErrors['items.' + index + '.receivedQuantity'] = 
-            'Cannot receive more than pending (' + maxAllowed + ' ' + item.unit + ')';
+        // Check if receiving more than pending (only if not marked complete)
+        if (item.receivedQuantity > 0 && !item.markAsComplete) {
+          const maxAllowed = item.orderedQuantity - item.previouslyReceived;
+          if (item.receivedQuantity > maxAllowed) {
+            newErrors['items.' + index + '.receivedQuantity'] = 
+              'Cannot receive more than pending (' + maxAllowed + ' ' + item.unit + ')';
+          }
         }
       }
     });
     
     if (!hasAtLeastOneItem) {
-      newErrors.items = 'Please enter received quantity for at least one item';
+      newErrors.items = 'Please enter received quantity for at least one item or mark as complete';
     }
 
     setErrors(newErrors);
@@ -377,6 +392,9 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Progress
                   </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Mark Complete
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -487,6 +505,25 @@ const GRNForm = ({ grn, onSubmit, onCancel }) => {
                         </div>
                         <div className="text-xs text-center text-gray-600 mt-1">
                           {completionPercentage}%
+                        </div>
+                      </td>
+                      
+                      <td className="px-4 py-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={item.markAsComplete || false}
+                            onChange={(e) => {
+                              const updatedItems = [...formData.items];
+                              updatedItems[index].markAsComplete = e.target.checked;
+                              setFormData(prev => ({ ...prev, items: updatedItems }));
+                            }}
+                            className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                            title="Mark this item as complete even if quantity doesn't match (e.g., due to losses)"
+                          />
+                          {item.markAsComplete && (
+                            <span className="text-xs text-green-600 font-medium">Final</span>
+                          )}
                         </div>
                       </td>
                     </tr>
