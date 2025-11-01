@@ -192,8 +192,11 @@ const PurchaseOrderDetail = ({ purchaseOrder, onStatusUpdate, onClose }) => {
                   {item.receivedQuantity > 0 && (
                     <p className="text-sm text-green-600">Received: {item.receivedQuantity} {item.unit}</p>
                   )}
-                  {(item.pendingQuantity > 0 || (item.quantity - (item.receivedQuantity || 0)) > 0) && (
-                    <p className="text-sm text-orange-600">Pending: {item.pendingQuantity || (item.quantity - (item.receivedQuantity || 0))} {item.unit}</p>
+                  {!item.manuallyCompleted && item.pendingQuantity > 0 && (
+                    <p className="text-sm text-orange-600">Pending: {item.pendingQuantity} {item.unit}</p>
+                  )}
+                  {item.manuallyCompleted && (
+                    <p className="text-sm text-green-600 font-medium">✓ Manually Completed</p>
                   )}
                 </div>
                 <div>
@@ -202,8 +205,8 @@ const PurchaseOrderDetail = ({ purchaseOrder, onStatusUpdate, onClose }) => {
                   {item.receivedWeight > 0 && (
                     <p className="text-sm text-green-600">Received: {item.receivedWeight.toFixed(2)} Kg</p>
                   )}
-                  {((item.specifications?.weight || item.weight || 0) - (item.receivedWeight || 0)) > 0 && (
-                    <p className="text-sm text-orange-600">Pending: {((item.specifications?.weight || item.weight || 0) - (item.receivedWeight || 0)).toFixed(2)} Kg</p>
+                  {!item.manuallyCompleted && item.pendingWeight > 0 && (
+                    <p className="text-sm text-orange-600">Pending: {item.pendingWeight.toFixed(2)} Kg</p>
                   )}
                 </div>
               </div>

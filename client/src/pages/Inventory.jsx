@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { inventoryAPI } from '../services/inventoryAPI';
 import { categoryAPI } from '../services/masterDataAPI';
+import ProductDetail from '../components/Inventory/ProductDetail';
 
 const Inventory = () => {
   const [categorizedProducts, setCategorizedProducts] = useState([]);
@@ -10,6 +11,7 @@ const Inventory = () => {
   const [error, setError] = useState('');
   const [expandedCategories, setExpandedCategories] = useState({});
   const [categoryProductLimits, setCategoryProductLimits] = useState({});
+  const [selectedProduct, setSelectedProduct] = useState(null);
   
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,11 +107,19 @@ const Inventory = () => {
     }
   };
 
-  const toggleCategory = (categoryId) => {
+  const toggleCategory = (categoryKey) => {
     setExpandedCategories(prev => ({
       ...prev,
-      [categoryId]: !prev[categoryId]
+      [categoryKey]: !prev[categoryKey]
     }));
+  };
+
+  const handleViewProduct = (product) => {
+    setSelectedProduct(product);
+  };
+
+  const handleBackToList = () => {
+    setSelectedProduct(null);
   };
 
   const loadMoreProducts = (categoryId) => {
@@ -140,6 +150,12 @@ const Inventory = () => {
 
   const totalProducts = pagination?.totalProducts || 0;
 
+  // Show product detail view if a product is selected
+  if (selectedProduct) {
+    return <ProductDetail product={selectedProduct} onClose={handleBackToList} />;
+  }
+
+  // Show inventory list view
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -311,11 +327,10 @@ const Inventory = () => {
                         <thead className="bg-gray-50 sticky top-0">
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PO Number</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Received</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Weight</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">GRNs</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -325,37 +340,25 @@ const Inventory = () => {
                                 <div className="text-sm font-medium text-gray-900">
                                   {highlightText(product.productName, debouncedSearchTerm)}
                                 </div>
-                                <div className="text-sm text-gray-500">
-                                  {highlightText(product.productCode, debouncedSearchTerm)}
-                                </div>
-                                <div className="text-xs text-green-600 mt-1">
-                                  ✓ Fully Received ({product.orderedQuantity} {product.unit})
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {highlightText(product.poNumber, debouncedSearchTerm)}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {product.totalReceivedQuantity} {product.unit}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  of {product.orderedQuantity} {product.unit}
+                                <div className="text-sm font-bold text-green-600">
+                                  {product.totalStock} {product.unit}
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {product.totalReceivedWeight ? `${product.totalReceivedWeight.toFixed(2)} Kg` : '-'}
+                                {product.totalWeight ? `${product.totalWeight.toFixed(2)} Kg` : '-'}
                               </td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm text-gray-900">{product.grnCount} GRN(s)</div>
-                                <div className="text-xs text-gray-500">
-                                  {product.grns.map(grn => highlightText(grn.grnNumber, debouncedSearchTerm)).reduce((prev, curr, i) => 
-                                    i === 0 ? [curr] : [...prev, ', ', curr], []
-                                  )}
-                                </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {highlightText(product.supplierName || 'N/A', debouncedSearchTerm)}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <button
+                                  onClick={() => handleViewProduct(product)}
+                                  className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                                >
+                                  View
+                                </button>
                               </td>
                             </tr>
                           ))}

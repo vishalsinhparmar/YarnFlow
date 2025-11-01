@@ -26,13 +26,17 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
       try {
         setLoadingPOs(true);
         console.log('Fetching purchase orders...');
-        // Fetch all POs first to test, you can change this to getByStatus('Approved') later
+        // Fetch all POs and filter out completed ones
         const response = await purchaseOrderAPI.getAll({ limit: 100 });
         console.log('Purchase Orders Response:', response);
         
         if (response && response.data) {
-          setPurchaseOrders(response.data);
-          console.log('Purchase Orders loaded:', response.data.length);
+          // Filter out completed POs (Fully_Received status)
+          const incompletePOs = response.data.filter(po => 
+            po.status !== 'Fully_Received' && po.status !== 'Complete'
+          );
+          setPurchaseOrders(incompletePOs);
+          console.log(`Purchase Orders loaded: ${incompletePOs.length} incomplete out of ${response.data.length} total`);
         } else {
           console.log('No purchase orders found in response');
           setPurchaseOrders([]);
@@ -616,11 +620,14 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
                   // Close modal
                   setShowPOModal(false);
                   
-                  // Refresh PO list
+                  // Refresh PO list (filter out completed POs)
                   const posResponse = await purchaseOrderAPI.getAll({ limit: 100 });
                   if (posResponse && posResponse.data) {
-                    console.log('Refreshed PO list, found:', posResponse.data.length, 'POs');
-                    setPurchaseOrders(posResponse.data);
+                    const incompletePOs = posResponse.data.filter(po => 
+                      po.status !== 'Fully_Received' && po.status !== 'Complete'
+                    );
+                    console.log(`Refreshed PO list: ${incompletePOs.length} incomplete out of ${posResponse.data.length} total`);
+                    setPurchaseOrders(incompletePOs);
                     
                     // Auto-select the newly created PO
                     console.log('Auto-selecting new PO:', newPOId);

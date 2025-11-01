@@ -297,24 +297,44 @@ const grnSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Auto-generate GRN number before saving
+// Auto-generate GRN number before saving with retry logic for duplicates
 grnSchema.pre('save', async function(next) {
   if (!this.grnNumber) {
-    try {
-      const currentYear = new Date().getFullYear();
-      const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
-      
-      // Count GRNs for current month
-      const count = await mongoose.model('GoodsReceiptNote').countDocuments({
-        createdAt: {
-          $gte: new Date(currentYear, new Date().getMonth(), 1),
-          $lt: new Date(currentYear, new Date().getMonth() + 1, 1)
+    const maxRetries = 5;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        const currentYear = new Date().getFullYear();
+        const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+        const prefix = `GRN${currentYear}${currentMonth}`;
+        
+        // Find the highest existing GRN number for this month
+        const lastGRN = await mongoose.model('GoodsReceiptNote')
+          .findOne({ grnNumber: new RegExp(`^${prefix}`) })
+          .sort({ grnNumber: -1 })
+          .select('grnNumber')
+          .lean();
+        
+        let nextNumber = 1;
+        if (lastGRN && lastGRN.grnNumber) {
+          const lastNumber = parseInt(lastGRN.grnNumber.slice(-4));
+          nextNumber = lastNumber + 1;
         }
-      });
-      
-      this.grnNumber = `GRN${currentYear}${currentMonth}${String(count + 1).padStart(4, '0')}`;
-    } catch (error) {
-      return next(error);
+        
+        this.grnNumber = `${prefix}${String(nextNumber).padStart(4, '0')}`;
+        
+        // Try to save and break if successful
+        break;
+      } catch (error) {
+        if (error.code === 11000 && attempt < maxRetries - 1) {
+          // Duplicate key error, retry with incremented number
+          attempt++;
+          await new Promise(resolve => setTimeout(resolve, 100 * attempt)); // Exponential backoff
+          continue;
+        }
+        return next(error);
+      }
     }
   }
   
