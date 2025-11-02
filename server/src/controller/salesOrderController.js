@@ -51,6 +51,7 @@ export const getAllSalesOrders = async (req, res) => {
     // Execute query with population
     const salesOrders = await SalesOrder.find(filter)
       .populate('customer', 'companyName contactPerson email phone')
+      .populate('category', 'categoryName')
       .populate('items.product', 'productName productCode specifications')
       .sort(sortOptions)
       .skip(skip)
@@ -88,6 +89,7 @@ export const getSalesOrderById = async (req, res) => {
 
     const salesOrder = await SalesOrder.findById(id)
       .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('category', 'categoryName')
       .populate('items.product', 'productName productCode specifications')
       .populate('items.inventoryAllocations.inventoryLot', 'lotNumber currentQuantity');
 
@@ -128,11 +130,9 @@ export const createSalesOrder = async (req, res) => {
     const {
       customer,
       expectedDeliveryDate,
+      category,
       items,
-      customerPONumber,
-      salesPerson,
-      customerNotes,
-      internalNotes,
+      notes,
       shippingAddress,
       createdBy
     } = req.body;
@@ -146,7 +146,7 @@ export const createSalesOrder = async (req, res) => {
       });
     }
 
-    // Validate products exist and get details
+    // Validate products exist and check inventory availability
     const validatedItems = [];
     for (const item of items) {
       const product = await Product.findById(item.product);
@@ -157,15 +157,29 @@ export const createSalesOrder = async (req, res) => {
         });
       }
 
+      // Check inventory availability
+      const inventoryLots = await InventoryLot.find({
+        product: item.product,
+        status: 'Active',
+        currentQuantity: { $gt: 0 }
+      });
+
+      const totalAvailable = inventoryLots.reduce((sum, lot) => sum + lot.currentQuantity, 0);
+      
+      if (totalAvailable < item.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for ${product.productName}. Available: ${totalAvailable} ${item.unit}, Requested: ${item.quantity} ${item.unit}`
+        });
+      }
+
       validatedItems.push({
         product: product._id,
         productName: product.productName,
         productCode: product.productCode,
-        orderedQuantity: item.orderedQuantity,
+        quantity: item.quantity,
         unit: item.unit,
-        unitPrice: item.unitPrice,
-        taxRate: item.taxRate || 18,
-        notes: item.notes
+        weight: item.weight || 0
       });
     }
 
@@ -183,14 +197,12 @@ export const createSalesOrder = async (req, res) => {
         phone: customerDoc.phone || 'No Phone',
         address: customerDoc.address || {}
       },
+      category,
       expectedDeliveryDate,
       items: validatedItems,
-      customerPONumber,
-      salesPerson,
-      customerNotes,
-      internalNotes,
+      notes: notes || '',
       shippingAddress: shippingAddress || customerDoc.address,
-      createdBy
+      createdBy: createdBy || 'Admin'
     });
 
     await salesOrder.save();
@@ -198,6 +210,7 @@ export const createSalesOrder = async (req, res) => {
     // Populate the saved sales order for response
     const populatedSalesOrder = await SalesOrder.findById(salesOrder._id)
       .populate('customer', 'companyName contactPerson email phone')
+      .populate('category', 'categoryName')
       .populate('items.product', 'productName productCode specifications');
 
     res.status(201).json({
@@ -239,11 +252,11 @@ export const updateSalesOrder = async (req, res) => {
       });
     }
 
-    // Check if order can be modified
-    if (['Shipped', 'Delivered', 'Cancelled'].includes(salesOrder.status)) {
+    // Check if order can be modified - only Draft orders can be edited
+    if (salesOrder.status !== 'Draft') {
       return res.status(400).json({
         success: false,
-        message: `Cannot modify sales order in ${salesOrder.status} status`
+        message: `Cannot modify sales order in ${salesOrder.status} status. Only Draft orders can be edited.`
       });
     }
 
@@ -256,6 +269,7 @@ export const updateSalesOrder = async (req, res) => {
     // Populate the updated sales order for response
     const populatedSalesOrder = await SalesOrder.findById(salesOrder._id)
       .populate('customer', 'companyName contactPerson email phone')
+      .populate('category', 'categoryName')
       .populate('items.product', 'productName productCode specifications');
 
     res.status(200).json({

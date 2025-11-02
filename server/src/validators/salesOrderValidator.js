@@ -23,6 +23,12 @@ export const validateSalesOrder = [
       return true;
     }),
 
+  body('category')
+    .notEmpty()
+    .withMessage('Category is required')
+    .isMongoId()
+    .withMessage('Invalid category ID'),
+
   body('items')
     .isArray({ min: 1 })
     .withMessage('At least one item is required'),
@@ -33,9 +39,9 @@ export const validateSalesOrder = [
     .isMongoId()
     .withMessage('Invalid product ID'),
 
-  body('items.*.orderedQuantity')
+  body('items.*.quantity')
     .isFloat({ min: 0.01 })
-    .withMessage('Ordered quantity must be greater than 0'),
+    .withMessage('Quantity must be greater than 0'),
 
   body('items.*.unit')
     .notEmpty()
@@ -43,38 +49,18 @@ export const validateSalesOrder = [
     .isLength({ min: 1, max: 20 })
     .withMessage('Unit must be between 1 and 20 characters'),
 
-  body('items.*.unitPrice')
+  body('items.*.weight')
+    .optional()
     .isFloat({ min: 0 })
-    .withMessage('Unit price must be a positive number'),
+    .withMessage('Weight must be a positive number'),
 
-  body('items.*.taxRate')
-    .optional()
-    .isFloat({ min: 0, max: 100 })
-    .withMessage('Tax rate must be between 0 and 100'),
-
-  body('customerPONumber')
-    .optional()
-    .isLength({ max: 50 })
-    .withMessage('Customer PO number cannot exceed 50 characters'),
-
-  body('salesPerson')
-    .optional()
-    .isLength({ max: 100 })
-    .withMessage('Sales person name cannot exceed 100 characters'),
-
-  body('customerNotes')
+  body('notes')
     .optional()
     .isLength({ max: 1000 })
-    .withMessage('Customer notes cannot exceed 1000 characters'),
-
-  body('internalNotes')
-    .optional()
-    .isLength({ max: 1000 })
-    .withMessage('Internal notes cannot exceed 1000 characters'),
+    .withMessage('Notes cannot exceed 1000 characters'),
 
   body('createdBy')
-    .notEmpty()
-    .withMessage('Created by is required')
+    .optional()
     .isLength({ min: 1, max: 100 })
     .withMessage('Created by must be between 1 and 100 characters'),
 

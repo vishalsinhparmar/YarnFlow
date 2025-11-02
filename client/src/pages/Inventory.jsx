@@ -329,7 +329,6 @@ const Inventory = () => {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Weight</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">GRNs</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                           </tr>
                         </thead>
@@ -348,9 +347,6 @@ const Inventory = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {product.totalWeight ? `${product.totalWeight.toFixed(2)} Kg` : '-'}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-900">{product.grnCount} GRN(s)</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <button

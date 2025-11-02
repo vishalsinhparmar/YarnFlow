@@ -29,6 +29,13 @@ const salesOrderSchema = new mongoose.Schema({
     }
   },
 
+  // Category (NEW - for inventory integration)
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: true
+  },
+
   // Order Dates
   orderDate: {
     type: Date,
@@ -53,19 +60,14 @@ const salesOrderSchema = new mongoose.Schema({
     productName: { type: String, required: true },
     productCode: { type: String, required: true },
     
-    // Quantities
-    orderedQuantity: { type: Number, required: true, min: 0 },
+    // Quantities (simplified for inventory-based sales)
+    quantity: { type: Number, required: true, min: 0 },
     reservedQuantity: { type: Number, default: 0, min: 0 },
     shippedQuantity: { type: Number, default: 0, min: 0 },
     deliveredQuantity: { type: Number, default: 0, min: 0 },
     
     unit: { type: String, required: true },
-    unitPrice: { type: Number, required: true, min: 0 },
-    totalPrice: { type: Number, default: 0, min: 0 },
-    
-    // Tax Information
-    taxRate: { type: Number, default: 18 }, // GST percentage
-    taxAmount: { type: Number, default: 0 },
+    weight: { type: Number, default: 0 }, // Total weight from inventory
     
     // Inventory Allocation
     inventoryAllocations: [{
@@ -88,10 +90,11 @@ const salesOrderSchema = new mongoose.Schema({
       type: String,
       enum: ['Pending', 'Reserved', 'Processing', 'Shipped', 'Delivered', 'Cancelled'],
       default: 'Pending'
-    },
-    
-    notes: String
+    }
   }],
+
+  // Notes (simplified - single field)
+  notes: { type: String, default: '' },
 
   // Financial Information
   totalAmount: { type: Number, default: 0, min: 0 },
