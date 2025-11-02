@@ -89,10 +89,10 @@ app.use((error, req, res, next) => {
 
 const PORT = process.env.PORT || 3020;
 
-app.listen(PORT, () => {
-    logger.info(`🚀 YarnFlow Server is running on port ${PORT}`);
-    console.log(`🚀 Server is running on http://localhost:${PORT}`);
-    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+app.listen(PORT, '0.0.0.0', () => {
+  logger.info(`🚀 YarnFlow Server is running on port ${PORT}`);
+  console.log(`🚀 Server is running on 0.0.0.0:${PORT}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 
