@@ -1,82 +1,77 @@
 import React, { useState, useEffect } from 'react';
-import { salesOrderAPI, salesOrderUtils } from '../../services/salesOrderAPI.js';
+import { salesOrderAPI } from '../../services/salesOrderAPI.js';
 import { apiRequest } from '../../services/common.js';
+import { inventoryAPI } from '../../services/inventoryAPI.js';
+import masterDataAPI from '../../services/masterDataAPI';
+import CustomerForm from '../masterdata/Customers/CustomerForm';
 
 const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
   const [formData, setFormData] = useState({
     customer: '',
     expectedDeliveryDate: '',
-    items: [
-      {
-        product: '',
-        productName: '',
-        orderedQuantity: '',
-        unit: '',
-        unitPrice: '',
-        taxRate: 18
-      }
-    ],
-    customerPONumber: '',
-    salesPerson: '',
-    customerNotes: '',
-    internalNotes: '',
-    createdBy: 'Admin'
+    category: '',
+    items: [{
+      product: '',
+      quantity: '',
+      unit: '',
+      weight: '',
+      availableStock: 0
+    }],
+    notes: ''
   });
 
   const [customers, setCustomers] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [inventoryProducts, setInventoryProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
 
-  // Load customers and products
+  // Load customers and categories on mount
   useEffect(() => {
     if (isOpen) {
       loadCustomers();
-      loadProducts();
+      loadCategories();
       
       // Reset form data when opening modal
       if (!order) {
         setFormData({
           customer: '',
           expectedDeliveryDate: '',
-          items: [
-            {
-              product: '',
-              productName: '',
-              orderedQuantity: '',
-              unit: '',
-              unitPrice: '',
-              taxRate: 18
-            }
-          ],
-          customerPONumber: '',
-          salesPerson: '',
-          customerNotes: '',
-          internalNotes: '',
-          createdBy: 'Admin'
+          category: '',
+          items: [{
+            product: '',
+            quantity: '',
+            unit: '',
+            weight: '',
+            availableStock: 0
+          }],
+          notes: ''
         });
       }
       
       // If editing existing order, populate form
       if (order) {
+        const categoryId = order.category?._id || order.category || '';
         setFormData({
           customer: order.customer._id || order.customer,
           expectedDeliveryDate: order.expectedDeliveryDate ? 
             new Date(order.expectedDeliveryDate).toISOString().split('T')[0] : '',
+          category: categoryId,
           items: order.items.map(item => ({
             product: item.product._id || item.product,
-            productName: item.productName,
-            orderedQuantity: item.orderedQuantity,
-            unit: item.unit,
-            unitPrice: item.unitPrice,
-            taxRate: item.taxRate || 18
+            quantity: item.quantity || '',
+            unit: item.unit || '',
+            weight: item.weight || '',
+            availableStock: 0
           })),
-          customerPONumber: order.customerPONumber || '',
-          salesPerson: order.salesPerson || '',
-          customerNotes: order.customerNotes || '',
-          internalNotes: order.internalNotes || '',
-          createdBy: 'Admin'
+          notes: order.notes || ''
         });
+        
+        // Load inventory for the existing category
+        if (categoryId) {
+          loadInventoryByCategory(categoryId);
+        }
       }
     }
   }, [isOpen, order]);
@@ -109,31 +104,67 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
     }
   };
 
-  const loadProducts = async () => {
+  const loadCategories = async () => {
     try {
-      // Load products from master data API (centralized base)
-      const data = await apiRequest('/master-data/products');
-      
-      if (data.success) {
-        setProducts(data.data || []);
-      } else {
-        // Fallback to mock data if API fails
-        const mockProducts = [
-          { _id: '1', productName: 'Cotton Yarn 20s', productCode: 'CY20S', unit: 'Kg', basePrice: 180 },
-          { _id: '2', productName: 'Polyester Thread', productCode: 'PT150', unit: 'Spools', basePrice: 25 },
-          { _id: '3', productName: 'Cotton Fabric', productCode: 'CF100', unit: 'Meters', basePrice: 120 }
-        ];
-        setProducts(mockProducts);
+      // First get all categories
+      const categoriesResponse = await masterDataAPI.categories.getAll();
+      if (!categoriesResponse.success) {
+        return;
       }
-    } catch (err) {
-      console.error('Error loading products:', err);
-      // Fallback to mock data
-      const mockProducts = [
-        { _id: '1', productName: 'Cotton Yarn 20s', productCode: 'CY20S', unit: 'Kg', basePrice: 180 },
-        { _id: '2', productName: 'Polyester Thread', productCode: 'PT150', unit: 'Spools', basePrice: 25 },
-        { _id: '3', productName: 'Cotton Fabric', productCode: 'CF100', unit: 'Meters', basePrice: 120 }
-      ];
-      setProducts(mockProducts);
+
+      // Then get inventory to see which categories have products
+      const inventoryResponse = await inventoryAPI.getAll();
+      if (!inventoryResponse.success || !inventoryResponse.data) {
+        setCategories(categoriesResponse.data || []);
+        return;
+      }
+
+      // Get category IDs that have inventory
+      const categoriesWithInventory = new Set();
+      inventoryResponse.data.forEach(cat => {
+        if (cat.products && cat.products.length > 0) {
+          categoriesWithInventory.add(cat.categoryId);
+        }
+      });
+
+      // Filter categories to only show those with inventory
+      const filteredCategories = categoriesResponse.data.filter(category => 
+        categoriesWithInventory.has(category._id)
+      );
+
+      setCategories(filteredCategories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
+
+  const loadInventoryByCategory = async (categoryId) => {
+    try {
+      const response = await inventoryAPI.getAll({ category: categoryId });
+      if (response.success && response.data) {
+        // Transform inventory data to product list
+        const products = [];
+        response.data.forEach(cat => {
+          if (cat.products) {
+            cat.products.forEach(product => {
+              products.push({
+                _id: product.productId,
+                productName: product.productName,
+                productCode: product.productCode,
+                unit: product.unit,
+                totalStock: product.totalStock,
+                totalWeight: product.totalWeight
+              });
+            });
+          }
+        });
+        setInventoryProducts(products);
+      } else {
+        setInventoryProducts([]);
+      }
+    } catch (error) {
+      console.error('Error loading inventory:', error);
+      setInventoryProducts([]);
     }
   };
 
@@ -145,6 +176,27 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
     }));
   };
 
+  const handleCategoryChange = (e) => {
+    const { value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      category: value,
+      items: [{
+        product: '',
+        quantity: '',
+        unit: '',
+        weight: '',
+        availableStock: 0
+      }]
+    }));
+    
+    if (value) {
+      loadInventoryByCategory(value);
+    } else {
+      setInventoryProducts([]);
+    }
+  };
+
   const handleItemChange = (index, field, value) => {
     const updatedItems = [...formData.items];
     updatedItems[index] = {
@@ -152,15 +204,15 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
       [field]: value
     };
 
-    // Auto-populate product details when product is selected
+    // Auto-populate from inventory when product selected
     if (field === 'product') {
-      const selectedProduct = products.find(p => p._id === value);
+      const selectedProduct = inventoryProducts.find(p => p._id === value);
       if (selectedProduct) {
         updatedItems[index] = {
           ...updatedItems[index],
-          productName: selectedProduct.productName,
-          unit: selectedProduct.unit || selectedProduct.baseUnit || 'Units',
-          unitPrice: selectedProduct.basePrice || selectedProduct.price || 0
+          unit: selectedProduct.unit,
+          availableStock: selectedProduct.totalStock,
+          weight: selectedProduct.totalWeight
         };
       }
     }
@@ -178,11 +230,10 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
         ...prev.items,
         {
           product: '',
-          productName: '',
-          orderedQuantity: '',
+          quantity: '',
           unit: '',
-          unitPrice: '',
-          taxRate: 18
+          weight: '',
+          availableStock: 0
         }
       ]
     }));
@@ -197,6 +248,19 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
     }
   };
 
+  const handleCustomerSaved = async (newCustomer) => {
+    setShowCustomerModal(false);
+    // Reload customers
+    await loadCustomers();
+    // Auto-select the new customer
+    if (newCustomer && newCustomer._id) {
+      setFormData(prev => ({
+        ...prev,
+        customer: newCustomer._id
+      }));
+    }
+  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -204,39 +268,84 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
     setError('');
 
     try {
+      // Validate all required fields
+      if (!formData.customer) {
+        setError('Please select a customer');
+        setLoading(false);
+        return;
+      }
 
-      // Prepare data for API - backend will calculate totals automatically
+      if (!formData.expectedDeliveryDate) {
+        setError('Please select expected delivery date');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.category) {
+        setError('Please select a category');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.items || formData.items.length === 0) {
+        setError('Please add at least one item');
+        setLoading(false);
+        return;
+      }
+
+      // Validate each item
+      for (let i = 0; i < formData.items.length; i++) {
+        const item = formData.items[i];
+        if (!item.product) {
+          setError(`Please select a product for item ${i + 1}`);
+          setLoading(false);
+          return;
+        }
+        if (!item.quantity || parseFloat(item.quantity) <= 0) {
+          setError(`Please enter a valid quantity for item ${i + 1}`);
+          setLoading(false);
+          return;
+        }
+        if (!item.unit) {
+          setError(`Unit is missing for item ${i + 1}`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Prepare data for API
       const orderData = {
         customer: formData.customer,
         expectedDeliveryDate: formData.expectedDeliveryDate,
+        category: formData.category,
         items: formData.items.map(item => {
-          // Find product details for productName and productCode
-          const selectedProduct = products.find(p => p._id === item.product);
+          const selectedProduct = inventoryProducts.find(p => p._id === item.product);
           return {
             product: item.product,
-            productName: selectedProduct?.productName || item.productName || 'Unknown Product',
-            productCode: selectedProduct?.productCode || item.productCode || 'UNKNOWN',
-            orderedQuantity: parseFloat(item.orderedQuantity || 0),
+            productName: selectedProduct?.productName || 'Unknown Product',
+            productCode: selectedProduct?.productCode || 'UNKNOWN',
+            quantity: parseFloat(item.quantity),
             unit: item.unit,
-            unitPrice: parseFloat(item.unitPrice || 0),
-            taxRate: parseFloat(item.taxRate || 18)
+            weight: parseFloat(item.weight || 0)
           };
         }),
-        customerPONumber: formData.customerPONumber || '',
-        salesPerson: formData.salesPerson || '',
-        customerNotes: formData.customerNotes || '',
-        internalNotes: formData.internalNotes || '',
-        createdBy: formData.createdBy || 'Admin'
+        notes: formData.notes || ''
       };
 
       console.log('Submitting order data:', orderData);
 
       if (order) {
         // Update existing order
-        await salesOrderAPI.update(order._id, orderData);
+        const response = await salesOrderAPI.update(order._id, orderData);
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to update order');
+        }
       } else {
         // Create new order
-        await salesOrderAPI.create(orderData);
+        const response = await salesOrderAPI.create(orderData);
+        if (!response.success) {
+          throw new Error(response.message || 'Failed to create order');
+        }
       }
 
       onClose();
@@ -288,9 +397,18 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
           {/* Customer and Basic Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Customer *
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Customer *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerModal(true)}
+                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                >
+                  + Add Customer
+                </button>
+              </div>
               <select
                 name="customer"
                 value={formData.customer}
@@ -301,7 +419,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
                 <option value="">Select Customer</option>
                 {customers.map(customer => (
                   <option key={customer._id} value={customer._id}>
-                    {customer.companyName} - {customer.contactPerson}
+                    {customer.companyName}
                   </option>
                 ))}
               </select>
@@ -321,34 +439,32 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Customer PO Number
-              </label>
-              <input
-                type="text"
-                name="customerPONumber"
-                value={formData.customerPONumber}
-                onChange={handleInputChange}
-                placeholder="Customer's PO reference"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Sales Person
-              </label>
-              <input
-                type="text"
-                name="salesPerson"
-                value={formData.salesPerson}
-                onChange={handleInputChange}
-                placeholder="Sales person name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+          {/* Category Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Category *
+            </label>
+            <select
+              name="category"
+              value={formData.category}
+              onChange={handleCategoryChange}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Category</option>
+              {categories.map(category => (
+                <option key={category._id} value={category._id}>
+                  {category.categoryName}
+                </option>
+              ))}
+            </select>
+            {!formData.category && (
+              <p className="text-xs text-blue-600 mt-1">
+                ℹ️ Select a category first to see available products from inventory
+              </p>
+            )}
           </div>
 
 
@@ -359,7 +475,8 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
               <button
                 type="button"
                 onClick={addItem}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md text-sm"
+                disabled={!formData.category}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 + Add Item
               </button>
@@ -368,7 +485,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
             <div className="space-y-4">
               {formData.items.map((item, index) => (
                 <div key={index} className="border border-gray-200 rounded-lg p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Product *
@@ -377,12 +494,15 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
                         value={item.product}
                         onChange={(e) => handleItemChange(index, 'product', e.target.value)}
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={!formData.category}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                       >
-                        <option value="">Select Product</option>
-                        {products.map(product => (
+                        <option value="">
+                          {formData.category ? 'Select Product' : 'Select Category First'}
+                        </option>
+                        {inventoryProducts.map(product => (
                           <option key={product._id} value={product._id}>
-                            {product.productName} ({product.productCode})
+                            {product.productName} (Stock: {product.totalStock} {product.unit})
                           </option>
                         ))}
                       </select>
@@ -394,41 +514,30 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
                       </label>
                       <input
                         type="number"
-                        value={item.orderedQuantity}
-                        onChange={(e) => handleItemChange(index, 'orderedQuantity', e.target.value)}
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
                         required
                         min="0.01"
+                        max={item.availableStock || undefined}
                         step="0.01"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
+                      {item.availableStock > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Available: {item.availableStock} {item.unit}
+                        </p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Unit *
+                        Unit
                       </label>
                       <input
                         type="text"
                         value={item.unit}
-                        onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
-                        required
-                        placeholder="e.g., Kg, Meters, Pieces"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Unit Price *
-                      </label>
-                      <input
-                        type="number"
-                        value={item.unitPrice}
-                        onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
-                        required
-                        min="0"
-                        step="0.01"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        readOnly
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                       />
                     </div>
 
@@ -445,6 +554,12 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
                     </div>
                   </div>
 
+                  {/* Weight Display */}
+                  {item.weight > 0 && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      Total Weight: {item.weight} Kg
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -453,34 +568,18 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
 
 
           {/* Notes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Customer Notes
-              </label>
-              <textarea
-                name="customerNotes"
-                value={formData.customerNotes}
-                onChange={handleInputChange}
-                rows="3"
-                placeholder="Notes visible to customer"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Internal Notes
-              </label>
-              <textarea
-                name="internalNotes"
-                value={formData.internalNotes}
-                onChange={handleInputChange}
-                rows="3"
-                placeholder="Internal notes (not visible to customer)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Notes
+            </label>
+            <textarea
+              name="notes"
+              value={formData.notes}
+              onChange={handleInputChange}
+              rows="3"
+              placeholder="Order notes..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
 
           {/* Form Actions */}
@@ -502,6 +601,31 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
           </div>
         </form>
       </div>
+
+      {/* Customer Modal */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Add New Customer</h3>
+                <button
+                  onClick={() => setShowCustomerModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <CustomerForm
+                onCancel={() => setShowCustomerModal(false)}
+                onSubmit={handleCustomerSaved}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

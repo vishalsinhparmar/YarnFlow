@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { salesOrderAPI, salesOrderUtils } from '../services/salesOrderAPI';
 import NewSalesOrderModal from '../components/SalesOrders/NewSalesOrderModal';
 import SalesOrderDetailModal from '../components/SalesOrders/SalesOrderDetailModal';
-import ShipOrderModal from '../components/ShipOrderModal';
-import StatusUpdateModal from '../components/StatusUpdateModal';
 
 const SalesOrder = () => {
   const navigate = useNavigate();
@@ -18,8 +16,6 @@ const SalesOrder = () => {
   // Modal states
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showShipModal, setShowShipModal] = useState(false);
-  const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   
   // Filter and pagination states
@@ -80,29 +76,6 @@ const SalesOrder = () => {
           setSelectedOrder(order);
           setShowNewOrderModal(true);
           break;
-        case 'updateStatus':
-          setSelectedOrder(order);
-          setShowStatusModal(true);
-          break;
-        case 'createChallan':
-          // Navigate to Sales Challan page with pre-selected order
-          navigate('/sales-challan', { state: { selectedOrderId: order._id } });
-          break;
-        case 'ship':
-          setSelectedOrder(order);
-          setShowShipModal(true);
-          break;
-        case 'reserve':
-          await salesOrderAPI.reserveInventory(order._id, 'Admin');
-          await fetchSalesOrders();
-          alert('Inventory reserved successfully');
-          break;
-        case 'deliver':
-          await salesOrderAPI.markDelivered(order._id, { deliveredBy: 'Admin' });
-          await fetchSalesOrders();
-          await fetchStats();
-          alert('Order marked as delivered');
-          break;
         case 'cancel':
           if (confirm('Are you sure you want to cancel this order?')) {
             await salesOrderAPI.cancel(order._id, { 
@@ -112,11 +85,6 @@ const SalesOrder = () => {
             await fetchSalesOrders();
             await fetchStats();
             alert('Order cancelled successfully');
-          }
-          break;
-        case 'track':
-          if (order.trackingNumber) {
-            alert(`Tracking Number: ${order.trackingNumber}\nCourier: ${order.courierCompany}`);
           }
           break;
         default:
@@ -132,7 +100,6 @@ const SalesOrder = () => {
   const handleModalClose = () => {
     setShowNewOrderModal(false);
     setShowDetailModal(false);
-    setShowShipModal(false);
     setSelectedOrder(null);
     fetchSalesOrders();
     fetchStats();
@@ -203,97 +170,81 @@ const SalesOrder = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Revenue</p>
-              <p className="text-2xl font-bold text-green-600">
-                {salesOrderUtils.formatCurrency(salesOrderStats?.overview?.totalRevenue || 0)}
+              <p className="text-sm font-medium text-gray-600">Draft</p>
+              <p className="text-2xl font-bold text-blue-600">
+                {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Draft')?.count || 0}
               </p>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">💰</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Order Pipeline */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Pipeline</h2>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-blue-600 text-xl">📝</span>
             </div>
-            <p className="text-sm font-medium text-gray-900">Draft</p>
-            <p className="text-2xl font-bold text-blue-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Draft')?.count || 0}
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-yellow-600 text-xl">⏳</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Pending')?.count || 0}
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-purple-600 text-xl">🏭</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Processing</p>
-            <p className="text-2xl font-bold text-purple-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Processing')?.count || 0}
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-orange-600 text-xl">🚚</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Shipping</p>
-            <p className="text-2xl font-bold text-orange-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Shipped')?.count || 0}
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-green-600 text-xl">✅</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Delivered</p>
-            <p className="text-2xl font-bold text-green-600">
-              {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Delivered')?.count || 0}
-            </p>
           </div>
         </div>
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex-1 max-w-md">
+      <div className="bg-white rounded-lg shadow-sm p-4">
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex-1">
             <input
               type="text"
               placeholder="Search orders, customers, SO numbers..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-          <div className="flex gap-3">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setStatusFilter('')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === '' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              <option value="">All Status</option>
-              <option value="Draft">Draft</option>
-              <option value="Pending">Pending</option>
-              <option value="Confirmed">Confirmed</option>
-              <option value="Processing">Processing</option>
-              <option value="Shipped">Shipped</option>
-              <option value="Delivered">Delivered</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
+              All
+            </button>
+            <button
+              onClick={() => setStatusFilter('Draft')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === 'Draft' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Draft
+            </button>
+            <button
+              onClick={() => setStatusFilter('Pending')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === 'Pending' 
+                  ? 'bg-yellow-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Pending
+            </button>
+            <button
+              onClick={() => setStatusFilter('Delivered')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === 'Delivered' 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Delivered
+            </button>
+            <button
+              onClick={() => setStatusFilter('Cancelled')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === 'Cancelled' 
+                  ? 'bg-red-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Cancelled
+            </button>
           </div>
         </div>
       </div>
@@ -326,6 +277,7 @@ const SalesOrder = () => {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SO Number</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delivery Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -343,6 +295,9 @@ const SalesOrder = () => {
                         {order.customerDetails?.companyName || 'Unknown Customer'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {order.category?.categoryName || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {salesOrderUtils.formatDate(order.orderDate)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -358,22 +313,35 @@ const SalesOrder = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
-                          {salesOrderUtils.getAvailableActions(order).map((action, index) => (
+                          <button
+                            onClick={() => handleOrderAction('view', order)}
+                            className="text-blue-600 hover:text-blue-900 text-xs px-2 py-1 rounded border border-blue-200 hover:bg-blue-50"
+                          >
+                            View
+                          </button>
+                          {order.status === 'Draft' && (
                             <button
-                              key={index}
-                              onClick={() => handleOrderAction(action.type, order)}
-                              className={`text-${action.color}-600 hover:text-${action.color}-900 text-xs px-2 py-1 rounded border border-${action.color}-200 hover:bg-${action.color}-50`}
+                              onClick={() => handleOrderAction('edit', order)}
+                              className="text-green-600 hover:text-green-900 text-xs px-2 py-1 rounded border border-green-200 hover:bg-green-50"
                             >
-                              {action.label}
+                              Edit
                             </button>
-                          ))}
+                          )}
+                          {order.status !== 'Cancelled' && order.status !== 'Delivered' && (
+                            <button
+                              onClick={() => handleOrderAction('cancel', order)}
+                              className="text-red-600 hover:text-red-900 text-xs px-2 py-1 rounded border border-red-200 hover:bg-red-50"
+                            >
+                              Cancel
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
                       <div className="flex flex-col items-center">
                         <span className="text-4xl mb-4">📋</span>
                         <p className="text-lg font-medium mb-2">No sales orders found</p>
@@ -436,24 +404,6 @@ const SalesOrder = () => {
         />
       )}
 
-      {showShipModal && selectedOrder && (
-        <ShipOrderModal
-          isOpen={showShipModal}
-          onClose={handleModalClose}
-          order={selectedOrder}
-        />
-      )}
-
-      {showStatusModal && selectedOrder && (
-        <StatusUpdateModal
-          isOpen={showStatusModal}
-          onClose={() => {
-            setShowStatusModal(false);
-            setSelectedOrder(null);
-          }}
-          order={selectedOrder}
-        />
-      )}
     </div>
   );
 };
