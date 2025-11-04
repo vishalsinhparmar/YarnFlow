@@ -1,9 +1,234 @@
 import InventoryLot from '../models/InventoryLot.js';
 import Product from '../models/Product.js';
 import Supplier from '../models/Supplier.js';
+import SalesChallan from '../models/SalesChallan.js';
+import GoodsReceiptNote from '../models/GoodsReceiptNote.js';
 import { validationResult } from 'express-validator';
 
-// ============ INVENTORY LOTS CONTROLLER ============
+// ============ INVENTORY CONTROLLER ============
+// Single source of truth for inventory data
+// Shows both Stock In (GRN) and Stock Out (Sales Challan)
+
+// Get inventory products with both Stock In and Stock Out data
+export const getInventoryProducts = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      category,
+      sortBy = 'latestReceiptDate',
+      sortOrder = 'desc'
+    } = req.query;
+
+    console.log('📊 Fetching inventory products:', { page, limit, search, category, sortBy, sortOrder });
+
+    // Get all inventory lots (single source of truth)
+    let inventoryLots = await InventoryLot.find({
+      status: { $in: ['Active', 'Consumed'] }
+    })
+      .populate('product', 'productName productCode category')
+      .populate('supplier', 'companyName')
+      .populate({
+        path: 'product',
+        populate: {
+          path: 'category',
+          select: 'categoryName'
+        }
+      })
+      .lean();
+
+    console.log(`📦 Found ${inventoryLots.length} inventory lots`);
+
+    // Aggregate by product
+    const productAggregation = {};
+    
+    inventoryLots.forEach(lot => {
+      if (!lot.product || !lot.product._id) return;
+      
+      const productKey = lot.product._id.toString();
+      
+      if (!productAggregation[productKey]) {
+        productAggregation[productKey] = {
+          productId: lot.product._id,
+          productName: lot.product.productName || 'Unknown Product',
+          productCode: lot.product.productCode || 'N/A',
+          categoryName: lot.product.category?.categoryName || 'Uncategorized',
+          categoryId: lot.product.category?._id,
+          unit: lot.unit || 'Units',
+          currentStock: 0,
+          receivedStock: 0,
+          issuedStock: 0,
+          currentWeight: 0,
+          receivedWeight: 0,
+          issuedWeight: 0,
+          suppliers: new Set(),
+          lots: [],
+          latestReceiptDate: null
+        };
+      }
+      
+      // Aggregate quantities
+      productAggregation[productKey].currentStock += lot.currentQuantity || 0;
+      productAggregation[productKey].receivedStock += lot.receivedQuantity || 0;
+      
+      // Aggregate weights
+      const lotReceivedWeight = lot.totalWeight || 0;
+      productAggregation[productKey].receivedWeight += lotReceivedWeight;
+      
+      // Calculate issued quantity and weight from movements
+      const issuedQty = lot.movements
+        ?.filter(m => m.type === 'Issued')
+        .reduce((sum, m) => sum + (m.quantity || 0), 0) || 0;
+      productAggregation[productKey].issuedStock += issuedQty;
+      
+      const issuedWeight = lot.movements
+        ?.filter(m => m.type === 'Issued')
+        .reduce((sum, m) => sum + (m.weight || 0), 0) || 0;
+      productAggregation[productKey].issuedWeight += issuedWeight;
+      
+      // Debug logging for weight tracking
+      if (issuedWeight > 0) {
+        console.log(`📊 Product ${lot.productName}: Issued weight from movements: ${issuedWeight.toFixed(2)} kg`);
+      }
+      
+      // Current weight = Received weight - Issued weight
+      productAggregation[productKey].currentWeight = 
+        productAggregation[productKey].receivedWeight - productAggregation[productKey].issuedWeight;
+      
+      // Track supplier
+      if (lot.supplier?.companyName) {
+        productAggregation[productKey].suppliers.add(lot.supplier.companyName);
+      }
+      
+      // Add lot detail
+      productAggregation[productKey].lots.push({
+        lotNumber: lot.lotNumber,
+        lotId: lot._id,
+        grnNumber: lot.grnNumber,
+        receivedQuantity: lot.receivedQuantity,
+        currentQuantity: lot.currentQuantity,
+        issuedQuantity: issuedQty,
+        status: lot.status,
+        receivedDate: lot.receivedDate,
+        supplierName: lot.supplierName || 'Unknown',
+        movements: lot.movements || []
+      });
+      
+      // Track latest receipt date
+      if (lot.receivedDate) {
+        if (!productAggregation[productKey].latestReceiptDate || 
+            new Date(lot.receivedDate) > new Date(productAggregation[productKey].latestReceiptDate)) {
+          productAggregation[productKey].latestReceiptDate = lot.receivedDate;
+        }
+      }
+    });
+
+    // Convert to array
+    let products = Object.values(productAggregation).map(product => {
+      const supplierList = Array.from(product.suppliers);
+      
+      return {
+        productId: product.productId,
+        productName: product.productName,
+        productCode: product.productCode,
+        categoryName: product.categoryName,
+        categoryId: product.categoryId,
+        unit: product.unit,
+        currentStock: product.currentStock,
+        receivedStock: product.receivedStock,
+        issuedStock: product.issuedStock,
+        totalStock: product.currentStock, // Alias for backward compatibility
+        currentWeight: product.currentWeight,
+        receivedWeight: product.receivedWeight,
+        issuedWeight: product.issuedWeight,
+        totalWeight: product.currentWeight, // Alias for backward compatibility
+        suppliers: supplierList,
+        supplierNames: supplierList.join(', '),
+        lotCount: product.lots.length,
+        lots: product.lots.sort((a, b) => new Date(b.receivedDate) - new Date(a.receivedDate)),
+        latestReceiptDate: product.latestReceiptDate
+      };
+    });
+    
+    console.log(`✅ Total products with stock: ${products.length}`);
+
+    // Apply filters
+    if (search) {
+      const searchLower = search.toLowerCase();
+      products = products.filter(p => 
+        p.productName.toLowerCase().includes(searchLower) ||
+        p.productCode.toLowerCase().includes(searchLower) ||
+        p.supplierNames.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    if (category) {
+      products = products.filter(p => p.categoryId?.toString() === category);
+    }
+
+    // Sort products by latest receipt date
+    products.sort((a, b) => {
+      const dateA = a.latestReceiptDate ? new Date(a.latestReceiptDate) : new Date(0);
+      const dateB = b.latestReceiptDate ? new Date(b.latestReceiptDate) : new Date(0);
+      return dateB - dateA; // Latest first
+    });
+
+    // Group products by category
+    const groupedByCategory = {};
+    
+    products.forEach(product => {
+      const categoryKey = product.categoryId?.toString() || 'uncategorized';
+      const categoryName = product.categoryName || 'Uncategorized';
+      
+      if (!groupedByCategory[categoryKey]) {
+        groupedByCategory[categoryKey] = {
+          categoryId: product.categoryId,
+          categoryName: categoryName,
+          products: [],
+          totalProducts: 0
+        };
+      }
+      
+      groupedByCategory[categoryKey].products.push(product);
+      groupedByCategory[categoryKey].totalProducts++;
+    });
+
+    // Convert to array and sort categories by name
+    let categorizedProducts = Object.values(groupedByCategory);
+    categorizedProducts.sort((a, b) => 
+      a.categoryName.localeCompare(b.categoryName)
+    );
+
+    // Calculate totals
+    const totalProducts = products.length;
+    const totalCategories = categorizedProducts.length;
+
+    // Apply pagination to categories (not individual products)
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const paginatedCategories = categorizedProducts.slice(skip, skip + parseInt(limit));
+
+    res.json({
+      success: true,
+      data: paginatedCategories,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(totalCategories / parseInt(limit)),
+        total: totalCategories,
+        totalProducts: totalProducts,
+        limit: parseInt(limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching inventory products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inventory products',
+      error: error.message
+    });
+  }
+};
 
 // Get all inventory lots with filtering and pagination
 export const getAllInventoryLots = async (req, res) => {
@@ -616,6 +841,7 @@ export const getMovementHistory = async (req, res) => {
 };
 
 export default {
+  getInventoryProducts,
   getAllInventoryLots,
   getInventoryStats,
   getInventoryLotById,

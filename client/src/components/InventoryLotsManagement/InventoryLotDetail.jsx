@@ -162,7 +162,7 @@ const InventoryLotDetail = ({ isOpen, onClose, lot, onRefresh }) => {
                     </div>
 
                     <div className="bg-gray-50 rounded-lg p-4">
-                      <h4 className="font-semibold text-gray-900 mb-3">Quantity Information</h4>
+                      <h4 className="font-semibold text-gray-900 mb-3">Quantity & Weight Information</h4>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Received Quantity:</span>
@@ -179,6 +179,11 @@ const InventoryLotDetail = ({ isOpen, onClose, lot, onRefresh }) => {
                         <div className="flex justify-between">
                           <span className="text-gray-600">Available Quantity:</span>
                           <span className="font-medium text-blue-600">{currentLot.availableQuantity || currentLot.currentQuantity} {currentLot.unit}</span>
+                        </div>
+                        <div className="border-t border-gray-300 my-2"></div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Total Weight:</span>
+                          <span className="font-medium text-gray-900">{currentLot.totalWeight ? `${currentLot.totalWeight.toFixed(2)} Kg` : '-'}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Unit Cost:</span>
@@ -268,6 +273,11 @@ const InventoryLotDetail = ({ isOpen, onClose, lot, onRefresh }) => {
                                 </span>
                                 <span className="ml-2 text-sm text-gray-600">
                                   {movement.quantity} {currentLot.unit}
+                                  {movement.weight > 0 && (
+                                    <span className="ml-2 text-xs text-gray-500">
+                                      ({movement.weight.toFixed(2)} Kg)
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                             </div>

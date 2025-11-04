@@ -11,7 +11,8 @@ import {
   cancelSalesOrder,
   deleteSalesOrder,
   getSalesOrderStats,
-  getSalesOrdersByCustomer
+  getSalesOrdersByCustomer,
+  recalculateAllSOStatuses
 } from '../controller/salesOrderController.js';
 import { validateSalesOrder, validateSalesOrderUpdate } from '../validators/salesOrderValidator.js';
 
@@ -19,6 +20,9 @@ const router = express.Router();
 
 // Statistics
 router.get('/stats', getSalesOrderStats);
+
+// Utility - Recalculate all SO statuses
+router.post('/recalculate-statuses', recalculateAllSOStatuses);
 
 // CRUD Operations
 router.get('/', getAllSalesOrders);

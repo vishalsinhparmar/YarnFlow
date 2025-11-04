@@ -327,7 +327,9 @@ const Inventory = () => {
                         <thead className="bg-gray-50 sticky top-0">
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Stock</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock In</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock Out</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Weight</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                           </tr>
@@ -342,11 +344,44 @@ const Inventory = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-bold text-green-600">
-                                  {product.totalStock} {product.unit}
+                                  {product.currentStock || product.totalStock} {product.unit}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  After stock out
                                 </div>
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {product.totalWeight ? `${product.totalWeight.toFixed(2)} Kg` : '-'}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-semibold text-blue-600">
+                                  +{product.receivedStock || product.totalStock}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  From GRN
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-semibold text-red-600">
+                                  -{product.issuedStock || 0}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  Via Challan
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-sm font-bold text-gray-900">
+                                  {product.currentWeight ? `${product.currentWeight.toFixed(2)} Kg` : (product.totalWeight ? `${product.totalWeight.toFixed(2)} Kg` : '-')}
+                                </div>
+                                <div className="flex items-center space-x-2 mt-1">
+                                  {product.receivedWeight > 0 && (
+                                    <span className="text-xs text-green-600 font-medium">
+                                      +{product.receivedWeight.toFixed(2)}
+                                    </span>
+                                  )}
+                                  {product.issuedWeight > 0 && (
+                                    <span className="text-xs text-red-600 font-medium">
+                                      -{product.issuedWeight.toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <button

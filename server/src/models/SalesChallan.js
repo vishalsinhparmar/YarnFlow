@@ -20,37 +20,35 @@ const salesChallanSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  soReference: {
+  soNumber: {
     type: String,
-    required: true,
+    required: false,  // Made optional temporarily
     index: true
   },
   
-  // Customer Information
+  // Customer Information (cached from SO)
   customer: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Customer',
+    required: false  // Made optional temporarily
+  },
+  customerName: String,
+  
+  // Warehouse Information (NEW - like GRN)
+  warehouseLocation: {
+    type: String,
     required: true
   },
-  customerDetails: {
-    companyName: String,
-    contactPerson: String,
-    phone: String,
-    email: String
-  },
   
-  // Delivery Address
-  deliveryAddress: {
-    street: { type: String, required: true },
-    city: { type: String, required: true },
-    state: { type: String, required: true },
-    pincode: { type: String, required: true },
-    country: { type: String, default: 'India' },
-    landmark: String
-  },
+  // Expected Delivery Date
+  expectedDeliveryDate: Date,
   
-  // Items to be delivered
+  // Items to be dispatched
   items: [{
+    salesOrderItem: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true
+    },
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
@@ -63,108 +61,42 @@ const salesChallanSchema = new mongoose.Schema({
     orderedQuantity: { type: Number, required: true, min: 0 },
     dispatchQuantity: { type: Number, required: true, min: 0 },
     unit: { type: String, required: true },
+    weight: { type: Number, default: 0 },
     
-    // Pricing (for reference)
-    unitPrice: { type: Number, required: true, min: 0 },
-    totalValue: { type: Number, required: true, min: 0 },
-    
-    // Inventory allocation
-    inventoryAllocations: [{
-      inventoryLot: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'InventoryLot'
-      },
-      allocatedQuantity: { type: Number, required: true, min: 0 },
-      lotNumber: String
-    }],
+    // Manual completion support (like GRN)
+    manuallyCompleted: { type: Boolean, default: false },
+    completionReason: { type: String },
+    completedAt: { type: Date },
     
     // Item status
     itemStatus: {
       type: String,
       enum: ['Prepared', 'Packed', 'Dispatched', 'Delivered'],
       default: 'Prepared'
-    },
-    
-    notes: String
+    }
   }],
-  
-  // Transport Details
-  transportDetails: {
-    vehicleNumber: String,
-    vehicleType: {
-      type: String,
-      enum: ['Truck', 'Tempo', 'Van', 'Car', 'Bike', 'Other'],
-      default: 'Truck'
-    },
-    driverName: String,
-    driverPhone: String,
-    driverLicense: String,
-    transporterName: String,
-    transporterGST: String,
-    freightCharges: { type: Number, default: 0, min: 0 }
-  },
-  
-  // Delivery Information
-  deliveryDetails: {
-    expectedDeliveryDate: Date,
-    actualDeliveryDate: Date,
-    deliveryTime: String,
-    receivedBy: String,
-    receivedByDesignation: String,
-    receivedByPhone: String,
-    deliveryNotes: String,
-    customerSignature: String, // File path or base64
-    deliveryProof: String // File path for delivery proof
-  },
   
   // Status and Workflow
   status: {
     type: String,
-    enum: ['Prepared', 'Packed', 'Dispatched', 'In_Transit', 'Out_for_Delivery', 'Delivered', 'Returned', 'Cancelled'],
+    enum: ['Prepared', 'Packed', 'Dispatched', 'In_Transit', 'Delivered', 'Cancelled'],
     default: 'Prepared',
     index: true
   },
-  
-  // Financial Information
-  totalValue: { type: Number, required: true, min: 0 },
-  taxAmount: { type: Number, default: 0, min: 0 },
-  freightCharges: { type: Number, default: 0, min: 0 },
-  
-  // Tracking Information
-  trackingNumber: String,
-  awbNumber: String, // Air Way Bill Number
-  courierPartner: String,
   
   // Workflow History
   statusHistory: [{
     status: {
       type: String,
-      enum: ['Prepared', 'Packed', 'Dispatched', 'In_Transit', 'Out_for_Delivery', 'Delivered', 'Returned', 'Cancelled']
+      enum: ['Prepared', 'Packed', 'Dispatched', 'In_Transit', 'Delivered', 'Cancelled']
     },
     timestamp: { type: Date, default: Date.now },
     updatedBy: String,
-    notes: String,
-    location: String
+    notes: String
   }],
   
-  // Documents
-  documents: [{
-    type: {
-      type: String,
-      enum: ['Challan_Copy', 'Invoice', 'Packing_List', 'Transport_Receipt', 'Delivery_Proof', 'Other']
-    },
-    fileName: String,
-    filePath: String,
-    uploadedBy: String,
-    uploadedAt: { type: Date, default: Date.now }
-  }],
-  
-  // Notes and Comments
-  preparationNotes: String,
-  packingNotes: String,
-  dispatchNotes: String,
-  deliveryNotes: String,
-  internalNotes: String,
+  // Notes
+  notes: String,
   
   // System Fields
   createdBy: { type: String, required: true },
@@ -224,66 +156,151 @@ salesChallanSchema.pre('save', async function(next) {
 
 // Static method to get statistics
 salesChallanSchema.statics.getStats = async function() {
-  const stats = await Promise.all([
-    // Total challans
-    this.countDocuments(),
-    
-    // Status breakdown
-    this.aggregate([
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]),
-    
-    // This month challans
-    this.countDocuments({
-      challanDate: {
-        $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-        $lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
-      }
-    }),
-    
-    // In transit challans
-    this.countDocuments({
-      status: { $in: ['Dispatched', 'In_Transit', 'Out_for_Delivery'] }
-    }),
-    
-    // Delivered this month
-    this.countDocuments({
-      status: 'Delivered',
-      'deliveryDetails.actualDeliveryDate': {
-        $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-        $lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
-      }
-    }),
-    
-    // Monthly trends
-    this.aggregate([
-      {
-        $group: {
-          _id: {
-            month: { $month: '$challanDate' },
-            year: { $year: '$challanDate' }
-          },
-          challans: { $sum: 1 },
-          totalValue: { $sum: '$totalValue' }
+  try {
+    const stats = await Promise.all([
+      // Total challans
+      this.countDocuments(),
+      
+      // Status breakdown
+      this.aggregate([
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      
+      // This month challans
+      this.countDocuments({
+        challanDate: {
+          $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          $lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
         }
+      }),
+      
+      // In transit challans (Dispatched, In_Transit, Out_for_Delivery)
+      this.countDocuments({
+        status: { $in: ['Dispatched', 'In_Transit', 'Out_for_Delivery'] }
+      }),
+      
+      // Delivered this month
+      this.countDocuments({
+        status: 'Delivered',
+        challanDate: {
+          $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          $lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+        }
+      }),
+      
+      // Monthly trends
+      this.aggregate([
+        {
+          $group: {
+            _id: {
+              month: { $month: '$challanDate' },
+              year: { $year: '$challanDate' }
+            },
+            challans: { $sum: 1 },
+            totalValue: { $sum: '$totalValue' }
+          }
+        },
+        { $sort: { '_id.year': 1, '_id.month': 1 } },
+        { $limit: 12 } // Last 12 months
+      ])
+    ]);
+    
+    const [totalChallans, statusBreakdown, thisMonth, inTransit, deliveredThisMonth, monthlyTrends] = stats;
+    
+    // Calculate Pending, Partial, Delivered stats based on item completion
+    const allChallans = await this.find({});
+    let pending = 0;
+    let partial = 0;
+    let completed = 0;
+    
+    allChallans.forEach(challan => {
+      if (!challan.items || challan.items.length === 0) {
+        pending++;
+        return;
+      }
+      
+      let allItemsComplete = true;
+      let anyItemPartial = false;
+      
+      challan.items.forEach(item => {
+        const dispatched = item.dispatchQuantity || 0;
+        const ordered = item.orderedQuantity || 0;
+        const manuallyCompleted = item.manuallyCompleted || false;
+        
+        if (manuallyCompleted || dispatched >= ordered) {
+          // Item is complete
+        } else if (dispatched > 0 && dispatched < ordered) {
+          allItemsComplete = false;
+          anyItemPartial = true;
+        } else {
+          allItemsComplete = false;
+        }
+      });
+      
+      if (allItemsComplete) {
+        completed++;
+      } else if (anyItemPartial) {
+        partial++;
+      } else {
+        pending++;
+      }
+    });
+    
+    return {
+      overview: {
+        totalChallans: totalChallans || 0,
+        thisMonth: thisMonth || 0,
+        inTransit: inTransit || 0,
+        deliveredThisMonth: deliveredThisMonth || 0
       },
-      { $sort: { '_id.year': 1, '_id.month': 1 } }
-    ])
-  ]);
-  
-  const [totalChallans, statusBreakdown, thisMonth, inTransit, deliveredThisMonth, monthlyTrends] = stats;
-  
-  return {
-    overview: {
-      totalChallans,
-      thisMonth,
-      inTransit,
-      deliveredThisMonth
-    },
-    statusBreakdown,
-    monthlyTrends
-  };
+      statusBreakdown: statusBreakdown || [],
+      pending: pending,
+      partial: partial,
+      completed: completed,
+      monthlyTrends: monthlyTrends || []
+    };
+  } catch (error) {
+    console.error('Error calculating stats:', error);
+    return {
+      overview: {
+        totalChallans: 0,
+        thisMonth: 0,
+        inTransit: 0,
+        deliveredThisMonth: 0
+      },
+      statusBreakdown: [],
+      pending: 0,
+      completed: 0,
+      monthlyTrends: []
+    };
+  }
 };
+
+// Virtual fields for frontend compatibility
+salesChallanSchema.virtual('soReference').get(function() {
+  return this.soNumber || (this.salesOrder?.soNumber) || 'N/A';
+});
+
+salesChallanSchema.virtual('customerDetails').get(function() {
+  if (this.customer && typeof this.customer === 'object' && this.customer.companyName) {
+    return {
+      companyName: this.customer.companyName,
+      contactPerson: this.customer.contactPerson,
+      email: this.customer.email,
+      phone: this.customer.phone
+    };
+  }
+  return {
+    companyName: this.customerName || 'Unknown',
+    contactPerson: '',
+    email: '',
+    phone: ''
+  };
+});
+
+// Ensure virtuals are included in JSON output
+salesChallanSchema.set('toJSON', { virtuals: true });
+salesChallanSchema.set('toObject', { virtuals: true });
 
 const SalesChallan = mongoose.model('SalesChallan', salesChallanSchema);
 

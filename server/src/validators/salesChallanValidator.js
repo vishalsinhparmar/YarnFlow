@@ -1,55 +1,38 @@
 import { body, validationResult } from 'express-validator';
 
-// Validation for creating sales challan
+// Validation for creating sales challan (UPDATED - Simplified)
 export const validateSalesChallan = [
-  body('salesOrderId')
+  body('salesOrder')
     .notEmpty()
     .withMessage('Sales Order ID is required')
     .isMongoId()
     .withMessage('Invalid Sales Order ID format'),
   
-  body('deliveryAddress.street')
+  body('warehouseLocation')
     .notEmpty()
-    .withMessage('Delivery street address is required')
-    .isLength({ min: 5, max: 200 })
-    .withMessage('Street address must be between 5 and 200 characters'),
-  
-  body('deliveryAddress.city')
-    .notEmpty()
-    .withMessage('Delivery city is required')
-    .isLength({ min: 2, max: 50 })
-    .withMessage('City must be between 2 and 50 characters'),
-  
-  body('deliveryAddress.state')
-    .notEmpty()
-    .withMessage('Delivery state is required')
-    .isLength({ min: 2, max: 50 })
-    .withMessage('State must be between 2 and 50 characters'),
-  
-  body('deliveryAddress.pincode')
-    .notEmpty()
-    .withMessage('Delivery pincode is required')
-    .matches(/^[1-9][0-9]{5}$/)
-    .withMessage('Invalid pincode format'),
+    .withMessage('Warehouse location is required')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Warehouse location must be between 2 and 100 characters'),
   
   body('items')
     .isArray({ min: 1 })
     .withMessage('At least one item is required'),
   
-  body('items.*.salesOrderItemId')
+  body('items.*.salesOrderItem')
     .notEmpty()
     .withMessage('Sales order item ID is required')
     .isMongoId()
     .withMessage('Invalid sales order item ID format'),
   
+  body('items.*.product')
+    .notEmpty()
+    .withMessage('Product ID is required')
+    .isMongoId()
+    .withMessage('Invalid product ID format'),
+  
   body('items.*.dispatchQuantity')
     .isFloat({ min: 0.01 })
     .withMessage('Dispatch quantity must be greater than 0'),
-  
-  body('transportDetails.vehicleType')
-    .optional()
-    .isIn(['Truck', 'Tempo', 'Van', 'Car', 'Bike', 'Other'])
-    .withMessage('Invalid vehicle type'),
   
   body('expectedDeliveryDate')
     .optional()
@@ -57,8 +40,7 @@ export const validateSalesChallan = [
     .withMessage('Invalid expected delivery date format'),
   
   body('createdBy')
-    .notEmpty()
-    .withMessage('Created by is required')
+    .optional()
     .isLength({ min: 2, max: 50 })
     .withMessage('Created by must be between 2 and 50 characters'),
   

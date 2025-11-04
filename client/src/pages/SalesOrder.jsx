@@ -87,6 +87,14 @@ const SalesOrder = () => {
             alert('Order cancelled successfully');
           }
           break;
+        case 'delete':
+          if (confirm('Are you sure you want to permanently delete this cancelled order? This action cannot be undone.')) {
+            await salesOrderAPI.delete(order._id);
+            await fetchSalesOrders();
+            await fetchStats();
+            alert('Order deleted successfully');
+          }
+          break;
         default:
           break;
       }
@@ -114,12 +122,14 @@ const SalesOrder = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Sales Orders (SO)</h1>
             <p className="text-gray-600">Manage customer orders and sales transactions</p>
           </div>
-          <button 
-            onClick={() => setShowNewOrderModal(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-          >
-            + New Sales Order
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowNewOrderModal(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              + New Sales Order
+            </button>
+          </div>
         </div>
       </div>
 
@@ -135,20 +145,6 @@ const SalesOrder = () => {
             </div>
             <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
               <span className="text-indigo-600 text-xl">📄</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Pending')?.count || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <span className="text-yellow-600 text-xl">⏳</span>
             </div>
           </div>
         </div>
@@ -214,16 +210,6 @@ const SalesOrder = () => {
               }`}
             >
               Draft
-            </button>
-            <button
-              onClick={() => setStatusFilter('Pending')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                statusFilter === 'Pending' 
-                  ? 'bg-yellow-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Pending
             </button>
             <button
               onClick={() => setStatusFilter('Delivered')}
@@ -330,9 +316,18 @@ const SalesOrder = () => {
                           {order.status !== 'Cancelled' && order.status !== 'Delivered' && (
                             <button
                               onClick={() => handleOrderAction('cancel', order)}
-                              className="text-red-600 hover:text-red-900 text-xs px-2 py-1 rounded border border-red-200 hover:bg-red-50"
+                              className="text-orange-600 hover:text-orange-900 text-xs px-2 py-1 rounded border border-orange-200 hover:bg-orange-50"
                             >
                               Cancel
+                            </button>
+                          )}
+                          {order.status === 'Cancelled' && (
+                            <button
+                              onClick={() => handleOrderAction('delete', order)}
+                              className="text-red-600 hover:text-red-900 text-xs px-2 py-1 rounded border border-red-200 hover:bg-red-50"
+                              title="Permanently delete this cancelled order"
+                            >
+                              Delete
                             </button>
                           )}
                         </div>
