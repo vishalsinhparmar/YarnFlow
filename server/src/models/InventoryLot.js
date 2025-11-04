@@ -96,6 +96,11 @@ const inventoryLotSchema = new mongoose.Schema({
     enum: ['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'],
     default: 'Bags'
   },
+  totalWeight: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   
   // Quality Information
   qualityStatus: {
@@ -168,6 +173,10 @@ const inventoryLotSchema = new mongoose.Schema({
       enum: ['Received', 'Reserved', 'Issued', 'Returned', 'Adjusted', 'Transferred', 'Damaged']
     },
     quantity: Number,
+    weight: {
+      type: Number,
+      default: 0
+    },
     date: {
       type: Date,
       default: Date.now

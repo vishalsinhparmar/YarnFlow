@@ -2,6 +2,7 @@ import SalesOrder from '../models/SalesOrder.js';
 import Customer from '../models/Customer.js';
 import Product from '../models/Product.js';
 import InventoryLot from '../models/InventoryLot.js';
+import SalesChallan from '../models/SalesChallan.js';
 import { validationResult } from 'express-validator';
 
 // Get all sales orders with filtering and pagination
@@ -674,7 +675,7 @@ export const cancelSalesOrder = async (req, res) => {
   }
 };
 
-// Delete sales order (draft only)
+// Delete sales order (draft or cancelled only)
 export const deleteSalesOrder = async (req, res) => {
   try {
     const { id } = req.params;
@@ -687,14 +688,28 @@ export const deleteSalesOrder = async (req, res) => {
       });
     }
 
-    if (salesOrder.status !== 'Draft') {
+    // Allow deletion of Draft or Cancelled orders only
+    if (salesOrder.status !== 'Draft' && salesOrder.status !== 'Cancelled') {
       return res.status(400).json({
         success: false,
-        message: 'Can only delete draft sales orders'
+        message: 'Can only delete draft or cancelled sales orders'
+      });
+    }
+
+    // Check if there are any challans associated with this SO
+    const SalesChallan = (await import('../models/SalesChallan.js')).default;
+    const challansCount = await SalesChallan.countDocuments({ salesOrder: id });
+    
+    if (challansCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete sales order. It has ${challansCount} associated challan(s). Please delete or reassign the challans first.`
       });
     }
 
     await SalesOrder.findByIdAndDelete(id);
+
+    console.log(`✅ Sales Order ${salesOrder.soNumber} deleted successfully`);
 
     res.status(200).json({
       success: true,
@@ -759,6 +774,45 @@ export const getSalesOrdersByCustomer = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch customer sales orders',
+      error: error.message
+    });
+  }
+};
+
+// Recalculate all SO statuses based on challans (utility endpoint)
+export const recalculateAllSOStatuses = async (req, res) => {
+  try {
+    const salesOrders = await SalesOrder.find({});
+    let updated = 0;
+    
+    for (const so of salesOrders) {
+      const challans = await SalesChallan.find({ salesOrder: so._id });
+      
+      if (challans.length > 0) {
+        const oldStatus = so.status;
+        so.updateDispatchStatus(challans);
+        await so.save();
+        
+        if (oldStatus !== so.status) {
+          updated++;
+          console.log(`Updated ${so.soNumber}: ${oldStatus} → ${so.status}`);
+        }
+      }
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: `Recalculated ${salesOrders.length} sales orders, updated ${updated}`,
+      data: {
+        total: salesOrders.length,
+        updated: updated
+      }
+    });
+  } catch (error) {
+    console.error('Error recalculating SO statuses:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to recalculate SO statuses',
       error: error.message
     });
   }

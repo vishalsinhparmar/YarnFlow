@@ -8,7 +8,8 @@ import {
   deleteSalesChallan,
   getSalesChallanStats,
   getChallansBySalesOrder,
-  trackChallan
+  trackChallan,
+  getDispatchedQuantities
 } from '../controller/salesChallanController.js';
 
 import {
@@ -29,6 +30,9 @@ router.get('/track/:challanNumber', trackChallan);
 
 // Get challans by sales order
 router.get('/by-sales-order/:soId', getChallansBySalesOrder);
+
+// Get dispatched quantities for a sales order
+router.get('/dispatched/:salesOrderId', getDispatchedQuantities);
 
 // CRUD Operations
 router.get('/', getAllSalesChallans);

@@ -1,204 +1,274 @@
+import React, { useState, useEffect } from 'react';
 import { salesChallanUtils } from '../../services/salesChallanAPI';
+import { salesOrderAPI } from '../../services/salesOrderAPI';
 
 const ChallanDetailModal = ({ isOpen, onClose, challan, onStatusUpdate }) => {
+  const [soData, setSOData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  
+  // Fetch SO data to get total dispatched information
+  useEffect(() => {
+    const fetchSOData = async () => {
+      if (challan?.salesOrder) {
+        try {
+          setLoading(true);
+          // Extract ID if salesOrder is an object, otherwise use as-is
+          const soId = typeof challan.salesOrder === 'object' && challan.salesOrder !== null
+            ? challan.salesOrder._id || challan.salesOrder
+            : challan.salesOrder;
+          
+          // Only fetch if we have a valid ID string
+          if (soId && typeof soId === 'string') {
+            const response = await salesOrderAPI.getById(soId);
+            setSOData(response.data);
+          }
+        } catch (error) {
+          console.error('Error fetching SO data:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    
+    if (isOpen) {
+      fetchSOData();
+    }
+  }, [challan?.salesOrder, isOpen]);
+  
   if (!isOpen || !challan) return null;
+
+  // Calculate challan completion status
+  const calculateChallanStatus = () => {
+    if (!challan.items || challan.items.length === 0) return 'Pending';
+    
+    let allComplete = true;
+    let anyPartial = false;
+    
+    challan.items.forEach(item => {
+      const dispatched = item.dispatchQuantity || 0;
+      const ordered = item.orderedQuantity || 0;
+      const manuallyCompleted = item.manuallyCompleted || false;
+      
+      if (manuallyCompleted || dispatched >= ordered) {
+        // Complete
+      } else if (dispatched > 0 && dispatched < ordered) {
+        allComplete = false;
+        anyPartial = true;
+      } else {
+        allComplete = false;
+      }
+    });
+    
+    if (allComplete) return 'Delivered';
+    if (anyPartial) return 'Partial';
+    return 'Pending';
+  };
+
+  const challanStatus = calculateChallanStatus();
+  
+  const formatDate = (date) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">
-            Challan Details - {challan.challanNumber}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <span className="sr-only">Close</span>
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">{challan.challanNumber}</h2>
+              <p className="text-gray-600">Created on {formatDate(challan.createdAt)}</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${
+                challanStatus === 'Delivered' ? 'bg-green-100 text-green-800' :
+                challanStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {challanStatus}
+              </span>
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">
           {/* Basic Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Challan Information</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="font-medium">Challan Number:</span>
-                  <span>{challan.challanNumber}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Challan Date:</span>
-                  <span>{salesChallanUtils.formatDate(challan.challanDate)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">SO Reference:</span>
-                  <span>{challan.soReference}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Status:</span>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${salesChallanUtils.getStatusColor(challan.status)}`}>
-                    {salesChallanUtils.formatStatus(challan.status)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Total Value:</span>
-                  <span>{salesChallanUtils.formatCurrency(challan.totalValue)}</span>
-                </div>
+          <div className="bg-gray-50 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Challan Information</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <span className="text-sm font-medium text-gray-500">Challan Number</span>
+                <p className="text-base font-semibold text-gray-900 mt-1">{challan.challanNumber}</p>
               </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Customer Information</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="font-medium">Company:</span>
-                  <span>{challan.customerDetails?.companyName || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Contact Person:</span>
-                  <span>{challan.customerDetails?.contactPerson || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Phone:</span>
-                  <span>{challan.customerDetails?.phone || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Email:</span>
-                  <span>{challan.customerDetails?.email || 'N/A'}</span>
-                </div>
+              
+              <div>
+                <span className="text-sm font-medium text-gray-500">SO Reference</span>
+                <p className="text-base font-semibold text-gray-900 mt-1">{challan.soReference || 'N/A'}</p>
               </div>
-            </div>
-          </div>
-
-          {/* Delivery Address */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Delivery Address</h3>
-            <div className="text-sm">
-              <p>{challan.deliveryAddress?.street}</p>
-              <p>{challan.deliveryAddress?.city}, {challan.deliveryAddress?.state} - {challan.deliveryAddress?.pincode}</p>
-              <p>{challan.deliveryAddress?.country}</p>
-            </div>
-          </div>
-
-          {/* Transport Details */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Transport Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="flex justify-between">
-                <span className="font-medium">Vehicle Number:</span>
-                <span>{challan.transportDetails?.vehicleNumber || 'N/A'}</span>
+              
+              <div>
+                <span className="text-sm font-medium text-gray-500">Dispatch Date</span>
+                <p className="text-base font-semibold text-gray-900 mt-1">{formatDate(challan.challanDate)}</p>
               </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Vehicle Type:</span>
-                <span>{challan.transportDetails?.vehicleType || 'N/A'}</span>
+              
+              <div>
+                <span className="text-sm font-medium text-gray-500">Customer</span>
+                <p className="text-base font-semibold text-gray-900 mt-1">{challan.customerDetails?.companyName || challan.customerName || 'N/A'}</p>
               </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Driver Name:</span>
-                <span>{challan.transportDetails?.driverName || 'N/A'}</span>
+              
+              <div>
+                <span className="text-sm font-medium text-gray-500">Warehouse Location</span>
+                <p className="text-base font-semibold text-gray-900 mt-1">{challan.warehouseLocation || 'N/A'}</p>
               </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Driver Phone:</span>
-                <span>{challan.transportDetails?.driverPhone || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Transporter:</span>
-                <span>{challan.transportDetails?.transporterName || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Freight Charges:</span>
-                <span>{salesChallanUtils.formatCurrency(challan.transportDetails?.freightCharges)}</span>
+              
+              <div>
+                <span className="text-sm font-medium text-gray-500">Expected Delivery</span>
+                <p className="text-base font-semibold text-gray-900 mt-1">{formatDate(challan.expectedDeliveryDate)}</p>
               </div>
             </div>
           </div>
 
           {/* Items */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Items</h3>
+          <div className="bg-gray-50 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Dispatched Items</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-100">
+                <thead className="bg-white">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Product
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Code
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      SO Total Qty
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Ordered Qty
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      This Challan Qty
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Dispatch Qty
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Weight
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Unit Price
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Challan Completion
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                      Total
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {challan.items?.map((item, index) => (
-                    <tr key={index}>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {item.productName}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {item.productCode}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {item.orderedQuantity} {item.unit}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {item.dispatchQuantity} {item.unit}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {salesChallanUtils.formatCurrency(item.unitPrice)}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {salesChallanUtils.formatCurrency(item.totalValue)}
-                      </td>
-                      <td className="px-4 py-2 text-sm">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${salesChallanUtils.getStatusColor(item.itemStatus)}`}>
-                          {salesChallanUtils.formatStatus(item.itemStatus)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {challan.items?.map((item, index) => {
+                    const dispatchedInThisChallan = item.dispatchQuantity || 0;
+                    const soTotalQty = item.orderedQuantity || 0;
+                    const manuallyCompleted = item.manuallyCompleted || false;
+                    
+                    // Calculate REAL completion based on SO data (like GRN does with PO)
+                    let totalDispatched = dispatchedInThisChallan;
+                    let completionPercent = 0;
+                    let itemStatus = 'Pending';
+                    
+                    if (soData && soData.items) {
+                      // Find the SO item to get total dispatched across all challans
+                      const soItem = soData.items.find(si => 
+                        si.product === item.product || 
+                        si.product?._id === item.product ||
+                        si._id?.toString() === item.salesOrderItem?.toString()
+                      );
+                      
+                      if (soItem) {
+                        // Get total dispatched from SO item (includes all challans)
+                        totalDispatched = soItem.deliveredQuantity || soItem.shippedQuantity || dispatchedInThisChallan;
+                        
+                        // Calculate completion percentage: total dispatched / SO quantity
+                        completionPercent = soItem.quantity > 0 
+                          ? Math.round((totalDispatched / soItem.quantity) * 100)
+                          : 0;
+                        
+                        // Determine status based on total dispatched vs SO quantity
+                        if (manuallyCompleted || totalDispatched >= soItem.quantity) {
+                          itemStatus = 'Complete';
+                        } else if (totalDispatched > 0) {
+                          itemStatus = 'Partial';
+                        } else {
+                          itemStatus = 'Pending';
+                        }
+                      } else {
+                        // Fallback if SO item not found
+                        completionPercent = dispatchedInThisChallan > 0 ? 100 : 0;
+                        itemStatus = dispatchedInThisChallan > 0 ? 'Complete' : 'Pending';
+                      }
+                    } else {
+                      // Fallback if SO data not loaded yet
+                      completionPercent = dispatchedInThisChallan > 0 ? 100 : 0;
+                      itemStatus = dispatchedInThisChallan > 0 ? 'Complete' : 'Pending';
+                    }
+                    
+                    return (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-gray-900">{item.productName}</div>
+                          <div className="text-sm text-gray-500">{item.productCode}</div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {soTotalQty} {item.unit}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-gray-900">{dispatchedInThisChallan} {item.unit}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Total: {totalDispatched} / {soTotalQty} {item.unit}
+                          </div>
+                          {manuallyCompleted && (
+                            <div className="text-xs text-green-600 mt-1">✓ Manually Completed</div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {(item.weight || 0).toFixed(2)} kg
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
+                              <div 
+                                className={`h-2 rounded-full ${
+                                  completionPercent === 100 ? 'bg-green-600' :
+                                  completionPercent > 0 ? 'bg-yellow-600' :
+                                  'bg-gray-400'
+                                }`}
+                                style={{ width: `${Math.min(completionPercent, 100)}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-medium text-gray-700 min-w-[45px]">
+                              {completionPercent}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            itemStatus === 'Complete' ? 'bg-green-100 text-green-800' :
+                            itemStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {itemStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            </div>
-          </div>
-
-          {/* Delivery Information */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Delivery Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="flex justify-between">
-                <span className="font-medium">Expected Delivery:</span>
-                <span>{salesChallanUtils.formatDate(challan.deliveryDetails?.expectedDeliveryDate)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Actual Delivery:</span>
-                <span>{salesChallanUtils.formatDate(challan.deliveryDetails?.actualDeliveryDate)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Received By:</span>
-                <span>{challan.deliveryDetails?.receivedBy || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Delivery Notes:</span>
-                <span>{challan.deliveryDetails?.deliveryNotes || 'N/A'}</span>
-              </div>
             </div>
           </div>
 
@@ -226,10 +296,10 @@ const ChallanDetailModal = ({ isOpen, onClose, challan, onStatusUpdate }) => {
           )}
 
           {/* Notes */}
-          {challan.preparationNotes && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Preparation Notes</h3>
-              <p className="text-sm text-gray-700">{challan.preparationNotes}</p>
+          {challan.notes && (
+            <div className="bg-gray-50 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Notes</h3>
+              <p className="text-sm text-gray-700">{challan.notes}</p>
             </div>
           )}
         </div>

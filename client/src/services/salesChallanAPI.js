@@ -17,6 +17,11 @@ export const salesChallanAPI = {
     return apiRequest(`/sales-challans/${id}`);
   },
 
+  // Get dispatched quantities for a sales order
+  getDispatchedQuantities: async (salesOrderId) => {
+    return apiRequest(`/sales-challans/dispatched/${salesOrderId}`);
+  },
+
   // Create sales challan from sales order
   create: async (challanData) => {
     return apiRequest('/sales-challans', {

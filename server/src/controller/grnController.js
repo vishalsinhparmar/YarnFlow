@@ -270,6 +270,12 @@ export const createGRN = async (req, res) => {
     );
     
     // Create GRN
+    // Set status based on receipt completion
+    // Note: GRN status enum values are: Draft, Received, Under_Review, Approved, Rejected, Completed
+    const grnStatus = receiptStatus === 'Complete' ? 'Completed' : (anyItemReceived ? 'Received' : 'Draft');
+    // Only approve if receiptStatus is Complete (all items complete)
+    const approvalStatus = receiptStatus === 'Complete' ? 'Approved' : 'Pending';
+    
     const grn = new GoodsReceiptNote({
       purchaseOrder: poId,
       poNumber: purchaseOrder.poNumber,
@@ -294,7 +300,11 @@ export const createGRN = async (req, res) => {
       generalNotes,
       createdBy,
       receiptStatus,
-      isPartialReceipt
+      isPartialReceipt,
+      status: grnStatus,
+      approvalStatus: approvalStatus,
+      approvedBy: receiptStatus === 'Complete' ? createdBy : undefined,
+      approvedDate: receiptStatus === 'Complete' ? new Date() : undefined
     });
     
     await grn.save();
@@ -361,33 +371,122 @@ export const createGRN = async (req, res) => {
       pending: i.pendingQuantity
     })));
     
-    // Create inventory lots for manually completed items (auto-approve)
+    // Create inventory lots for completed items
+    // When an item becomes complete, create lots for ALL GRNs (including previous partial ones)
     const inventoryLots = [];
     for (const item of grn.items) {
-      if (item.manuallyCompleted && item.receivedQuantity > 0) {
+      // Check if this specific item is now complete
+      const isItemComplete = item.manuallyCompleted || item.pendingQuantity === 0;
+      
+      if (isItemComplete && item.receivedQuantity > 0) {
         const product = await Product.findById(item.product);
+        
+        // Find all previous GRNs for this PO and product that don't have inventory lots yet
+        const previousGRNs = await GoodsReceiptNote.find({
+          purchaseOrder: grn.purchaseOrder,
+          'items.product': item.product,
+          _id: { $ne: grn._id } // Exclude current GRN
+        }).sort({ createdAt: 1 });
+        
+        // Create lots for previous GRNs first
+        for (const prevGRN of previousGRNs) {
+          const prevItem = prevGRN.items.find(i => i.product.toString() === item.product.toString());
+          if (prevItem && prevItem.receivedQuantity > 0) {
+            // Check if lot already exists for this GRN and product
+            const existingLot = await InventoryLot.findOne({
+              grn: prevGRN._id,
+              product: item.product
+            });
+            
+            if (!existingLot) {
+              const prevLot = new InventoryLot({
+                grn: prevGRN._id,
+                grnNumber: prevGRN.grnNumber,
+                purchaseOrder: prevGRN.purchaseOrder,
+                poNumber: prevGRN.poNumber,
+                product: item.product,
+                productName: product.productName,
+                productCode: product.productCode,
+                category: product.category,
+                supplier: prevGRN.supplier,
+                supplierName: prevGRN.supplierDetails?.companyName || grn.supplierDetails.companyName,
+                supplierBatchNumber: prevItem.batchNumber,
+                specifications: prevItem.specifications,
+                receivedQuantity: prevItem.receivedQuantity,
+                currentQuantity: prevItem.receivedQuantity,
+                unit: prevItem.unit,
+                totalWeight: prevItem.receivedWeight || 0,
+                qualityStatus: 'Approved',
+                qualityNotes: 'Auto-approved (Item Completed in Later GRN)',
+                warehouse: prevItem.warehouseLocation,
+                receivedDate: prevGRN.receiptDate,
+                expiryDate: prevItem.expiryDate,
+                unitCost: prevItem.unitPrice,
+                notes: 'Auto-approved when item was completed',
+                createdBy: 'System'
+              });
+              
+              prevLot.movements.push({
+                type: 'Received',
+                quantity: prevItem.receivedQuantity,
+                date: prevGRN.receiptDate,
+                reference: prevGRN.grnNumber,
+                notes: `Received via GRN ${prevGRN.grnNumber}`,
+                performedBy: 'System'
+              });
+              
+              await prevLot.save();
+              inventoryLots.push(prevLot);
+              console.log(`📦 Created inventory lot for previous GRN ${prevGRN.grnNumber}: ${prevItem.receivedQuantity} ${prevItem.unit}`);
+              
+              // Update product inventory for previous GRN
+              await Product.findByIdAndUpdate(
+                item.product,
+                { $inc: { 'inventory.currentStock': prevItem.receivedQuantity } }
+              );
+              
+              // Update previous GRN status to Completed
+              await GoodsReceiptNote.findByIdAndUpdate(prevGRN._id, {
+                status: 'Completed',
+                approvalStatus: 'Approved',
+                approvedBy: createdBy,
+                approvedDate: new Date()
+              });
+              console.log(`✅ Updated GRN ${prevGRN.grnNumber} status to Completed`);
+            }
+          }
+        }
+        
+        // Now create lot for current GRN
         const lot = new InventoryLot({
           grn: grn._id,
           grnNumber: grn.grnNumber,
           purchaseOrder: grn.purchaseOrder,
-          poNumber: purchaseOrder.poNumber,
+          poNumber: grn.poNumber,
           product: item.product,
-          productName: item.productName,
-          productCode: item.productCode,
-          supplier: purchaseOrder.supplier._id,
-          supplierName: purchaseOrder.supplier.companyName,
-          supplierBatchNumber: item.batchNumber || '',
+          productName: product.productName,
+          productCode: product.productCode,
+          category: product.category,
+          supplier: grn.supplier,
+          supplierName: grn.supplierDetails.companyName,
+          supplierBatchNumber: item.batchNumber,
           specifications: item.specifications,
           receivedQuantity: item.receivedQuantity,
           currentQuantity: item.receivedQuantity,
           unit: item.unit,
+          totalWeight: item.receivedWeight || 0,
           qualityStatus: 'Approved',
-          qualityNotes: 'Auto-approved (Manually Completed)',
-          warehouse: item.warehouseLocation || warehouseLocation,
+          qualityNotes: item.manuallyCompleted 
+            ? 'Auto-approved (Manually Completed)' 
+            : 'Auto-approved (Item Fully Received)',
+          warehouse: item.warehouseLocation,
           receivedDate: grn.receiptDate,
+          expiryDate: item.expiryDate,
           unitCost: item.unitPrice,
-          notes: `Manually completed - ${item.completionReason}`,
-          createdBy: createdBy || 'System'
+          notes: item.manuallyCompleted 
+            ? `Manually completed - ${item.completionReason}` 
+            : 'Auto-approved - Item fully received',
+          createdBy: 'System'
         });
         
         // Add initial movement record
@@ -396,7 +495,9 @@ export const createGRN = async (req, res) => {
           quantity: item.receivedQuantity,
           date: grn.receiptDate,
           reference: grn.grnNumber,
-          notes: `Received via GRN ${grn.grnNumber} (Manually Completed)`,
+          notes: item.manuallyCompleted 
+            ? `Received via GRN ${grn.grnNumber} (Manually Completed)`
+            : `Received via GRN ${grn.grnNumber}`,
           performedBy: createdBy || 'System'
         });
         
@@ -610,6 +711,7 @@ export const approveGRN = async (req, res) => {
       
       if (shouldCreateLot) {
         const lotQuantity = item.manuallyCompleted ? item.receivedQuantity : item.acceptedQuantity;
+        const lotWeight = item.manuallyCompleted ? item.receivedWeight : item.acceptedWeight;
         const lot = new InventoryLot({
           grn: grn._id,
           grnNumber: grn.grnNumber,
@@ -618,6 +720,7 @@ export const approveGRN = async (req, res) => {
           product: item.product._id,
           productName: item.productName,
           productCode: item.productCode,
+          category: item.product.category,
           supplier: grn.supplier._id,
           supplierName: grn.supplierDetails.companyName,
           supplierBatchNumber: item.batchNumber,
@@ -625,6 +728,7 @@ export const approveGRN = async (req, res) => {
           receivedQuantity: lotQuantity,
           currentQuantity: lotQuantity,
           unit: item.unit,
+          totalWeight: lotWeight || 0,
           qualityStatus: 'Approved',
           qualityNotes: item.manuallyCompleted ? 'Auto-approved (Manually Completed)' : item.qualityNotes,
           warehouse: item.warehouseLocation,
@@ -771,249 +875,6 @@ export const getGRNsByPO = async (req, res) => {
       success: false,
       message: 'Failed to fetch GRNs for Purchase Order',
       error: error.message
-    });
-  }
-};
-
-// Get inventory products from completed GRNs (product-level completion)
-export const getInventoryProducts = async (req, res) => {
-  try {
-    const {
-      page = 1,
-      limit = 20,
-      search,
-      category,
-      sortBy = 'latestReceiptDate',
-      sortOrder = 'desc'
-    } = req.query;
-
-    console.log('Fetching inventory products with params:', { page, limit, search, category, sortBy, sortOrder });
-
-    // Get only approved/completed GRNs for inventory
-    let grns = await GoodsReceiptNote.find({
-      receiptStatus: { $in: ['Complete', 'Partial'] }
-    })
-      .populate('supplier', 'companyName')
-      .populate('purchaseOrder', 'poNumber')
-      .populate({
-        path: 'items.product',
-        select: 'productName productCode category',
-        populate: {
-          path: 'category',
-          select: 'categoryName'
-        }
-      })
-      .lean();
-
-    console.log(`Found ${grns.length} GRNs`);
-
-    // Get all POs to check ordered quantities and manual completion status
-    const poIds = [...new Set(grns.map(grn => grn.purchaseOrder?._id).filter(Boolean))];
-    const purchaseOrders = await PurchaseOrder.find({ _id: { $in: poIds } })
-      .populate('items.product')
-      .lean();
-
-    // Create a map of PO items: { poId_productId_itemId: { ordered, unit } }
-    // Use item._id to differentiate multiple line items of same product
-    const poItemsMap = {};
-    purchaseOrders.forEach(po => {
-      if (!po.items) return;
-      po.items.forEach(item => {
-        if (!item.product || !item.product._id) return;
-        // Use item._id to uniquely identify each PO line item
-        const key = `${po._id}_${item.product._id}_${item._id}`;
-        poItemsMap[key] = {
-          orderedQuantity: item.quantity || 0,
-          orderedWeight: item.totalWeight || 0,
-          unit: item.unit || 'Units',
-          poNumber: po.poNumber,
-          supplier: po.supplier,
-          poItemId: item._id,
-          manuallyCompleted: item.manuallyCompleted || false,
-          receiptStatus: item.receiptStatus
-        };
-      });
-    });
-
-    // Aggregate received quantities by PRODUCT (not by PO line item)
-    const productAggregation = {};
-    
-    grns.forEach(grn => {
-      if (!grn.items || !grn.purchaseOrder) return;
-      
-      grn.items.forEach(item => {
-        if (!item.product || !item.product._id) return;
-        
-        // Aggregate by product ID only
-        const productKey = item.product._id.toString();
-        
-        if (!productAggregation[productKey]) {
-          productAggregation[productKey] = {
-            productId: item.product._id,
-            productName: item.product.productName || 'Unknown Product',
-            productCode: item.product.productCode || 'N/A',
-            categoryName: item.product.category?.categoryName || 'Uncategorized',
-            categoryId: item.product.category?._id,
-            unit: item.unit || 'Units',
-            totalStock: 0, // Total aggregated stock
-            totalWeight: 0, // Total aggregated weight
-            suppliers: new Set(), // Unique suppliers
-            grns: [], // Detailed GRN breakdown
-            latestReceiptDate: null
-          };
-        }
-        
-        // Aggregate quantities
-        productAggregation[productKey].totalStock += item.receivedQuantity || 0;
-        productAggregation[productKey].totalWeight += item.receivedWeight || 0;
-        
-        // Track supplier
-        if (grn.supplier?.companyName) {
-          productAggregation[productKey].suppliers.add(grn.supplier.companyName);
-        }
-        
-        // Add GRN detail for expandable view
-        productAggregation[productKey].grns.push({
-          grnNumber: grn.grnNumber || 'N/A',
-          grnId: grn._id,
-          poNumber: grn.purchaseOrder.poNumber || 'N/A',
-          poId: grn.purchaseOrder._id,
-          supplierName: grn.supplier?.companyName || 'Unknown Supplier',
-          receiptDate: grn.receiptDate,
-          receivedQuantity: item.receivedQuantity || 0,
-          receivedWeight: item.receivedWeight || 0,
-          receiptStatus: grn.receiptStatus || 'Unknown',
-          approvalStatus: grn.approvalStatus || 'Pending'
-        });
-        
-        // Track latest receipt date
-        if (grn.receiptDate) {
-          if (!productAggregation[productKey].latestReceiptDate || 
-              new Date(grn.receiptDate) > new Date(productAggregation[productKey].latestReceiptDate)) {
-            productAggregation[productKey].latestReceiptDate = grn.receiptDate;
-          }
-        }
-      });
-    });
-
-    // Convert aggregated products to array (show all products with stock)
-    let fullyReceivedProducts = Object.values(productAggregation).map(product => {
-      // Convert Set to Array for suppliers
-      const supplierList = Array.from(product.suppliers);
-      
-      return {
-        productId: product.productId,
-        productName: product.productName,
-        productCode: product.productCode,
-        categoryName: product.categoryName,
-        categoryId: product.categoryId,
-        unit: product.unit,
-        totalStock: product.totalStock,
-        totalWeight: product.totalWeight,
-        suppliers: supplierList,
-        supplierNames: supplierList.join(', '),
-        grnCount: product.grns.length,
-        grns: product.grns.sort((a, b) => new Date(b.receiptDate) - new Date(a.receiptDate)), // Latest first
-        latestReceiptDate: product.latestReceiptDate
-      };
-    });
-    
-    console.log(`Total products with stock: ${fullyReceivedProducts.length}`);
-
-    // Search filter
-    if (search) {
-      const searchLower = search.toLowerCase();
-      fullyReceivedProducts = fullyReceivedProducts.filter(p => 
-        p.productName.toLowerCase().includes(searchLower) ||
-        p.productCode.toLowerCase().includes(searchLower) ||
-        p.supplierNames?.toLowerCase().includes(searchLower) ||
-        p.grns.some(grn => 
-          grn.grnNumber.toLowerCase().includes(searchLower) ||
-          grn.poNumber.toLowerCase().includes(searchLower)
-        )
-      );
-    }
-
-    // Group products by category
-    const groupedByCategory = {};
-    
-    fullyReceivedProducts.forEach(product => {
-      const categoryKey = product.categoryId?.toString() || 'uncategorized';
-      const categoryName = product.categoryName || 'Uncategorized';
-      
-      if (!groupedByCategory[categoryKey]) {
-        groupedByCategory[categoryKey] = {
-          categoryId: product.categoryId,
-          categoryName: categoryName,
-          products: [],
-          totalProducts: 0
-        };
-      }
-      
-      groupedByCategory[categoryKey].products.push(product);
-      groupedByCategory[categoryKey].totalProducts++;
-    });
-
-    // Convert to array and sort categories
-    let categorizedProducts = Object.values(groupedByCategory);
-    
-    // Sort products within each category by latest receipt date
-    categorizedProducts.forEach(category => {
-      category.products.sort((a, b) => {
-        const dateA = new Date(a.latestReceiptDate);
-        const dateB = new Date(b.latestReceiptDate);
-        return dateB - dateA; // Latest first
-      });
-    });
-
-    // Sort categories by name
-    categorizedProducts.sort((a, b) => 
-      a.categoryName.localeCompare(b.categoryName)
-    );
-
-    // Filter by specific category if requested
-    if (category) {
-      categorizedProducts = categorizedProducts.filter(cat => 
-        cat.categoryId && cat.categoryId.toString() === category
-      );
-    }
-
-    // Calculate totals
-    const totalProducts = fullyReceivedProducts.length;
-    const totalCategories = categorizedProducts.length;
-
-    // Limit products per category to first 10 (for initial load)
-    // Frontend will handle "Load More" for each category
-    const productsPerCategoryLimit = 10;
-    categorizedProducts.forEach(category => {
-      category.displayedProducts = category.products.length;
-      category.hasMore = category.products.length > productsPerCategoryLimit;
-      // Don't slice here - send all products, let frontend handle pagination
-    });
-
-    // Apply pagination to categories (not individual products)
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const paginatedCategories = categorizedProducts.slice(skip, skip + parseInt(limit));
-
-    res.status(200).json({
-      success: true,
-      data: paginatedCategories,
-      pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(totalCategories / parseInt(limit)),
-        total: totalCategories,
-        totalProducts: totalProducts,
-        limit: parseInt(limit)
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching inventory products:', error);
-    console.error('Error stack:', error.stack);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch inventory products',
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };

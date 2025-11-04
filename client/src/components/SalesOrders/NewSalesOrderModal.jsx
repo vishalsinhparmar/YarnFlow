@@ -5,7 +5,7 @@ import { inventoryAPI } from '../../services/inventoryAPI.js';
 import masterDataAPI from '../../services/masterDataAPI';
 import CustomerForm from '../masterdata/Customers/CustomerForm';
 
-const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
+const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
   const [formData, setFormData] = useState({
     customer: '',
     expectedDeliveryDate: '',
@@ -212,8 +212,25 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
           ...updatedItems[index],
           unit: selectedProduct.unit,
           availableStock: selectedProduct.totalStock,
-          weight: selectedProduct.totalWeight
+          totalProductWeight: selectedProduct.totalWeight || 0,
+          productStock: selectedProduct.totalStock || 0
+          // Don't auto-fill weight - let user enter it
         };
+      }
+    }
+    
+    // Auto-calculate suggested weight when quantity changes
+    if (field === 'quantity') {
+      const qty = parseFloat(value) || 0;
+      const totalWeight = updatedItems[index].totalProductWeight || 0;
+      const totalStock = updatedItems[index].productStock || 1;
+      
+      // Calculate weight per unit from inventory
+      const weightPerUnit = totalStock > 0 ? totalWeight / totalStock : 0;
+      
+      // Suggest weight based on quantity (user can still edit)
+      if (weightPerUnit > 0 && qty > 0) {
+        updatedItems[index].weight = (qty * weightPerUnit).toFixed(2);
       }
     }
 
@@ -334,21 +351,30 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
 
       console.log('Submitting order data:', orderData);
 
+      let createdSO = null;
+      
       if (order) {
         // Update existing order
         const response = await salesOrderAPI.update(order._id, orderData);
         if (!response.success) {
           throw new Error(response.message || 'Failed to update order');
         }
+        createdSO = response.data;
       } else {
         // Create new order
         const response = await salesOrderAPI.create(orderData);
         if (!response.success) {
           throw new Error(response.message || 'Failed to create order');
         }
+        createdSO = response.data;
       }
 
-      onClose();
+      // Call onSubmit if provided (for CreateChallanModal integration)
+      if (onSubmit && createdSO) {
+        onSubmit(createdSO);
+      } else {
+        onClose();
+      }
     } catch (err) {
       console.error('Form submission error:', err);
       setError(err.message || 'Failed to submit order');
@@ -541,6 +567,28 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Weight (Kg) *
+                      </label>
+                      <input
+                        type="number"
+                        value={item.weight}
+                        onChange={(e) => handleItemChange(index, 'weight', e.target.value)}
+                        required
+                        min="0"
+                        step="0.01"
+                        placeholder="Auto-calculated or enter manually"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      {item.totalProductWeight > 0 && item.productStock > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Suggested: {((item.totalProductWeight / item.productStock) * (parseFloat(item.quantity) || 0)).toFixed(2)} Kg
+                          ({(item.totalProductWeight / item.productStock).toFixed(2)} Kg per {item.unit})
+                        </p>
+                      )}
+                    </div>
+
                     <div className="flex items-end">
                       {formData.items.length > 1 && (
                         <button
@@ -553,13 +601,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, order = null }) => {
                       )}
                     </div>
                   </div>
-
-                  {/* Weight Display */}
-                  {item.weight > 0 && (
-                    <div className="mt-2 text-sm text-gray-600">
-                      Total Weight: {item.weight} Kg
-                    </div>
-                  )}
                 </div>
               ))}
             </div>

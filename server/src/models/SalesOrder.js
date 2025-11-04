@@ -68,6 +68,8 @@ const salesOrderSchema = new mongoose.Schema({
     
     unit: { type: String, required: true },
     weight: { type: Number, default: 0 }, // Total weight from inventory
+    dispatchedWeight: { type: Number, default: 0 }, // Weight dispatched via challans
+    manuallyCompleted: { type: Boolean, default: false }, // Manually marked as complete
     
     // Inventory Allocation
     inventoryAllocations: [{
@@ -234,6 +236,84 @@ salesOrderSchema.pre('save', function(next) {
   }
   next();
 });
+
+// Method to update dispatch status based on challan data
+// Note: This is called from controller after fetching challans to avoid circular dependency
+salesOrderSchema.methods.updateDispatchStatus = function(challans) {
+  if (!challans || challans.length === 0) {
+    return;
+  }
+  
+  // Calculate dispatched quantities per item
+  const dispatchedMap = {};
+  const manuallyCompletedMap = {};
+  
+  challans.forEach(challan => {
+    if (!challan.items || !Array.isArray(challan.items)) {
+      return;
+    }
+    
+    challan.items.forEach(item => {
+      const key = item.salesOrderItem.toString();
+      
+      if (!dispatchedMap[key]) {
+        dispatchedMap[key] = 0;
+      }
+      dispatchedMap[key] += item.dispatchQuantity || 0;
+      
+      // Track if any challan marked this item as manually completed
+      if (item.manuallyCompleted) {
+        manuallyCompletedMap[key] = true;
+      }
+    });
+  });
+  
+  // Update each SO item's dispatch status
+  let allItemsCompleted = true;
+  let anyItemDispatched = false;
+  
+  for (let i = 0; i < this.items.length; i++) {
+    const item = this.items[i];
+    const itemId = item._id.toString();
+    const dispatched = dispatchedMap[itemId] || 0;
+    const manuallyCompleted = manuallyCompletedMap[itemId] || false;
+    
+    // UPDATE: Save dispatched quantities to SO item (like GRN saves receivedQuantity to PO item)
+    item.deliveredQuantity = dispatched;
+    item.shippedQuantity = dispatched; // Keep both in sync
+    item.manuallyCompleted = manuallyCompleted;
+    
+    // Calculate dispatched weight (proportional to quantity)
+    if (item.weight && item.quantity > 0) {
+      item.dispatchedWeight = (dispatched / item.quantity) * item.weight;
+    }
+    
+    if (dispatched > 0) {
+      anyItemDispatched = true;
+    }
+    
+    if (manuallyCompleted) {
+      // Item manually marked as complete
+      console.log(`✅ Item ${item.productName || 'Unknown'} manually completed (${dispatched}/${item.quantity})`);
+      // Consider it complete regardless of quantity
+    } else if (dispatched < item.quantity) {
+      // Not fully dispatched and not manually completed
+      allItemsCompleted = false;
+    }
+  }
+  
+  // Update SO status based on dispatch progress
+  if (allItemsCompleted && this.status !== 'Delivered') {
+    this.status = 'Delivered';
+    console.log(`📦 Sales Order ${this.soNumber} marked as Delivered`);
+  } else if (anyItemDispatched && (this.status === 'Draft' || this.status === 'Pending')) {
+    // If any items dispatched and status is Draft or Pending, move to Processing
+    this.status = 'Processing';
+    console.log(`📦 Sales Order ${this.soNumber} marked as Processing (${Object.keys(dispatchedMap).length} items dispatched)`);
+  }
+  
+  this.markModified('status');
+};
 
 // Static method to generate SO number
 salesOrderSchema.statics.generateSONumber = async function() {

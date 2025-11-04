@@ -95,6 +95,13 @@ export const salesOrderAPI = {
     return await apiRequest('/sales-orders/stats');
   },
 
+  // Recalculate all SO statuses based on challans
+  recalculateStatuses: async () => {
+    return await apiRequest('/sales-orders/recalculate-statuses', {
+      method: 'POST'
+    });
+  },
+
   // Get sales orders by customer
   getByCustomer: async (customerId, params = {}) => {
     const queryParams = new URLSearchParams(params);
