@@ -8,7 +8,10 @@
     "start": "cross-env NODE_ENV=production node index.js",
     "start:dev": "cross-env NODE_ENV=development node index.js",
     "seed": "node src/utils/seedData.js",
-    "install-cross-env": "npm install cross-env --save-dev"
+    "install-cross-env": "npm install cross-env --save-dev",
+    "db:erase-all": "node scripts/eraseAllData.js",
+    "db:erase-select": "node scripts/eraseSelectedData.js",
+    "db:clean": "node scripts/eraseSelectedData.js"
   },
   "author": "",
   "license": "ISC",
@@ -23,6 +26,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.1",
     "nodemon": "^3.1.10",
+    "pdfkit": "^0.17.2",
     "winston": "^3.18.3"
   },
   "devDependencies": {

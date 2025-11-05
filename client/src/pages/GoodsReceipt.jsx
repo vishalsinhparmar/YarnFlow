@@ -70,18 +70,32 @@ const GoodsReceipt = () => {
       
       if (!grouped[poKey]) {
         // Get category from PO or first product
-        let category = 'Uncategorized';
+        let category = 'General';
         
         // Try to get from PO's category field first
         if (grn.purchaseOrder?.category?.categoryName) {
           category = grn.purchaseOrder.category.categoryName;
+        } else if (grn.purchaseOrder?.category?.name) {
+          category = grn.purchaseOrder.category.name;
         } else if (grn.purchaseOrder?.category && typeof grn.purchaseOrder.category === 'string') {
           category = grn.purchaseOrder.category;
+        } else if (grn.items && grn.items.length > 0) {
+          // Fallback: get from first GRN item
+          const firstItem = grn.items[0];
+          if (firstItem.product?.category?.categoryName) {
+            category = firstItem.product.category.categoryName;
+          } else if (firstItem.product?.category?.name) {
+            category = firstItem.product.category.name;
+          } else if (firstItem.product?.category && typeof firstItem.product.category === 'string') {
+            category = firstItem.product.category;
+          }
         } else if (grn.purchaseOrder?.items && grn.purchaseOrder.items.length > 0) {
-          // Fallback: get from first product
+          // Last fallback: get from PO items
           const firstItem = grn.purchaseOrder.items[0];
           if (firstItem.product?.category?.categoryName) {
             category = firstItem.product.category.categoryName;
+          } else if (firstItem.product?.category?.name) {
+            category = firstItem.product.category.name;
           } else if (firstItem.product?.category && typeof firstItem.product.category === 'string') {
             category = firstItem.product.category;
           }
@@ -353,7 +367,7 @@ const GoodsReceipt = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -362,18 +376,6 @@ const GoodsReceipt = () => {
             </div>
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
               <span className="text-orange-600 text-xl">📦</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-gray-600">{stats?.pending || 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-              <span className="text-gray-600 text-xl">⏳</span>
             </div>
           </div>
         </div>
@@ -422,7 +424,6 @@ const GoodsReceipt = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="">All Status</option>
-              <option value="Pending">Pending</option>
               <option value="Partial">Partial</option>
               <option value="Complete">Complete</option>
             </select>

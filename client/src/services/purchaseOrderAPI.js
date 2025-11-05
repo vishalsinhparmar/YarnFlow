@@ -56,14 +56,6 @@ export const purchaseOrderAPI = {
     });
   },
 
-  // Receive items (Goods Receipt)
-  receiveItems: async (id, receivedItems, notes = '') => {
-    return apiRequest(`/purchase-orders/${id}/receive`, {
-      method: 'PATCH',
-      body: JSON.stringify({ receivedItems, notes }),
-    });
-  },
-
   // Get PO statistics
   getStats: async () => {
     return apiRequest('/purchase-orders/stats');

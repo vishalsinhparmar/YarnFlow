@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { salesChallanAPI, salesChallanUtils } from '../services/salesChallanAPI';
 import CreateChallanModal from '../components/SalesChallan/CreateChallanModal';
@@ -13,9 +13,8 @@ const SalesChallan = () => {
   const [soChallanLimits, setSOChallanLimits] = useState({}); // Pagination per SO
   const [stats, setStats] = useState({
     totalChallans: 0,
-    pending: 0,
+    completed: 0,
     partial: 0,
-    delivered: 0,
     thisMonth: 0
   });
   const [loading, setLoading] = useState(true);
@@ -30,11 +29,12 @@ const SalesChallan = () => {
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(''); // '', 'Completed', 'Partial'
   const [currentPage, setCurrentPage] = useState(1);
   const [currentSOPage, setCurrentSOPage] = useState(1);
   const [sosPerPage] = useState(5); // Show 5 SOs per page
   const [pagination, setPagination] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState({});
 
   // Group Challans by Sales Order
   const groupChallansBySO = (challanList) => {
@@ -114,28 +114,34 @@ const SalesChallan = () => {
     }));
   };
 
-  // Fetch data on component mount
+  // Debounced search to avoid too many API calls
   useEffect(() => {
-    fetchAllData();
+    const timeoutId = setTimeout(() => {
+      fetchAllData();
+    }, 300); // 300ms debounce
     
-    // Auto-open create modal if navigated from Sales Order
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter]);
+
+  // Auto-open create modal if navigated from Sales Order
+  useEffect(() => {
     if (location.state?.selectedOrderId) {
       setShowCreateModal(true);
     }
-  }, [searchTerm, statusFilter, location.state]);
+  }, [location.state]);
 
   const fetchAllData = async () => {
     try {
       setLoading(true);
+      setError(null);
       
       // Fetch stats and challans in parallel
       const [statsRes, challansRes] = await Promise.all([
         salesChallanAPI.getStats(),
         salesChallanAPI.getAll({
           page: 1,
-          limit: 1000, // Get all for grouping
-          search: searchTerm,
-          status: statusFilter
+          limit: 100, // Reasonable limit for performance
+          search: searchTerm
         })
       ]);
 
@@ -143,53 +149,126 @@ const SalesChallan = () => {
         const data = statsRes.data;
         setStats({
           totalChallans: data?.overview?.totalChallans || 0,
-          pending: data?.pending || 0,
+          completed: data?.completed || 0,
           partial: data?.partial || 0,
-          delivered: data?.completed || 0,
           thisMonth: data?.overview?.thisMonth || 0
         });
       }
 
       if (challansRes.success) {
-        const challanData = challansRes?.data || [];
+        let challanData = Array.isArray(challansRes?.data) ? challansRes.data : [];
+        
+        // Apply status filter on frontend (optimized)
+        if (statusFilter && challanData.length > 0) {
+          challanData = challanData.filter(challan => {
+            // Safety check
+            if (!challan || !Array.isArray(challan.items) || challan.items.length === 0) {
+              return statusFilter === 'Pending';
+            }
+            
+            // Use for loop for better performance with large datasets
+            let allItemsComplete = true;
+            let anyItemPartial = false;
+            
+            for (let i = 0; i < challan.items.length; i++) {
+              const item = challan.items[i];
+              const dispatched = item.dispatchQuantity || 0;
+              const ordered = item.orderedQuantity || 0;
+              const manuallyCompleted = item.manuallyCompleted || false;
+              
+              if (manuallyCompleted || dispatched >= ordered) {
+                // Item is complete - continue checking
+                continue;
+              } else if (dispatched > 0 && dispatched < ordered) {
+                // Item is partial
+                allItemsComplete = false;
+                anyItemPartial = true;
+              } else {
+                // Item is pending
+                allItemsComplete = false;
+              }
+            }
+            
+            // Return based on filter
+            if (statusFilter === 'Completed') {
+              return allItemsComplete;
+            } else if (statusFilter === 'Partial') {
+              return anyItemPartial;
+            }
+            return true;
+          });
+        }
+        
         setChallans(challanData);
         
         // Group by SO
         const grouped = groupChallansBySO(challanData);
         setGroupedBySO(grouped);
         
-        // Initialize expansion and limits
+        // Initialize expansion and limits (optimized)
         const expanded = {};
         const limits = {};
-        grouped.forEach(so => {
+        for (let i = 0; i < grouped.length; i++) {
+          const so = grouped[i];
           const soKey = so.soId || so.soNumber;
-          expanded[soKey] = true;
+          expanded[soKey] = i < 5; // Only expand first 5 SOs by default
           limits[soKey] = 5;
-        });
+        }
         setExpandedSOs(expanded);
         setSOChallanLimits(limits);
       }
       
-      setError(null);
     } catch (err) {
-      setError(err.message || 'Failed to fetch data');
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to fetch data';
+      setError(errorMessage);
       setChallans([]);
       setGroupedBySO([]);
-      console.error('Error fetching data:', err);
+      console.error('Error fetching sales challan data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle challan creation
-  const handleCreateChallan = async (challanData) => {
+  // Handle challan creation (memoized)
+  const handleCreateChallan = useCallback(async (challanData) => {
     try {
-      await salesChallanAPI.create(challanData);
+      const response = await salesChallanAPI.create(challanData);
       setShowCreateModal(false);
-      fetchAllData(); // Refresh data
+      await fetchAllData(); // Refresh data
+      return response;
     } catch (err) {
       console.error('Error creating challan:', err);
       throw err;
+    }
+  }, []);
+
+  // Handle Consolidated PDF Download for SO
+  const handleDownloadPDF = async (soId, soNumber) => {
+    try {
+      setPdfLoading(prev => ({ ...prev, [soId]: 'download' }));
+      await salesChallanAPI.generateConsolidatedPDF(soId);
+      // Success - PDF downloads automatically
+    } catch (err) {
+      console.error('Error downloading PDF:', err);
+      setError(`Failed to download PDF for ${soNumber}`);
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setPdfLoading(prev => ({ ...prev, [soId]: null }));
+    }
+  };
+
+  // Handle Consolidated PDF Preview for SO
+  const handlePreviewPDF = async (soId, soNumber) => {
+    try {
+      setPdfLoading(prev => ({ ...prev, [soId]: 'preview' }));
+      await salesChallanAPI.previewConsolidatedPDF(soId);
+      // Success - PDF opens in new tab
+    } catch (err) {
+      console.error('Error previewing PDF:', err);
+      setError(`Failed to preview PDF for ${soNumber}`);
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setPdfLoading(prev => ({ ...prev, [soId]: null }));
     }
   };
 
@@ -293,11 +372,11 @@ const SalesChallan = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-gray-600">{stats.pending}</p>
+              <p className="text-sm font-medium text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
             </div>
-            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-              <span className="text-gray-600 text-xl">⏳</span>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <span className="text-green-600 text-xl">✅</span>
             </div>
           </div>
         </div>
@@ -305,11 +384,11 @@ const SalesChallan = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Delivered</p>
-              <p className="text-2xl font-bold text-green-600">{stats.delivered}</p>
+              <p className="text-sm font-medium text-gray-600">Partial</p>
+              <p className="text-2xl font-bold text-yellow-600">{stats.partial}</p>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">✅</span>
+            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <span className="text-yellow-600 text-xl">📦</span>
             </div>
           </div>
         </div>
@@ -327,9 +406,9 @@ const SalesChallan = () => {
         </div>
       </div>
 
-      {/* Search and Filters */}
+      {/* Search and Filter */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex-1">
             <input
               type="text"
@@ -339,20 +418,37 @@ const SalesChallan = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
           </div>
-          <div className="sm:w-48">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setStatusFilter('')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === '' 
+                  ? 'bg-teal-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              <option value="">All Status</option>
-              <option value="Prepared">Prepared</option>
-              <option value="Packed">Packed</option>
-              <option value="Dispatched">Dispatched</option>
-              <option value="In_Transit">In Transit</option>
-              <option value="Delivered">Delivered</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
+              All
+            </button>
+            <button
+              onClick={() => setStatusFilter('Completed')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === 'Completed' 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Completed
+            </button>
+            <button
+              onClick={() => setStatusFilter('Partial')}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                statusFilter === 'Partial' 
+                  ? 'bg-yellow-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Partial
+            </button>
           </div>
         </div>
       </div>
@@ -419,16 +515,42 @@ const SalesChallan = () => {
                         </p>
                       </div>
                     </button>
-                    {/* Only show Add Challan button if SO is not Delivered */}
-                    {so.soStatus !== 'Delivered' && (
-                      <button
-                        onClick={() => handleCreateChallanForSO(so)}
-                        className="ml-4 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-                      >
-                        <span>+</span>
-                        <span>Add Challan</span>
-                      </button>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {/* Show PDF button only for Delivered/Completed SOs */}
+                      {so.soStatus === 'Delivered' && (
+                        <>
+                          <button
+                            onClick={() => handlePreviewPDF(so.soId, so.soNumber)}
+                            disabled={pdfLoading[so.soId]}
+                            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Preview Consolidated PDF"
+                          >
+                            {pdfLoading[so.soId] === 'preview' ? '⏳' : '📄'}
+                            <span>Preview PDF</span>
+                          </button>
+                          <button
+                            onClick={() => handleDownloadPDF(so.soId, so.soNumber)}
+                            disabled={pdfLoading[so.soId]}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Download Consolidated PDF"
+                          >
+                            {pdfLoading[so.soId] === 'download' ? '⏳' : '📥'}
+                            <span>Download PDF</span>
+                          </button>
+                        </>
+                      )}
+                      
+                      {/* Only show Add Challan button if SO is not Delivered */}
+                      {so.soStatus !== 'Delivered' && (
+                        <button
+                          onClick={() => handleCreateChallanForSO(so)}
+                          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                        >
+                          <span>+</span>
+                          <span>Add Challan</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -524,9 +646,10 @@ const SalesChallan = () => {
                                     setSelectedChallan(challan);
                                     setShowDetailModal(true);
                                   }}
-                                  className="text-blue-600 hover:text-blue-900"
+                                  className="text-blue-600 hover:text-blue-900 font-medium"
+                                  title="View Details"
                                 >
-                                  View
+                                  👁️ View Details
                                 </button>
                               </td>
                             </tr>
@@ -605,7 +728,6 @@ const SalesChallan = () => {
           isOpen={showDetailModal}
           onClose={() => setShowDetailModal(false)}
           challan={selectedChallan}
-          onStatusUpdate={(statusData) => handleStatusUpdate(selectedChallan._id, statusData)}
         />
       )}
 

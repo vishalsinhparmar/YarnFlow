@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { salesOrderAPI } from '../../services/salesOrderAPI';
 import { salesChallanAPI } from '../../services/salesChallanAPI';
+import { inventoryAPI } from '../../services/inventoryAPI';
+import { apiRequest } from '../../services/common';
 import NewSalesOrderModal from '../SalesOrders/NewSalesOrderModal';
+import { WAREHOUSE_LOCATIONS, getWarehouseName } from '../../constants/warehouseLocations';
 
 const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = null }) => {
   const [formData, setFormData] = useState({
@@ -167,6 +170,85 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           setError('⚠️ This Sales Order is already fully dispatched. All items have been completed.');
         }
 
+        // Fetch warehouse locations for each product from inventory lots
+        const productIds = items.map(item => item.product).filter(Boolean);
+        if (productIds.length > 0) {
+          try {
+            // Fetch inventory lots for these products
+            const lotsPromises = productIds.map(productId =>
+              apiRequest(`/inventory/lots?product=${productId}&status=Active`)
+            );
+            
+            const lotsResponses = await Promise.all(lotsPromises);
+            
+            // Map product to warehouse locations with quantities
+            const productWarehouseMap = {};
+            lotsResponses.forEach((response, index) => {
+              const productId = productIds[index];
+              if (response.success && response.data) {
+                productWarehouseMap[productId] = [];
+                
+                // Group lots by warehouse
+                const warehouseStockMap = {};
+                response.data.forEach(lot => {
+                  if (lot.warehouse && lot.currentQuantity > 0) {
+                    if (!warehouseStockMap[lot.warehouse]) {
+                      warehouseStockMap[lot.warehouse] = {
+                        warehouse: lot.warehouse,
+                        availableQuantity: 0,
+                        lots: []
+                      };
+                    }
+                    warehouseStockMap[lot.warehouse].availableQuantity += lot.currentQuantity;
+                    warehouseStockMap[lot.warehouse].lots.push(lot);
+                  }
+                });
+                
+                // Convert to array
+                productWarehouseMap[productId] = Object.values(warehouseStockMap);
+              }
+            });
+            
+            // Add warehouse info to items
+            const itemsWithWarehouses = items.map(item => ({
+              ...item,
+              warehouses: productWarehouseMap[item.product] || []
+            }));
+            
+            console.log('📦 Warehouse data for products:', productWarehouseMap);
+            
+            // Auto-select warehouse if all products are in the same single warehouse
+            const allWarehouses = itemsWithWarehouses.flatMap(item => 
+              item.warehouses.map(wh => wh.warehouse)
+            );
+            const uniqueWarehouses = [...new Set(allWarehouses)];
+            
+            let autoSelectedWarehouse = '';
+            if (uniqueWarehouses.length === 1 && uniqueWarehouses[0]) {
+              // All products are in the same warehouse
+              autoSelectedWarehouse = uniqueWarehouses[0];
+              console.log('✅ Auto-selected warehouse:', autoSelectedWarehouse, getWarehouseName(autoSelectedWarehouse));
+            } else if (uniqueWarehouses.length > 1) {
+              console.log('⚠️ Products are in multiple warehouses:', uniqueWarehouses.map(wh => getWarehouseName(wh)));
+            }
+            
+            // Update form data with auto-selected warehouse
+            setFormData(prev => ({
+              ...prev,
+              salesOrder: soId,
+              expectedDeliveryDate: so.expectedDeliveryDate ? 
+                new Date(so.expectedDeliveryDate).toISOString().split('T')[0] : '',
+              warehouseLocation: autoSelectedWarehouse,
+              items: itemsWithWarehouses
+            }));
+            
+            return; // Exit early since we've set formData
+          } catch (err) {
+            console.error('Error fetching warehouse info:', err);
+            // Continue without warehouse info
+          }
+        }
+
         setFormData(prev => ({
           ...prev,
           salesOrder: soId,
@@ -259,17 +341,30 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       return false;
     }
 
-    for (let i = 0; i < formData.items.length; i++) {
-      const item = formData.items[i];
+    // Filter items that have remaining quantity to dispatch
+    const itemsToDispatch = formData.items.filter(item => {
+      const dispatchedQty = item.previouslyDispatched || 0;
+      const maxDispatch = item.orderedQuantity - dispatchedQty;
+      return maxDispatch > 0;
+    });
+
+    if (itemsToDispatch.length === 0) {
+      setError('All items are already fully dispatched. No items remaining to dispatch.');
+      return false;
+    }
+
+    for (let i = 0; i < itemsToDispatch.length; i++) {
+      const item = itemsToDispatch[i];
       const dispatchQty = parseFloat(item.dispatchQuantity) || 0;
-      const orderedQty = parseFloat(item.orderedQuantity) || 0;
+      const dispatchedQty = item.previouslyDispatched || 0;
+      const maxDispatch = item.orderedQuantity - dispatchedQty;
 
       if (dispatchQty <= 0) {
         setError(`Please enter dispatch quantity for ${item.productName}`);
         return false;
       }
-      if (dispatchQty > orderedQty) {
-        setError(`Dispatch quantity cannot exceed ordered quantity for ${item.productName}`);
+      if (dispatchQty > maxDispatch) {
+        setError(`Dispatch quantity for ${item.productName} cannot exceed remaining quantity (${maxDispatch} ${item.unit})`);
         return false;
       }
     }
@@ -288,12 +383,17 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
     setError('');
 
     try {
-      // Prepare challan data
+      // Prepare challan data - only include items with remaining quantity
+      const itemsToDispatch = formData.items.filter(item => {
+        const dispatchedQty = item.previouslyDispatched || 0;
+        const maxDispatch = item.orderedQuantity - dispatchedQty;
+        return maxDispatch > 0 && parseFloat(item.dispatchQuantity || 0) > 0;
+      });
+
       const challanData = {
         salesOrder: formData.salesOrder,
-        expectedDeliveryDate: formData.expectedDeliveryDate || null,
         warehouseLocation: formData.warehouseLocation,
-        items: formData.items.map((item, idx) => {
+        items: itemsToDispatch.map((item, idx) => {
           const itemData = {
             salesOrderItem: item.salesOrderItem,
             product: item.product,
@@ -311,6 +411,11 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
         notes: formData.notes || '',
         createdBy: 'Admin'
       };
+
+      // Only include expectedDeliveryDate if it has a value
+      if (formData.expectedDeliveryDate) {
+        challanData.expectedDeliveryDate = formData.expectedDeliveryDate;
+      }
 
       console.log('=== Submitting Challan Data ===');
       console.log('Sales Order:', challanData.salesOrder);
@@ -469,60 +574,110 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
           {/* Warehouse Information */}
           <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Warehouse Information</h3>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Warehouse Location *
-              </label>
-              <input
-                type="text"
-                value={formData.warehouseLocation}
-                onChange={(e) => handleInputChange('warehouseLocation', e.target.value)}
-                required
-                placeholder="Warehouse location or zone"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter the warehouse location or zone where goods will be dispatched from
-              </p>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Dispatch Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Warehouse Location *
+                </label>
+                <select
+                  value={formData.warehouseLocation}
+                  onChange={(e) => handleInputChange('warehouseLocation', e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="">Select Warehouse Location</option>
+                  {WAREHOUSE_LOCATIONS.map(warehouse => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select the warehouse location where goods will be dispatched from
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Dispatch Notes
+                </label>
+                <input
+                  type="text"
+                  value={formData.notes}
+                  onChange={(e) => handleInputChange('notes', e.target.value)}
+                  placeholder="Special dispatch instructions (optional)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
             </div>
           </div>
 
           {/* Items to Dispatch - GRN Style */}
-          {!loadingSODetails && formData.items && formData.items.length > 0 && (
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-3">
-                Items to Dispatch
-              </h3>
-              
-              {/* Table Header */}
-              <div className="bg-gray-50 border border-gray-200 rounded-t-lg px-4 py-2">
-                <div className="grid grid-cols-12 gap-4 text-xs font-medium text-gray-600 uppercase">
-                  <div className="col-span-3">Product</div>
-                  <div className="col-span-2 text-center">Ordered</div>
-                  <div className="col-span-2 text-center">Prev. Dispatched</div>
-                  <div className="col-span-2 text-center">Dispatching Now *</div>
-                  <div className="col-span-2 text-center">Pending</div>
-                  <div className="col-span-1 text-center">Mark Complete</div>
-                </div>
-              </div>
+          {!loadingSODetails && formData.items && formData.items.length > 0 && (() => {
+            // Filter out fully dispatched items
+            const itemsToDispatch = formData.items.filter(item => {
+              const dispatchedQty = item.previouslyDispatched || 0;
+              const maxDispatch = item.orderedQuantity - dispatchedQty;
+              return maxDispatch > 0; // Only show items with remaining quantity
+            });
 
-              {/* Table Body */}
-              <div className="border-l border-r border-b border-gray-200 rounded-b-lg">
-                {formData.items.map((item, index) => {
-                  const dispatchedQty = item.previouslyDispatched || 0;
-                  const maxDispatch = item.orderedQuantity - dispatchedQty;
-                  const currentDispatch = parseFloat(item.dispatchQuantity || 0);
-                  const totalAfterThis = dispatchedQty + currentDispatch;
-                  const progress = ((totalAfterThis) / item.orderedQuantity * 100).toFixed(0);
+            return itemsToDispatch.length > 0 ? (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-3">
+                  Items to Dispatch
+                </h3>
+                
+                {/* Table Header */}
+                <div className="bg-gray-50 border border-gray-200 rounded-t-lg px-4 py-2">
+                  <div className="grid grid-cols-12 gap-4 text-xs font-medium text-gray-600 uppercase">
+                    <div className="col-span-2">Product</div>
+                    <div className="col-span-2">Warehouse</div>
+                    <div className="col-span-2 text-center">Ordered</div>
+                    <div className="col-span-1 text-center">Prev. Disp.</div>
+                    <div className="col-span-2 text-center">Dispatching Now *</div>
+                    <div className="col-span-2 text-center">Pending</div>
+                    <div className="col-span-1 text-center">Complete</div>
+                  </div>
+                </div>
+
+                {/* Table Body */}
+                <div className="border-l border-r border-b border-gray-200 rounded-b-lg">
+                  {itemsToDispatch.map((item, index) => {
+                    const dispatchedQty = item.previouslyDispatched || 0;
+                    const maxDispatch = item.orderedQuantity - dispatchedQty;
+                    const currentDispatch = parseFloat(item.dispatchQuantity || 0);
+                    const totalAfterThis = dispatchedQty + currentDispatch;
+                    const progress = ((totalAfterThis) / item.orderedQuantity * 100).toFixed(0);
                   
                   return (
                     <div key={index} className="px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
                       <div className="grid grid-cols-12 gap-4 items-center">
                         {/* Product */}
-                        <div className="col-span-3">
+                        <div className="col-span-2">
                           <div className="font-medium text-gray-900 text-sm">{item.productName}</div>
                           <div className="text-xs text-gray-500">{item.productCode}</div>
+                        </div>
+
+                        {/* Warehouse */}
+                        <div className="col-span-2">
+                          {item.warehouses && item.warehouses.length > 0 ? (
+                            <div className="text-xs space-y-1">
+                              {item.warehouses.map((whData, idx) => (
+                                <div key={idx} className="flex flex-col">
+                                  <div className="flex items-center text-purple-600 font-medium">
+                                    <span className="mr-1">📍</span>
+                                    <span>{getWarehouseName(whData.warehouse)}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-500 ml-4">
+                                    Stock: {whData.availableQuantity} {item.unit}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-gray-400">No stock</div>
+                          )}
                         </div>
 
                         {/* Ordered */}
@@ -532,8 +687,8 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                         </div>
 
                         {/* Previously Dispatched */}
-                        <div className="col-span-2 text-center">
-                          <div className="text-sm font-medium text-blue-600">{dispatchedQty} {item.unit}</div>
+                        <div className="col-span-1 text-center">
+                          <div className="text-sm font-medium text-blue-600">{dispatchedQty}</div>
                           <div className="text-xs text-gray-500">Max: {maxDispatch}</div>
                         </div>
 
@@ -604,11 +759,18 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm text-green-800">
+                  ✅ All items in this Sales Order have been fully dispatched. No items remaining to dispatch.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* No Items Message */}
           {!loadingSODetails && formData.salesOrder && (!formData.items || formData.items.length === 0) && (
@@ -619,19 +781,6 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             </div>
           )}
 
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Dispatch Notes
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => handleInputChange('notes', e.target.value)}
-              rows="3"
-              placeholder="Any special instructions for dispatch..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
 
           {/* Form Actions */}
           <div className="flex items-center justify-end space-x-4 pt-4 border-t border-gray-200">

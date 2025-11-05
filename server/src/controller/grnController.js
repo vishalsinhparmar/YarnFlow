@@ -62,8 +62,32 @@ export const getAllGRNs = async (req, res) => {
     
     const grns = await GoodsReceiptNote.find(query)
       .populate('supplier', 'companyName supplierCode contactPerson phone')
-      .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
-      .populate('items.product', 'productName productCode specifications')
+      .populate({
+        path: 'purchaseOrder',
+        select: 'poNumber orderDate expectedDeliveryDate category items',
+        populate: [
+          {
+            path: 'category',
+            select: 'categoryName name'
+          },
+          {
+            path: 'items.product',
+            select: 'productName productCode category',
+            populate: {
+              path: 'category',
+              select: 'categoryName name'
+            }
+          }
+        ]
+      })
+      .populate({
+        path: 'items.product',
+        select: 'productName productCode specifications category',
+        populate: {
+          path: 'category',
+          select: 'categoryName name'
+        }
+      })
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
@@ -418,7 +442,7 @@ export const createGRN = async (req, res) => {
                 totalWeight: prevItem.receivedWeight || 0,
                 qualityStatus: 'Approved',
                 qualityNotes: 'Auto-approved (Item Completed in Later GRN)',
-                warehouse: prevItem.warehouseLocation,
+                warehouse: prevGRN.warehouseLocation || prevItem.warehouseLocation || undefined,
                 receivedDate: prevGRN.receiptDate,
                 expiryDate: prevItem.expiryDate,
                 unitCost: prevItem.unitPrice,
@@ -458,6 +482,13 @@ export const createGRN = async (req, res) => {
         }
         
         // Now create lot for current GRN
+        // Debug warehouse location
+        console.log(`📍 Warehouse for ${item.productName}:`, {
+          grnWarehouse: grn.warehouseLocation,
+          itemWarehouse: item.warehouseLocation,
+          final: grn.warehouseLocation || item.warehouseLocation || undefined
+        });
+        
         const lot = new InventoryLot({
           grn: grn._id,
           grnNumber: grn.grnNumber,
@@ -479,7 +510,7 @@ export const createGRN = async (req, res) => {
           qualityNotes: item.manuallyCompleted 
             ? 'Auto-approved (Manually Completed)' 
             : 'Auto-approved (Item Fully Received)',
-          warehouse: item.warehouseLocation,
+          warehouse: grn.warehouseLocation || item.warehouseLocation || undefined,
           receivedDate: grn.receiptDate,
           expiryDate: item.expiryDate,
           unitCost: item.unitPrice,
@@ -504,6 +535,7 @@ export const createGRN = async (req, res) => {
         await lot.save();
         inventoryLots.push(lot);
         console.log(`📦 Created inventory lot for ${item.productName}: ${item.receivedQuantity} ${item.unit}`);
+        console.log(`✅ Lot saved with warehouse: ${lot.warehouse} (LotNumber: ${lot.lotNumber})`);
         
         // Update product inventory
         await Product.findByIdAndUpdate(
@@ -731,7 +763,7 @@ export const approveGRN = async (req, res) => {
           totalWeight: lotWeight || 0,
           qualityStatus: 'Approved',
           qualityNotes: item.manuallyCompleted ? 'Auto-approved (Manually Completed)' : item.qualityNotes,
-          warehouse: item.warehouseLocation,
+          warehouse: grn.warehouseLocation || item.warehouseLocation || undefined,
           receivedDate: grn.receiptDate,
           expiryDate: item.expiryDate,
           unitCost: item.unitPrice,

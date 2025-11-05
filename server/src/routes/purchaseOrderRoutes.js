@@ -6,15 +6,13 @@ import {
   updatePurchaseOrder,
   deletePurchaseOrder,
   updatePurchaseOrderStatus,
-  receiveItems,
   getPurchaseOrderStats
 } from '../controller/purchaseOrderController.js';
 
 import {
   validatePurchaseOrder,
   validatePurchaseOrderUpdate,
-  validateStatusUpdate,
-  validateGoodsReceipt
+  validateStatusUpdate
 } from '../validators/purchaseOrderValidator.js';
 
 const router = express.Router();
@@ -33,8 +31,5 @@ router.delete('/:id', deletePurchaseOrder);
 
 // Status Management
 router.patch('/:id/status', validateStatusUpdate, updatePurchaseOrderStatus);
-
-// Goods Receipt
-router.patch('/:id/receive', validateGoodsReceipt, receiveItems);
 
 export default router;

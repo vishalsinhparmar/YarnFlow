@@ -8,17 +8,18 @@ export const validateSalesOrder = [
     .withMessage('Invalid customer ID'),
 
   body('expectedDeliveryDate')
-    .notEmpty()
-    .withMessage('Expected delivery date is required')
+    .optional()
     .isISO8601()
     .withMessage('Invalid date format')
     .custom((value) => {
-      const deliveryDate = new Date(value);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      if (deliveryDate < today) {
-        throw new Error('Expected delivery date cannot be in the past');
+      if (value) {
+        const deliveryDate = new Date(value);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (deliveryDate < today) {
+          throw new Error('Expected delivery date cannot be in the past');
+        }
       }
       return true;
     }),

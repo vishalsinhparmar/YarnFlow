@@ -112,6 +112,7 @@ export const getInventoryProducts = async (req, res) => {
         status: lot.status,
         receivedDate: lot.receivedDate,
         supplierName: lot.supplierName || 'Unknown',
+        warehouse: lot.warehouse, // Include warehouse location
         movements: lot.movements || []
       });
       

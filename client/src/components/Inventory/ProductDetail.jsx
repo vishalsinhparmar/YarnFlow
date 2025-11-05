@@ -1,7 +1,19 @@
 import React from 'react';
+import { getWarehouseName } from '../../constants/warehouseLocations';
 
 const ProductDetail = ({ product, onClose }) => {
   if (!product) return null;
+
+  // Debug: Log product lots data
+  console.log('📦 ProductDetail - Lots data:', {
+    productName: product.productName,
+    lotsCount: (product.lots || product.grns || []).length,
+    lots: (product.lots || product.grns || []).map(lot => ({
+      lotNumber: lot.lotNumber,
+      warehouse: lot.warehouse,
+      warehouseName: getWarehouseName(lot.warehouse)
+    }))
+  });
 
   return (
     <div className="space-y-6">
@@ -125,11 +137,17 @@ const ProductDetail = ({ product, onClose }) => {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Supplier:</span>
                         <span className="font-medium text-gray-900">
                           {isLotFormat ? lot.supplierName : lot.supplierName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">Warehouse:</span>
+                        <span className="font-medium text-purple-600">
+                          📍 {getWarehouseName(isLotFormat ? lot.warehouse : lot.warehouseLocation)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

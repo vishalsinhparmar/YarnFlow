@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { grnUtils } from '../../services/grnAPI';
 import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
+import { getWarehouseName } from '../../constants/warehouseLocations';
 
 const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
   const [loading, setLoading] = useState(false);
@@ -508,7 +509,10 @@ const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
           
           <div>
             <span className="text-sm font-medium text-gray-500">Warehouse Location</span>
-            <p className="text-base text-gray-900 mt-1">{grn.warehouseLocation}</p>
+            <p className="text-base font-medium text-purple-600 mt-1 flex items-center">
+              <span className="mr-2">📍</span>
+              {getWarehouseName(grn.warehouseLocation)}
+            </p>
           </div>
         </div>
       )}

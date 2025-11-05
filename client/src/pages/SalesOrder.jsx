@@ -115,64 +115,65 @@ const SalesOrder = () => {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Sales Orders (SO)</h1>
-            <p className="text-gray-600">Manage customer orders and sales transactions</p>
-          </div>
-          <div className="flex items-center gap-3">
+      {/* Page Header with Stats */}
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        {/* Header Section */}
+        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-8">
+          <div className="flex items-center justify-between">
+            <div className="text-white">
+              <h1 className="text-3xl font-bold mb-2">Sales Orders (SO)</h1>
+              <p className="text-indigo-100">Manage customer orders and sales transactions</p>
+            </div>
             <button 
               onClick={() => setShowNewOrderModal(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              className="bg-white hover:bg-indigo-50 text-indigo-600 px-6 py-3 rounded-lg font-semibold transition-colors shadow-lg hover:shadow-xl"
             >
               + New Sales Order
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Orders</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {salesOrderStats?.overview?.totalOrders || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-              <span className="text-indigo-600 text-xl">📄</span>
+        {/* Stats Cards Inside Banner */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-6 py-6 bg-gray-50">
+          <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-indigo-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Total Orders</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {salesOrderStats?.overview?.totalOrders || 0}
+                </p>
+              </div>
+              <div className="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center">
+                <span className="text-indigo-600 text-2xl">📄</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Completed</p>
-              <p className="text-2xl font-bold text-green-600">
-                {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Delivered')?.count || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">✅</span>
+          <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-green-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Completed</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Delivered')?.count || 0}
+                </p>
+              </div>
+              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="text-green-600 text-2xl">✅</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Draft</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Draft')?.count || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-blue-600 text-xl">📝</span>
+          <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-blue-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Draft</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {salesOrderStats?.statusBreakdown?.find(s => s._id === 'Draft')?.count || 0}
+                </p>
+              </div>
+              <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 text-2xl">📝</span>
+              </div>
             </div>
           </div>
         </div>
