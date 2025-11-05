@@ -66,6 +66,174 @@ export const salesChallanAPI = {
   // Track challan by number
   track: async (challanNumber) => {
     return apiRequest(`/sales-challans/track/${challanNumber}`);
+  },
+
+  // Generate PDF (download)
+  generatePDF: async (id) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const url = `${API_BASE_URL}/sales-challans/${id}/pdf/download`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+
+      // Get the blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `Sales_Challan_${id}.pdf`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      return { success: true, message: 'PDF downloaded successfully' };
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      throw error;
+    }
+  },
+
+  // Preview PDF (open in new tab)
+  previewPDF: async (id) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const url = `${API_BASE_URL}/sales-challans/${id}/pdf/preview`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to preview PDF');
+      }
+
+      // Get the blob
+      const blob = await response.blob();
+      
+      // Create object URL and open in new tab
+      const pdfUrl = window.URL.createObjectURL(blob);
+      window.open(pdfUrl, '_blank');
+      
+      // Clean up after a delay
+      setTimeout(() => {
+        window.URL.revokeObjectURL(pdfUrl);
+      }, 100);
+
+      return { success: true, message: 'PDF preview opened' };
+    } catch (error) {
+      console.error('Error previewing PDF:', error);
+      throw error;
+    }
+  },
+
+  // Generate Consolidated PDF for SO (download)
+  generateConsolidatedPDF: async (soId) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const url = `${API_BASE_URL}/sales-challans/so/${soId}/pdf/download`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate consolidated PDF');
+      }
+
+      // Get the blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `SO_Consolidated_${soId}.pdf`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      return { success: true, message: 'Consolidated PDF downloaded successfully' };
+    } catch (error) {
+      console.error('Error downloading consolidated PDF:', error);
+      throw error;
+    }
+  },
+
+  // Preview Consolidated PDF for SO (open in new tab)
+  previewConsolidatedPDF: async (soId) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const url = `${API_BASE_URL}/sales-challans/so/${soId}/pdf/preview`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to preview consolidated PDF');
+      }
+
+      // Get the blob
+      const blob = await response.blob();
+      
+      // Create object URL and open in new tab
+      const pdfUrl = window.URL.createObjectURL(blob);
+      window.open(pdfUrl, '_blank');
+      
+      // Clean up after a delay
+      setTimeout(() => {
+        window.URL.revokeObjectURL(pdfUrl);
+      }, 100);
+
+      return { success: true, message: 'Consolidated PDF preview opened' };
+    } catch (error) {
+      console.error('Error previewing consolidated PDF:', error);
+      throw error;
+    }
   }
 };
 
@@ -75,12 +243,8 @@ export const salesChallanUtils = {
   formatStatus: (status) => {
     const statusMap = {
       'Prepared': 'Prepared',
-      'Packed': 'Packed',
       'Dispatched': 'Dispatched',
-      'In_Transit': 'In Transit',
-      'Out_for_Delivery': 'Out for Delivery',
       'Delivered': 'Delivered',
-      'Returned': 'Returned',
       'Cancelled': 'Cancelled'
     };
     return statusMap[status] || status;
@@ -90,12 +254,8 @@ export const salesChallanUtils = {
   getStatusColor: (status) => {
     const colorMap = {
       'Prepared': 'bg-blue-100 text-blue-800',
-      'Packed': 'bg-yellow-100 text-yellow-800',
       'Dispatched': 'bg-orange-100 text-orange-800',
-      'In_Transit': 'bg-purple-100 text-purple-800',
-      'Out_for_Delivery': 'bg-indigo-100 text-indigo-800',
       'Delivered': 'bg-green-100 text-green-800',
-      'Returned': 'bg-red-100 text-red-800',
       'Cancelled': 'bg-gray-100 text-gray-800'
     };
     return colorMap[status] || 'bg-gray-100 text-gray-800';
@@ -103,24 +263,20 @@ export const salesChallanUtils = {
 
   // Check if challan can be updated
   canUpdate: (status) => {
-    return !['Delivered', 'Returned', 'Cancelled'].includes(status);
+    return !['Delivered', 'Cancelled'].includes(status);
   },
 
   // Check if challan can be deleted
   canDelete: (status) => {
-    return ['Prepared', 'Packed'].includes(status);
+    return status === 'Prepared';
   },
 
   // Get next possible statuses
   getNextStatuses: (currentStatus) => {
     const statusFlow = {
-      'Prepared': ['Packed', 'Cancelled'],
-      'Packed': ['Dispatched', 'Cancelled'],
-      'Dispatched': ['In_Transit', 'Returned'],
-      'In_Transit': ['Out_for_Delivery', 'Returned'],
-      'Out_for_Delivery': ['Delivered', 'Returned'],
+      'Prepared': ['Dispatched', 'Cancelled'],
+      'Dispatched': ['Delivered', 'Cancelled'],
       'Delivered': [],
-      'Returned': ['Prepared'],
       'Cancelled': []
     };
     return statusFlow[currentStatus] || [];
@@ -162,13 +318,13 @@ export const salesChallanUtils = {
       }
     }
     
-    // Edit action (only for prepared/packed)
-    if (['Prepared', 'Packed'].includes(challan.status)) {
+    // Edit action (only for prepared)
+    if (challan.status === 'Prepared') {
       actions.push({ type: 'edit', label: 'Edit', color: 'yellow' });
     }
     
-    // Track action (for dispatched and beyond)
-    if (['Dispatched', 'In_Transit', 'Out_for_Delivery', 'Delivered'].includes(challan.status)) {
+    // Track action (for dispatched and delivered)
+    if (['Dispatched', 'Delivered'].includes(challan.status)) {
       actions.push({ type: 'track', label: 'Track', color: 'purple' });
     }
     

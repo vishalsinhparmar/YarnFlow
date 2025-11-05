@@ -9,7 +9,11 @@ import {
   getSalesChallanStats,
   getChallansBySalesOrder,
   trackChallan,
-  getDispatchedQuantities
+  getDispatchedQuantities,
+  generateChallanPDF,
+  previewChallanPDF,
+  generateSOConsolidatedPDF,
+  previewSOConsolidatedPDF
 } from '../controller/salesChallanController.js';
 
 import {
@@ -43,5 +47,13 @@ router.delete('/:id', deleteSalesChallan);
 
 // Status Management
 router.patch('/:id/status', validateStatusUpdate, updateChallanStatus);
+
+// PDF Generation - Individual Challan
+router.get('/:id/pdf/download', generateChallanPDF);  // Download PDF
+router.get('/:id/pdf/preview', previewChallanPDF);    // Preview PDF in browser
+
+// PDF Generation - Consolidated SO (All Challans)
+router.get('/so/:soId/pdf/download', generateSOConsolidatedPDF);  // Download consolidated PDF
+router.get('/so/:soId/pdf/preview', previewSOConsolidatedPDF);    // Preview consolidated PDF
 
 export default router;

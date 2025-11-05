@@ -1,6 +1,7 @@
 import Customer from '../models/Customer.js';
 import Supplier from '../models/Supplier.js';
 import Category from '../models/Category.js';
+import Product from '../models/Product.js';
 import PurchaseOrder from '../models/PurchaseOrder.js';
 import GoodsReceiptNote from '../models/GoodsReceiptNote.js';
 import InventoryLot from '../models/InventoryLot.js';
@@ -28,6 +29,7 @@ export const getDashboardStats = async (req, res) => {
       totalCustomers,
       totalSuppliers,
       totalCategories,
+      totalProducts,
       
       // Purchase Orders
       totalPurchaseOrders,
@@ -67,6 +69,7 @@ export const getDashboardStats = async (req, res) => {
       Customer.countDocuments(),
       Supplier.countDocuments(),
       Category.countDocuments(),
+      Product.countDocuments(),
       
       // Purchase Orders
       PurchaseOrder.countDocuments(),
@@ -297,6 +300,7 @@ export const getDashboardStats = async (req, res) => {
         totalCustomers,
         totalSuppliers,
         totalCategories,
+        totalProducts,
         activePOs: realStats.purchaseOrders.active,
         pendingGRNs: realStats.grn.pending,
         lowStockItems: realStats.inventory.lowStock
@@ -336,6 +340,7 @@ export const getDashboardStats = async (req, res) => {
         totalCustomers: 0,
         totalSuppliers: 0,
         totalCategories: 0,
+        totalProducts: 0,
         activePOs: 0,
         pendingGRNs: 0,
         lowStockItems: 0

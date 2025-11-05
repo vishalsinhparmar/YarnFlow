@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { salesChallanUtils } from '../../services/salesChallanAPI';
 import { salesOrderAPI } from '../../services/salesOrderAPI';
 
-const ChallanDetailModal = ({ isOpen, onClose, challan, onStatusUpdate }) => {
+const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
   const [soData, setSOData] = useState(null);
   const [loading, setLoading] = useState(false);
   
@@ -305,32 +305,12 @@ const ChallanDetailModal = ({ isOpen, onClose, challan, onStatusUpdate }) => {
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end space-x-4">
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Close
-          </button>
-          
-          {salesChallanUtils.canUpdate(challan.status) && (
-            <button
-              onClick={() => {
-                onClose();
-                // This would trigger the status update modal
-                // The parent component handles this logic
-              }}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-md"
-            >
-              Update Status
-            </button>
-          )}
-          
-          <button
-            onClick={() => window.print()}
-            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md"
-          >
-            Print
           </button>
         </div>
       </div>

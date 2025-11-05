@@ -44,7 +44,7 @@ const salesOrderSchema = new mongoose.Schema({
   },
   expectedDeliveryDate: {
     type: Date,
-    required: true
+    required: false
   },
   actualDeliveryDate: {
     type: Date

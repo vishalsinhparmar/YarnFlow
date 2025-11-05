@@ -49,8 +49,7 @@ const Dashboard = () => {
     );
   }
 
-  const workflowMetrics = dashboardData?.workflowMetrics || {};
-  const keyMetrics = dashboardData?.keyMetrics || {};
+  const summary = dashboardData?.summary || {};
   const recentActivity = dashboardData?.recentActivity || [];
 
   return (
@@ -61,10 +60,10 @@ const Dashboard = () => {
         <p className="text-gray-600">Complete Textile Supply Chain Management Overview</p>
       </div>
 
-      {/* Workflow Process Flow */}
+      {/* Master Data Statistics */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">Supply Chain Workflow</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Master Data Overview</h2>
           {lastUpdated && (
             <div className="flex items-center text-xs text-gray-500">
               <span className="mr-1">🕒</span>
@@ -72,160 +71,64 @@ const Dashboard = () => {
             </div>
           )}
         </div>
-        <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-4">
-          
-          {/* Supplier */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center mb-2">
-              <span className="text-purple-600 text-xl">🏭</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Supplier</p>
-            <p className="text-xs text-gray-500">{dashboardUtils.formatNumber(workflowMetrics.suppliers || 0)} Active</p>
-          </div>
-          
-          <div className="text-gray-400">→</div>
-          
-          {/* Purchase Order */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-lg flex items-center justify-center mb-2">
-              <span className="text-blue-600 text-xl">🛒</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Purchase Order</p>
-            <p className="text-xs text-gray-500">{dashboardUtils.formatNumber(workflowMetrics.purchaseOrders || 0)} Active</p>
-          </div>
-          
-          <div className="text-gray-400">→</div>
-          
-          {/* GRN */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 bg-green-100 rounded-lg flex items-center justify-center mb-2">
-              <span className="text-green-600 text-xl">📋</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Goods Receipt</p>
-            <p className="text-xs text-gray-500">{dashboardUtils.formatNumber(workflowMetrics.goodsReceipt || 0)} Processed</p>
-          </div>
-          
-          <div className="text-gray-400">→</div>
-          
-          {/* Inventory */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 bg-yellow-100 rounded-lg flex items-center justify-center mb-2">
-              <span className="text-yellow-600 text-xl">📦</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Inventory Lots</p>
-            <p className="text-xs text-gray-500">{dashboardUtils.formatNumber(workflowMetrics.inventoryLots || 0)} Bags</p>
-          </div>
-          
-          <div className="text-gray-400">→</div>
-          
-          {/* Sales Order */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 bg-indigo-100 rounded-lg flex items-center justify-center mb-2">
-              <span className="text-indigo-600 text-xl">📄</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Sales Order</p>
-            <p className="text-xs text-gray-500">{dashboardUtils.formatNumber(workflowMetrics.salesOrders || 0)} Orders</p>
-          </div>
-          
-          <div className="text-gray-400">→</div>
-          
-          {/* Sales Challan */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 bg-teal-100 rounded-lg flex items-center justify-center mb-2">
-              <span className="text-teal-600 text-xl">🚚</span>
-            </div>
-            <p className="text-sm font-medium text-gray-900">Sales Challan</p>
-            <p className="text-xs text-gray-500">{dashboardUtils.formatNumber(workflowMetrics.salesChallans || 0)} Dispatched</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Inventory</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {dashboardUtils.formatNumber(keyMetrics.totalInventory?.value || 0)}
-              </p>
-              <div className="flex items-center space-x-2">
-                <p className="text-xs text-gray-500">{keyMetrics.totalInventory?.unit || 'Bags/Rolls'}</p>
-                {keyMetrics.totalInventory?.change && (
-                  <span className={`text-xs ${dashboardUtils.getTrendColor(keyMetrics.totalInventory.trend)}`}>
-                    {keyMetrics.totalInventory.change}
-                  </span>
-                )}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Total Categories */}
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-purple-600 mb-1">Total Categories</p>
+                <p className="text-3xl font-bold text-purple-900">
+                  {dashboardUtils.formatNumber(summary.totalCategories || 0)}
+                </p>
+              </div>
+              <div className="w-14 h-14 bg-purple-200 rounded-full flex items-center justify-center">
+                <span className="text-purple-700 text-2xl">📁</span>
               </div>
             </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <span className="text-yellow-600 text-xl">📦</span>
-            </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Cotton Yarn Stock</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {dashboardUtils.formatNumber(keyMetrics.cottonYarnStock?.value || 0)}
-              </p>
-              <div className="flex items-center space-x-2">
-                <p className="text-xs text-gray-500">{keyMetrics.cottonYarnStock?.unit || 'Bags Available'}</p>
-                {keyMetrics.cottonYarnStock?.change && (
-                  <span className={`text-xs ${dashboardUtils.getTrendColor(keyMetrics.cottonYarnStock.trend)}`}>
-                    {keyMetrics.cottonYarnStock.change}
-                  </span>
-                )}
+          {/* Total Products */}
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-600 mb-1">Total Products</p>
+                <p className="text-3xl font-bold text-blue-900">
+                  {dashboardUtils.formatNumber(summary.totalProducts || 0)}
+                </p>
+              </div>
+              <div className="w-14 h-14 bg-blue-200 rounded-full flex items-center justify-center">
+                <span className="text-blue-700 text-2xl">📦</span>
               </div>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">🧶</span>
-            </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Polyester Rolls</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {dashboardUtils.formatNumber(keyMetrics.polyesterRolls?.value || 0)}
-              </p>
-              <div className="flex items-center space-x-2">
-                <p className="text-xs text-gray-500">{keyMetrics.polyesterRolls?.unit || 'Rolls in Stock'}</p>
-                {keyMetrics.polyesterRolls?.change && (
-                  <span className={`text-xs ${dashboardUtils.getTrendColor(keyMetrics.polyesterRolls.trend)}`}>
-                    {keyMetrics.polyesterRolls.change}
-                  </span>
-                )}
+          {/* Total Suppliers */}
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-green-600 mb-1">Total Suppliers</p>
+                <p className="text-3xl font-bold text-green-900">
+                  {dashboardUtils.formatNumber(summary.totalSuppliers || 0)}
+                </p>
+              </div>
+              <div className="w-14 h-14 bg-green-200 rounded-full flex items-center justify-center">
+                <span className="text-green-700 text-2xl">🏭</span>
               </div>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-blue-600 text-xl">🎯</span>
-            </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Monthly Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {dashboardUtils.formatCurrency(keyMetrics.monthlyRevenue?.value || 0)}
-              </p>
-              <div className="flex items-center space-x-2">
-                <p className="text-xs text-gray-500">{keyMetrics.monthlyRevenue?.unit || 'This Month'}</p>
-                {keyMetrics.monthlyRevenue?.change && (
-                  <span className={`text-xs ${dashboardUtils.getTrendColor(keyMetrics.monthlyRevenue.trend)}`}>
-                    {keyMetrics.monthlyRevenue.change}
-                  </span>
-                )}
+          {/* Total Customers */}
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-orange-600 mb-1">Total Customers</p>
+                <p className="text-3xl font-bold text-orange-900">
+                  {dashboardUtils.formatNumber(summary.totalCustomers || 0)}
+                </p>
               </div>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-purple-600 text-xl">💰</span>
+              <div className="w-14 h-14 bg-orange-200 rounded-full flex items-center justify-center">
+                <span className="text-orange-700 text-2xl">👥</span>
+              </div>
             </div>
           </div>
         </div>

@@ -383,69 +383,6 @@ export const updatePurchaseOrderStatus = async (req, res) => {
   }
 };
 
-// Receive items (Goods Receipt)
-export const receiveItems = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { receivedItems, notes } = req.body;
-    
-    const purchaseOrder = await PurchaseOrder.findById(id);
-    if (!purchaseOrder) {
-      return res.status(404).json({
-        success: false,
-        message: 'Purchase order not found'
-      });
-    }
-    
-    // Update received quantities
-    receivedItems.forEach(receivedItem => {
-      const poItem = purchaseOrder.items.id(receivedItem.itemId);
-      if (poItem) {
-        poItem.receivedQuantity = Math.min(
-          (poItem.receivedQuantity || 0) + receivedItem.quantity,
-          poItem.quantity
-        );
-      }
-    });
-    
-    if (notes) {
-      purchaseOrder.notes = purchaseOrder.notes ? 
-        `${purchaseOrder.notes}\n\nGoods Receipt: ${notes}` : 
-        `Goods Receipt: ${notes}`;
-    }
-    
-    await purchaseOrder.save(); // This will trigger the pre-save hook to update status
-    
-    // Update product inventory
-    for (const receivedItem of receivedItems) {
-      const poItem = purchaseOrder.items.id(receivedItem.itemId);
-      if (poItem) {
-        await Product.findByIdAndUpdate(
-          poItem.product,
-          { $inc: { 'inventory.currentStock': receivedItem.quantity } }
-        );
-      }
-    }
-    
-    const updatedPO = await PurchaseOrder.findById(id)
-      .populate('supplier', 'companyName supplierCode contactPerson phone')
-      .populate('items.product', 'productName productCode specifications');
-    
-    res.status(200).json({
-      success: true,
-      message: 'Items received successfully',
-      data: updatedPO
-    });
-  } catch (error) {
-    console.error('Error receiving items:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to receive items',
-      error: error.message
-    });
-  }
-};
-
 // Get PO statistics
 export const getPurchaseOrderStats = async (req, res) => {
   try {

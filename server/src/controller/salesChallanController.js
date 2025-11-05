@@ -1,8 +1,8 @@
 import SalesChallan from '../models/SalesChallan.js';
 import SalesOrder from '../models/SalesOrder.js';
-import Customer from '../models/Customer.js';
-import Product from '../models/Product.js';
 import InventoryLot from '../models/InventoryLot.js';
+import Product from '../models/Product.js';
+import { generateSalesChallanPDF, generateSalesOrderConsolidatedPDF } from '../utils/pdfGenerator.js';
 
 // ============ HELPER FUNCTIONS ============
 
@@ -54,76 +54,60 @@ export const getAllSalesChallans = async (req, res) => {
     const { 
       page = 1, 
       limit = 10, 
-      search, 
-      status, 
-      customer,
-      dateFrom,
-      dateTo,
-      soReference 
+      search
     } = req.query;
+    
+    // Validate and cap limit to prevent memory issues
+    const validatedLimit = Math.min(parseInt(limit) || 10, 200); // Max 200 items per request
+    const validatedPage = Math.max(parseInt(page) || 1, 1);
     
     let query = {};
     
-    // Search functionality
-    if (search) {
+    // Search functionality with optimized regex
+    if (search && search.trim()) {
+      const searchTerm = search.trim();
       query.$or = [
-        { challanNumber: { $regex: search, $options: 'i' } },
-        { soReference: { $regex: search, $options: 'i' } },
-        { trackingNumber: { $regex: search, $options: 'i' } },
-        { 'customerDetails.companyName': { $regex: search, $options: 'i' } }
+        { challanNumber: { $regex: searchTerm, $options: 'i' } },
+        { soNumber: { $regex: searchTerm, $options: 'i' } },
+        { customerName: { $regex: searchTerm, $options: 'i' } }
       ];
     }
     
-    // Filter by status
-    if (status) {
-      query.status = status;
-    }
+    const skip = (validatedPage - 1) * validatedLimit;
     
-    // Filter by customer
-    if (customer) {
-      query.customer = customer;
-    }
-    
-    // Filter by SO reference
-    if (soReference) {
-      query.soReference = soReference;
-    }
-    
-    // Date range filter
-    if (dateFrom || dateTo) {
-      query.challanDate = {};
-      if (dateFrom) query.challanDate.$gte = new Date(dateFrom);
-      if (dateTo) query.challanDate.$lte = new Date(dateTo);
-    }
-    
-    const skip = (page - 1) * limit;
-    
-    const challans = await SalesChallan.find(query)
-      .populate('customer', 'companyName contactPerson email phone')
-      .populate('salesOrder', 'soNumber orderDate totalAmount status')
-      .populate('items.product', 'productName productCode')
-      .sort({ challanDate: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-    
-    const total = await SalesChallan.countDocuments(query);
+    // Execute queries in parallel for better performance
+    const [challans, total] = await Promise.all([
+      SalesChallan.find(query)
+        .populate('customer', 'companyName contactPerson email phone')
+        .populate('salesOrder', 'soNumber orderDate totalAmount status')
+        .populate('items.product', 'productName productCode')
+        .sort({ challanDate: -1 })
+        .skip(skip)
+        .limit(validatedLimit),
+      SalesChallan.countDocuments(query)
+    ]);
     
     res.status(200).json({
       success: true,
       data: challans,
       pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / limit),
+        currentPage: validatedPage,
+        totalPages: Math.ceil(total / validatedLimit),
         totalItems: total,
-        itemsPerPage: parseInt(limit)
+        itemsPerPage: validatedLimit,
+        hasNextPage: skip + validatedLimit < total,
+        hasPrevPage: validatedPage > 1
       }
     });
   } catch (error) {
     console.error('Error fetching sales challans:', error);
+    
+    // Don't expose internal errors in production
+    const isDevelopment = process.env.NODE_ENV === 'development';
     res.status(500).json({
       success: false,
       message: 'Failed to fetch sales challans',
-      error: error.message
+      error: isDevelopment ? error.message : 'Internal server error'
     });
   }
 };
@@ -514,11 +498,11 @@ export const updateSalesChallan = async (req, res) => {
       });
     }
     
-    // Don't allow updating delivered challans
-    if (challan.status === 'Delivered') {
+    // Don't allow updating delivered or cancelled challans
+    if (['Delivered', 'Cancelled'].includes(challan.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot modify delivered challan'
+        message: 'Cannot modify delivered or cancelled challan'
       });
     }
     
@@ -558,7 +542,7 @@ export const updateChallanStatus = async (req, res) => {
     const { id } = req.params;
     const { status, notes, location, updatedBy } = req.body;
     
-    const validStatuses = ['Prepared', 'Packed', 'Dispatched', 'In_Transit', 'Out_for_Delivery', 'Delivered', 'Returned', 'Cancelled'];
+    const validStatuses = ['Prepared', 'Dispatched', 'Delivered', 'Cancelled'];
     
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
@@ -650,11 +634,11 @@ export const deleteSalesChallan = async (req, res) => {
       });
     }
     
-    // Only allow deletion of prepared/packed challans
-    if (!['Prepared', 'Packed'].includes(challan.status)) {
+    // Only allow deletion of prepared challans
+    if (challan.status !== 'Prepared') {
       return res.status(400).json({
         success: false,
-        message: 'Only prepared or packed challans can be deleted'
+        message: 'Only prepared challans can be deleted'
       });
     }
     
@@ -773,6 +757,267 @@ export const trackChallan = async (req, res) => {
       success: false,
       message: 'Failed to track challan',
       error: error.message
+    });
+  }
+};
+
+// ============================================
+// GENERATE SALES CHALLAN PDF INVOICE
+// ============================================
+export const generateChallanPDF = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch complete challan data with all populated fields including customer address
+    const challan = await SalesChallan.findById(id)
+      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
+      .populate('items.product', 'productName productCode specifications');
+
+    if (!challan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sales challan not found'
+      });
+    }
+
+    // Company information (your company - the sender)
+    const companyInfo = {
+      name: process.env.COMPANY_NAME || 'YarnFlow',
+      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
+      city: process.env.COMPANY_CITY || 'City, State - 000000',
+      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
+      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
+      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
+    };
+
+    // Generate PDF buffer
+    const pdfBuffer = await generateSalesChallanPDF(challan.toObject(), companyInfo);
+
+    // Set response headers for PDF download
+    const filename = `Sales_Challan_${challan.challanNumber}.pdf`;
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    // Send PDF buffer
+    res.send(pdfBuffer);
+
+    console.log(`PDF generated successfully for challan: ${challan.challanNumber}`);
+
+  } catch (error) {
+    console.error('Error generating challan PDF:', error);
+    
+    // Don't expose internal errors in production
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate PDF',
+      error: isDevelopment ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// ============================================
+// GENERATE CONSOLIDATED PDF FOR SALES ORDER (All Challans)
+// ============================================
+export const generateSOConsolidatedPDF = async (req, res) => {
+  try {
+    const { soId } = req.params;
+
+    // Fetch all challans for this Sales Order
+    const challans = await SalesChallan.find({ salesOrder: soId })
+      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
+      .populate({
+        path: 'items.product',
+        select: 'productName productCode specifications category',
+        populate: {
+          path: 'category',
+          select: 'categoryName name' // Include both field names for compatibility
+        }
+      })
+      .sort({ challanDate: 1 }); // Sort by date
+
+    if (!challans || challans.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No challans found for this Sales Order'
+      });
+    }
+
+    // Company information (your company - the sender)
+    const companyInfo = {
+      name: process.env.COMPANY_NAME || 'YarnFlow',
+      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
+      city: process.env.COMPANY_CITY || 'City, State - 000000',
+      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
+      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
+      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
+    };
+
+    // Consolidate all challan data
+    const consolidatedData = {
+      salesOrder: challans[0].salesOrder,
+      customer: challans[0].customer,
+      customerDetails: challans[0].customerDetails,
+      challans: challans,
+      soNumber: challans[0].soReference || challans[0].salesOrder?.soNumber,
+      totalChallans: challans.length
+    };
+
+    // Generate consolidated PDF buffer
+    const pdfBuffer = await generateSalesOrderConsolidatedPDF(consolidatedData, companyInfo);
+
+    // Set response headers for download
+    const filename = `SO_${consolidatedData.soNumber}_Consolidated_${Date.now()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send PDF buffer
+    res.send(pdfBuffer);
+
+    console.log(`✅ Consolidated PDF generated for SO: ${consolidatedData.soNumber}`);
+  } catch (error) {
+    console.error('❌ Error generating consolidated PDF:', error);
+    res.status(500).json({
+      success: false,
+      message: process.env.NODE_ENV === 'production' 
+        ? 'Failed to generate consolidated PDF' 
+        : error.message
+    });
+  }
+};
+
+// ============================================
+// PREVIEW CONSOLIDATED PDF FOR SALES ORDER
+// ============================================
+export const previewSOConsolidatedPDF = async (req, res) => {
+  try {
+    const { soId } = req.params;
+
+    // Fetch all challans for this Sales Order
+    const challans = await SalesChallan.find({ salesOrder: soId })
+      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
+      .populate({
+        path: 'items.product',
+        select: 'productName productCode specifications category',
+        populate: {
+          path: 'category',
+          select: 'categoryName name' // Include both field names for compatibility
+        }
+      })
+      .sort({ challanDate: 1 });
+
+    if (!challans || challans.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No challans found for this Sales Order'
+      });
+    }
+
+    // Company information
+    const companyInfo = {
+      name: process.env.COMPANY_NAME || 'YarnFlow',
+      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
+      city: process.env.COMPANY_CITY || 'City, State - 000000',
+      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
+      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
+      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
+    };
+
+    // Consolidate data
+    const consolidatedData = {
+      salesOrder: challans[0].salesOrder,
+      customer: challans[0].customer,
+      customerDetails: challans[0].customerDetails,
+      challans: challans,
+      soNumber: challans[0].soReference || challans[0].salesOrder?.soNumber,
+      totalChallans: challans.length
+    };
+
+    // Generate PDF buffer
+    const pdfBuffer = await generateSalesOrderConsolidatedPDF(consolidatedData, companyInfo);
+
+    // Set headers for inline display
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send PDF buffer
+    res.send(pdfBuffer);
+
+    console.log(`✅ Consolidated PDF preview for SO: ${consolidatedData.soNumber}`);
+  } catch (error) {
+    console.error('❌ Error previewing consolidated PDF:', error);
+    res.status(500).json({
+      success: false,
+      message: process.env.NODE_ENV === 'production' 
+        ? 'Failed to preview consolidated PDF' 
+        : error.message
+    });
+  }
+};
+
+// ============================================
+// PREVIEW SALES CHALLAN PDF (Opens in browser)
+// ============================================
+export const previewChallanPDF = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch complete challan data with all populated fields including customer address
+    const challan = await SalesChallan.findById(id)
+      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
+      .populate('items.product', 'productName productCode specifications');
+
+    if (!challan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sales challan not found'
+      });
+    }
+
+    // Company information (your company - the sender)
+    const companyInfo = {
+      name: process.env.COMPANY_NAME || 'YarnFlow',
+      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
+      city: process.env.COMPANY_CITY || 'City, State - 000000',
+      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
+      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
+      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
+    };
+
+    // Generate PDF buffer
+    const pdfBuffer = await generateSalesChallanPDF(challan.toObject(), companyInfo);
+
+    // Set response headers for inline display (preview in browser)
+    const filename = `Sales_Challan_${challan.challanNumber}.pdf`;
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send PDF buffer
+    res.send(pdfBuffer);
+
+    console.log(`PDF preview generated for challan: ${challan.challanNumber}`);
+
+  } catch (error) {
+    console.error('Error previewing challan PDF:', error);
+    
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    res.status(500).json({
+      success: false,
+      message: 'Failed to preview PDF',
+      error: isDevelopment ? error.message : 'Internal server error'
     });
   }
 };

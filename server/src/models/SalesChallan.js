@@ -68,18 +68,18 @@ const salesChallanSchema = new mongoose.Schema({
     completionReason: { type: String },
     completedAt: { type: Date },
     
-    // Item status
+    // Item status (Simplified)
     itemStatus: {
       type: String,
-      enum: ['Prepared', 'Packed', 'Dispatched', 'Delivered'],
+      enum: ['Prepared', 'Dispatched', 'Delivered'],
       default: 'Prepared'
     }
   }],
   
-  // Status and Workflow
+  // Status and Workflow (Simplified)
   status: {
     type: String,
-    enum: ['Prepared', 'Packed', 'Dispatched', 'In_Transit', 'Delivered', 'Cancelled'],
+    enum: ['Prepared', 'Dispatched', 'Delivered', 'Cancelled'],
     default: 'Prepared',
     index: true
   },
@@ -88,7 +88,7 @@ const salesChallanSchema = new mongoose.Schema({
   statusHistory: [{
     status: {
       type: String,
-      enum: ['Prepared', 'Packed', 'Dispatched', 'In_Transit', 'Delivered', 'Cancelled']
+      enum: ['Prepared', 'Dispatched', 'Delivered', 'Cancelled']
     },
     timestamp: { type: Date, default: Date.now },
     updatedBy: String,
@@ -174,9 +174,9 @@ salesChallanSchema.statics.getStats = async function() {
         }
       }),
       
-      // In transit challans (Dispatched, In_Transit, Out_for_Delivery)
+      // In transit challans (Dispatched only)
       this.countDocuments({
-        status: { $in: ['Dispatched', 'In_Transit', 'Out_for_Delivery'] }
+        status: 'Dispatched'
       }),
       
       // Delivered this month
@@ -186,64 +186,89 @@ salesChallanSchema.statics.getStats = async function() {
           $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
           $lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
         }
-      }),
-      
-      // Monthly trends
-      this.aggregate([
-        {
-          $group: {
-            _id: {
-              month: { $month: '$challanDate' },
-              year: { $year: '$challanDate' }
-            },
-            challans: { $sum: 1 },
-            totalValue: { $sum: '$totalValue' }
-          }
-        },
-        { $sort: { '_id.year': 1, '_id.month': 1 } },
-        { $limit: 12 } // Last 12 months
-      ])
+      })
     ]);
     
-    const [totalChallans, statusBreakdown, thisMonth, inTransit, deliveredThisMonth, monthlyTrends] = stats;
+    const [totalChallans, statusBreakdown, thisMonth, inTransit, deliveredThisMonth] = stats;
     
     // Calculate Pending, Partial, Delivered stats based on item completion
-    const allChallans = await this.find({});
+    // Use aggregation for better performance with large datasets
+    const completionStats = await this.aggregate([
+      {
+        $project: {
+          items: 1,
+          completionStatus: {
+            $cond: {
+              if: { $eq: [{ $size: '$items' }, 0] },
+              then: 'pending',
+              else: {
+                $let: {
+                  vars: {
+                    allComplete: {
+                      $allElementsTrue: {
+                        $map: {
+                          input: '$items',
+                          as: 'item',
+                          in: {
+                            $or: [
+                              { $eq: ['$$item.manuallyCompleted', true] },
+                              { $gte: ['$$item.dispatchQuantity', '$$item.orderedQuantity'] }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    anyPartial: {
+                      $anyElementTrue: {
+                        $map: {
+                          input: '$items',
+                          as: 'item',
+                          in: {
+                            $and: [
+                              { $gt: ['$$item.dispatchQuantity', 0] },
+                              { $lt: ['$$item.dispatchQuantity', '$$item.orderedQuantity'] }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  in: {
+                    $cond: {
+                      if: '$$allComplete',
+                      then: 'completed',
+                      else: {
+                        $cond: {
+                          if: '$$anyPartial',
+                          then: 'partial',
+                          else: 'pending'
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$completionStatus',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Extract counts from aggregation result
     let pending = 0;
     let partial = 0;
     let completed = 0;
     
-    allChallans.forEach(challan => {
-      if (!challan.items || challan.items.length === 0) {
-        pending++;
-        return;
-      }
-      
-      let allItemsComplete = true;
-      let anyItemPartial = false;
-      
-      challan.items.forEach(item => {
-        const dispatched = item.dispatchQuantity || 0;
-        const ordered = item.orderedQuantity || 0;
-        const manuallyCompleted = item.manuallyCompleted || false;
-        
-        if (manuallyCompleted || dispatched >= ordered) {
-          // Item is complete
-        } else if (dispatched > 0 && dispatched < ordered) {
-          allItemsComplete = false;
-          anyItemPartial = true;
-        } else {
-          allItemsComplete = false;
-        }
-      });
-      
-      if (allItemsComplete) {
-        completed++;
-      } else if (anyItemPartial) {
-        partial++;
-      } else {
-        pending++;
-      }
+    completionStats.forEach(stat => {
+      if (stat._id === 'pending') pending = stat.count;
+      else if (stat._id === 'partial') partial = stat.count;
+      else if (stat._id === 'completed') completed = stat.count;
     });
     
     return {
@@ -256,8 +281,7 @@ salesChallanSchema.statics.getStats = async function() {
       statusBreakdown: statusBreakdown || [],
       pending: pending,
       partial: partial,
-      completed: completed,
-      monthlyTrends: monthlyTrends || []
+      completed: completed
     };
   } catch (error) {
     console.error('Error calculating stats:', error);
@@ -270,8 +294,8 @@ salesChallanSchema.statics.getStats = async function() {
       },
       statusBreakdown: [],
       pending: 0,
-      completed: 0,
-      monthlyTrends: []
+      partial: 0,
+      completed: 0
     };
   }
 };

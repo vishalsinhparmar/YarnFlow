@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { inventoryAPI, inventoryUtils } from '../../services/inventoryAPI';
+import { getWarehouseName } from '../../constants/warehouseLocations';
 
 const InventoryLotDetail = ({ isOpen, onClose, lot, onRefresh }) => {
   const [lotDetail, setLotDetail] = useState(null);
@@ -18,6 +19,11 @@ const InventoryLotDetail = ({ isOpen, onClose, lot, onRefresh }) => {
     try {
       const response = await inventoryAPI.getById(lot._id);
       if (response.success) {
+        console.log('📦 Fetched lot detail:', {
+          lotNumber: response.data.lotNumber,
+          warehouse: response.data.warehouse,
+          warehouseName: getWarehouseName(response.data.warehouse)
+        });
         setLotDetail(response.data);
       }
     } catch (error) {
@@ -50,6 +56,14 @@ const InventoryLotDetail = ({ isOpen, onClose, lot, onRefresh }) => {
   if (!isOpen || !lot) return null;
 
   const currentLot = lotDetail || lot;
+  
+  // Debug: Log warehouse data
+  console.log('🔍 InventoryLotDetail - Warehouse check:', {
+    lotPropWarehouse: lot.warehouse,
+    lotDetailWarehouse: lotDetail?.warehouse,
+    currentLotWarehouse: currentLot.warehouse,
+    warehouseName: getWarehouseName(currentLot.warehouse)
+  });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -226,7 +240,9 @@ const InventoryLotDetail = ({ isOpen, onClose, lot, onRefresh }) => {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Warehouse:</span>
-                          <span className="font-medium">{currentLot.warehouse || '-'}</span>
+                          <span className="font-medium text-purple-600">
+                            📍 {getWarehouseName(currentLot.warehouse)}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Location:</span>

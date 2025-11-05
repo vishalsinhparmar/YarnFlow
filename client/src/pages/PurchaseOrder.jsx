@@ -3,7 +3,6 @@ import { purchaseOrderAPI, poUtils } from '../services/purchaseOrderAPI';
 import Modal from '../components/model/Modal';
 import PurchaseOrderForm from '../components/PurchaseOrders/PurchaseOrderForm';
 import PurchaseOrderDetail from '../components/PurchaseOrders/PurchaseOrderDetail';
-import GoodsReceiptForm from '../components/GRN/GoodsReceiptForm';
 
 const PurchaseOrder = () => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -20,7 +19,6 @@ const PurchaseOrder = () => {
   // Modal states
   const [showCreatePO, setShowCreatePO] = useState(false);
   const [showPODetail, setShowPODetail] = useState(false);
-  const [showGoodsReceipt, setShowGoodsReceipt] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
   
   // Filters and search
@@ -121,22 +119,6 @@ const PurchaseOrder = () => {
     }
   };
 
-  // Handle goods receipt
-  const handleGoodsReceipt = async (poId, receivedItems, notes) => {
-    try {
-      await purchaseOrderAPI.receiveItems(poId, receivedItems, notes);
-      setShowGoodsReceipt(false);
-      fetchPurchaseOrders(currentPage, searchTerm, statusFilter);
-      fetchStats();
-      if (selectedPO && selectedPO._id === poId) {
-        const updatedPO = await purchaseOrderAPI.getById(poId);
-        setSelectedPO(updatedPO.data);
-      }
-    } catch (err) {
-      console.error('Error receiving goods:', err);
-      throw err;
-    }
-  };
 
   // View PO details
   const handleViewPO = async (po) => {
@@ -175,7 +157,7 @@ const PurchaseOrder = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -191,25 +173,13 @@ const PurchaseOrder = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {getStatusCount('Sent') + getStatusCount('Acknowledged')}
+              <p className="text-sm font-medium text-gray-600">Partially Received</p>
+              <p className="text-2xl font-bold text-orange-600">
+                {getStatusCount('Partially_Received')}
               </p>
             </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <span className="text-yellow-600 text-xl">⏳</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Approved</p>
-              <p className="text-2xl font-bold text-green-600">{getStatusCount('Approved')}</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">✅</span>
+            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+              <span className="text-orange-600 text-xl">📦</span>
             </div>
           </div>
         </div>
@@ -223,7 +193,7 @@ const PurchaseOrder = () => {
               </p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">📦</span>
+              <span className="text-green-600 text-xl">✅</span>
             </div>
           </div>
         </div>
@@ -249,12 +219,8 @@ const PurchaseOrder = () => {
             >
               <option value="">All Status</option>
               <option value="Draft">Draft</option>
-              <option value="Sent">Sent</option>
-              <option value="Acknowledged">Acknowledged</option>
-              <option value="Approved">Approved</option>
               <option value="Partially_Received">Partially Received</option>
               <option value="Fully_Received">Fully Received</option>
-              <option value="Cancelled">Cancelled</option>
             </select>
           </div>
         </div>
@@ -357,17 +323,6 @@ const PurchaseOrder = () => {
                             Approve
                           </button>
                         )}
-                        {['Approved', 'Partially_Received'].includes(po.status) && (
-                          <button 
-                            onClick={() => {
-                              setSelectedPO(po);
-                              setShowGoodsReceipt(true);
-                            }}
-                            className="text-purple-600 hover:text-purple-900"
-                          >
-                            Receive
-                          </button>
-                        )}
                       </td>
                     </tr>
                   ))
@@ -451,20 +406,6 @@ const PurchaseOrder = () => {
         </Modal>
       )}
 
-      {showGoodsReceipt && selectedPO && (
-        <Modal
-          isOpen={showGoodsReceipt}
-          onClose={() => setShowGoodsReceipt(false)}
-          title={`Goods Receipt - ${selectedPO.poNumber}`}
-          size="lg"
-        >
-          <GoodsReceiptForm
-            purchaseOrder={selectedPO}
-            onSubmit={handleGoodsReceipt}
-            onCancel={() => setShowGoodsReceipt(false)}
-          />
-        </Modal>
-      )}
     </div>
   );
 };

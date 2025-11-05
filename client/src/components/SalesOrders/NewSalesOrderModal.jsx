@@ -292,12 +292,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
         return;
       }
 
-      if (!formData.expectedDeliveryDate) {
-        setError('Please select expected delivery date');
-        setLoading(false);
-        return;
-      }
-
       if (!formData.category) {
         setError('Please select a category');
         setLoading(false);
@@ -333,7 +327,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
       // Prepare data for API
       const orderData = {
         customer: formData.customer,
-        expectedDeliveryDate: formData.expectedDeliveryDate,
         category: formData.category,
         items: formData.items.map(item => {
           const selectedProduct = inventoryProducts.find(p => p._id === item.product);
@@ -348,6 +341,11 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
         }),
         notes: formData.notes || ''
       };
+
+      // Only include expectedDeliveryDate if it has a value
+      if (formData.expectedDeliveryDate) {
+        orderData.expectedDeliveryDate = formData.expectedDeliveryDate;
+      }
 
       console.log('Submitting order data:', orderData);
 
@@ -453,14 +451,13 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Expected Delivery Date *
+                Expected Delivery Date
               </label>
               <input
                 type="date"
                 name="expectedDeliveryDate"
                 value={formData.expectedDeliveryDate}
                 onChange={handleInputChange}
-                required
                 min={new Date().toISOString().split('T')[0]}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
