@@ -73,6 +73,13 @@ const salesChallanSchema = new mongoose.Schema({
       type: String,
       enum: ['Prepared', 'Dispatched', 'Delivered'],
       default: 'Prepared'
+    },
+    
+    // Item-specific notes (from Sales Order)
+    notes: {
+      type: String,
+      default: '',
+      trim: true
     }
   }],
   
@@ -95,9 +102,6 @@ const salesChallanSchema = new mongoose.Schema({
     notes: String
   }],
   
-  // Notes
-  notes: String,
-  
   // System Fields
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
@@ -117,22 +121,11 @@ salesChallanSchema.pre('save', async function(next) {
   try {
     // Generate challan number for new documents
     if (this.isNew && !this.challanNumber) {
-      // Generate challan number: CH202410001
-      const year = new Date().getFullYear();
-      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+      // Count total challans to get next number
+      const count = await this.constructor.countDocuments({});
       
-      // Find the last challan number for this month
-      const lastChallan = await this.constructor.findOne({
-        challanNumber: new RegExp(`^CH${year}${month}`)
-      }).sort({ challanNumber: -1 });
-      
-      let nextNumber = 1;
-      if (lastChallan) {
-        const lastNumber = parseInt(lastChallan.challanNumber.slice(-4));
-        nextNumber = lastNumber + 1;
-      }
-      
-      this.challanNumber = `CH${year}${month}${String(nextNumber).padStart(4, '0')}`;
+      // Generate challan number: PKRK/SC/01, PKRK/SC/02, etc.
+      this.challanNumber = `PKRK/SC/${String(count + 1).padStart(2, '0')}`;
     }
     
     // Add status history for status changes

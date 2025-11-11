@@ -157,7 +157,8 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             weight: remainingWeight, // Proportional weight for remaining quantity
             totalSOWeight: totalWeight, // Store total SO weight for reference
             weightPerUnit: weightPerUnit, // Store weight per unit for calculations
-            markAsComplete: false
+            markAsComplete: false,
+            notes: item.notes || ''  // Include notes from Sales Order item
           };
         }) || [];
 
@@ -656,7 +657,11 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                         {/* Product */}
                         <div className="col-span-2">
                           <div className="font-medium text-gray-900 text-sm">{item.productName}</div>
-                          <div className="text-xs text-gray-500">{item.productCode}</div>
+                          {item.notes && (
+                            <div className="text-xs text-blue-600 italic mt-1 bg-blue-50 px-2 py-1 rounded inline-block">
+                              📝 {item.notes}
+                            </div>
+                          )}
                         </div>
 
                         {/* Warehouse */}

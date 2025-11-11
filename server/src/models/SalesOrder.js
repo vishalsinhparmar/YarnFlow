@@ -92,11 +92,15 @@ const salesOrderSchema = new mongoose.Schema({
       type: String,
       enum: ['Pending', 'Reserved', 'Processing', 'Shipped', 'Delivered', 'Cancelled'],
       default: 'Pending'
+    },
+    
+    // Item-specific notes
+    notes: {
+      type: String,
+      default: '',
+      trim: true
     }
   }],
-
-  // Notes (simplified - single field)
-  notes: { type: String, default: '' },
 
   // Financial Information
   totalAmount: { type: Number, default: 0, min: 0 },
@@ -317,21 +321,11 @@ salesOrderSchema.methods.updateDispatchStatus = function(challans) {
 
 // Static method to generate SO number
 salesOrderSchema.statics.generateSONumber = async function() {
-  const currentYear = new Date().getFullYear();
-  const prefix = `SO${currentYear}`;
+  // Count total SOs to get next number
+  const count = await this.countDocuments({});
   
-  // Find the last SO number for current year
-  const lastOrder = await this.findOne({
-    soNumber: { $regex: `^${prefix}` }
-  }).sort({ soNumber: -1 });
-  
-  let nextNumber = 1;
-  if (lastOrder) {
-    const lastNumber = parseInt(lastOrder.soNumber.replace(prefix, ''));
-    nextNumber = lastNumber + 1;
-  }
-  
-  return `${prefix}${String(nextNumber).padStart(6, '0')}`;
+  // Generate SO number: PKRK/SO/01, PKRK/SO/02, etc.
+  return `PKRK/SO/${String(count + 1).padStart(2, '0')}`;
 };
 
 // Static method to get order statistics

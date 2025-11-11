@@ -180,7 +180,8 @@ export const createSalesOrder = async (req, res) => {
         productCode: product.productCode,
         quantity: item.quantity,
         unit: item.unit,
-        weight: item.weight || 0
+        weight: item.weight || 0,
+        notes: item.notes || ''  // ✅ Include notes from request
       });
     }
 

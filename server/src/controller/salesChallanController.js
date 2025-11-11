@@ -238,21 +238,25 @@ export const createSalesChallan = async (req, res) => {
       customerName: so.customer.companyName || so.customer.name || 'Unknown',
       warehouseLocation,
       expectedDeliveryDate: expectedDeliveryDate || null,
-      items: items.map(item => ({
-        salesOrderItem: item.salesOrderItem,
-        product: item.product,
-        productName: item.productName,
-        productCode: item.productCode,
-        orderedQuantity: item.orderedQuantity,
-        dispatchQuantity: item.dispatchQuantity,
-        unit: item.unit,
-        weight: item.weight || 0,
-        // Manual completion support (like GRN)
-        manuallyCompleted: item.markAsComplete || false,
-        completionReason: item.markAsComplete ? 'Marked as complete by user (losses/damages accepted)' : '',
-        completedAt: item.markAsComplete ? new Date() : null
-      })),
-      notes: notes || '',
+      items: items.map(item => {
+        // Find corresponding SO item to get notes
+        const soItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
+        return {
+          salesOrderItem: item.salesOrderItem,
+          product: item.product,
+          productName: item.productName,
+          productCode: item.productCode,
+          orderedQuantity: item.orderedQuantity,
+          dispatchQuantity: item.dispatchQuantity,
+          unit: item.unit,
+          weight: item.weight || 0,
+          notes: soItem?.notes || '',  // ✅ Carry forward notes from SO
+          // Manual completion support (like GRN)
+          manuallyCompleted: item.markAsComplete || false,
+          completionReason: item.markAsComplete ? 'Marked as complete by user (losses/damages accepted)' : '',
+          completedAt: item.markAsComplete ? new Date() : null
+        };
+      }),
       createdBy: createdBy || 'Admin',
       status: 'Prepared'
     };

@@ -9,8 +9,8 @@ export const WAREHOUSE_LOCATIONS = [
     type: 'Shop'
   },
   {
-    id: 'maryadpatti-godown',
-    name: 'Maryadpatti - Godown',
+    id: 'godown-maryadpatti',
+    name: 'Godown -Maryadpatti',
     code: 'MYD-GDN',
     type: 'Godown'
   },
