@@ -15,9 +15,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
       quantity: '',
       unit: '',
       weight: '',
-      availableStock: 0
-    }],
-    notes: ''
+      availableStock: 0,
+      notes: ''
+    }]
   });
 
   const [customers, setCustomers] = useState([]);
@@ -44,9 +44,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
             quantity: '',
             unit: '',
             weight: '',
-            availableStock: 0
-          }],
-          notes: ''
+            availableStock: 0,
+            notes: ''
+          }]
         });
       }
       
@@ -63,9 +63,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
             quantity: item.quantity || '',
             unit: item.unit || '',
             weight: item.weight || '',
-            availableStock: 0
-          })),
-          notes: order.notes || ''
+            availableStock: 0,
+            notes: item.notes || ''
+          }))
         });
         
         // Load inventory for the existing category
@@ -250,7 +250,8 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
           quantity: '',
           unit: '',
           weight: '',
-          availableStock: 0
+          availableStock: 0,
+          notes: ''
         }
       ]
     }));
@@ -336,10 +337,10 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
             productCode: selectedProduct?.productCode || 'UNKNOWN',
             quantity: parseFloat(item.quantity),
             unit: item.unit,
-            weight: parseFloat(item.weight || 0)
+            weight: parseFloat(item.weight || 0),
+            notes: item.notes || ''
           };
-        }),
-        notes: formData.notes || ''
+        })
       };
 
       // Only include expectedDeliveryDate if it has a value
@@ -385,14 +386,28 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative">
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50 rounded-lg">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
+              <p className="text-lg font-semibold text-gray-700">
+                {order ? 'Updating' : 'Creating'} Sales Order...
+              </p>
+              <p className="text-sm text-gray-500 mt-2">Please wait</p>
+            </div>
+          </div>
+        )}
+
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">
             {order ? 'Update Sales Order' : 'New Sales Order'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            disabled={loading}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className="sr-only">Close</span>
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -598,27 +613,29 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                       )}
                     </div>
                   </div>
+
+                  {/* Item Notes - NEW */}
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Item Notes
+                    </label>
+                    <textarea
+                      value={item.notes || ''}
+                      onChange={(e) => handleItemChange(index, 'notes', e.target.value)}
+                      placeholder="Special instructions for this item (optional)"
+                      rows="2"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      📝 These notes will appear on the challan and PDF
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
 
-
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Notes
-            </label>
-            <textarea
-              name="notes"
-              value={formData.notes}
-              onChange={handleInputChange}
-              rows="3"
-              placeholder="Order notes..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
 
           {/* Form Actions */}
           <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">

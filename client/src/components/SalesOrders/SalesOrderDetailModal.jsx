@@ -136,6 +136,11 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-gray-900">{item.productName || 'N/A'}</div>
                           <div className="text-sm text-gray-500">{item.productCode || ''}</div>
+                          {item.notes && (
+                            <div className="text-xs text-blue-600 italic bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
+                              📝 {item.notes}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-base text-gray-900">{item.quantity} {item.unit || 'Bags'}</div>
@@ -191,14 +196,6 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
               </table>
             </div>
           </div>
-
-          {/* Notes */}
-          {order.notes && (
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Notes</h3>
-              <p className="text-sm text-gray-700">{order.notes}</p>
-            </div>
-          )}
         </div>
 
         {/* Footer */}

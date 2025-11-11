@@ -12,10 +12,10 @@ import fs from 'fs';
 export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => {
   return new Promise((resolve, reject) => {
     try {
-      // Create a new PDF document
+      // Create a new PDF document - A6 size
       const doc = new PDFDocument({
-        size: 'A4',
-        margin: 50,
+        size: [298, 420], // A6: 105mm x 148mm
+        margin: 18,
         bufferPages: true
       });
 
@@ -38,373 +38,232 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
       };
 
       // Page dimensions
-      const pageWidth = doc.page.width;
-      const pageHeight = doc.page.height;
-      const margin = 50;
-      const contentWidth = pageWidth - (2 * margin);
-
-      // ============================================
-      // HEADER SECTION - Company Details
-      // ============================================
+      const margin = 18;
+      const pageWidth = 298;
+      const pageHeight = 420;
+      const contentWidth = 262;
       let yPosition = margin;
 
-      // Company Name (Large, Bold)
-      doc.fontSize(24)
+      // HEADER - Clean and readable
+      doc.fontSize(12)
          .font('Helvetica-Bold')
          .fillColor('#1a1a1a')
-         .text(company.name, margin, yPosition, { align: 'center' });
-      
-      yPosition += 30;
+         .text(company.name, margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 14;
 
-      // Company Address & Contact
-      doc.fontSize(9)
+      doc.fontSize(7)
          .font('Helvetica')
-         .fillColor('#4a4a4a')
-         .text(company.address, margin, yPosition, { align: 'center' });
-      
-      yPosition += 12;
-      
-      doc.text(`${company.city} | Phone: ${company.phone} | Email: ${company.email}`, 
-               margin, yPosition, { align: 'center' });
-      
-      yPosition += 12;
-      
-      if (company.gstin) {
-        doc.text(company.gstin, margin, yPosition, { align: 'center' });
-        yPosition += 15;
-      }
+         .fillColor('#666')
+         .text(`${company.city} | ${company.phone}`, margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 10;
 
-      // Horizontal line after header
-      yPosition += 5;
-      doc.moveTo(margin, yPosition)
-         .lineTo(pageWidth - margin, yPosition)
-         .strokeColor('#cccccc')
-         .lineWidth(1)
-         .stroke();
-      
-      yPosition += 20;
-
-      // ============================================
-      // DOCUMENT TITLE
-      // ============================================
-      doc.fontSize(18)
+      doc.fontSize(10)
          .font('Helvetica-Bold')
          .fillColor('#0891b2')
-         .text('DELIVERY CHALLAN', margin, yPosition, { align: 'center' });
-      
-      yPosition += 30;
-
-      // ============================================
-      // CHALLAN INFO & CUSTOMER INFO (Two Columns)
-      // ============================================
-      const leftColumnX = margin;
-      const rightColumnX = pageWidth / 2 + 10;
-      const columnStartY = yPosition;
-
-      // LEFT COLUMN - Challan Details
-      doc.fontSize(10)
-         .font('Helvetica-Bold')
-         .fillColor('#1a1a1a')
-         .text('Challan Details:', leftColumnX, yPosition);
-      
+         .text('DELIVERY CHALLAN', margin, yPosition, { align: 'center', width: contentWidth });
       yPosition += 15;
 
-      const challanDetails = [
-        { label: 'Challan No:', value: challanData.challanNumber || 'N/A' },
-        { label: 'Date:', value: formatDate(challanData.challanDate) },
-        { label: 'SO Reference:', value: challanData.soReference || challanData.salesOrder?.soNumber || 'N/A' },
-        { label: 'Warehouse:', value: challanData.warehouseLocation || 'N/A' },
-        { label: 'Status:', value: challanData.status || 'Prepared' }
-      ];
+      // Line separator
+      doc.moveTo(margin, yPosition)
+         .lineTo(margin + contentWidth, yPosition)
+         .strokeColor('#ddd')
+         .lineWidth(0.5)
+         .stroke();
+      yPosition += 8;
 
-      doc.fontSize(9).font('Helvetica');
-      challanDetails.forEach(detail => {
-        doc.fillColor('#4a4a4a')
-           .text(detail.label, leftColumnX, yPosition, { width: 90, continued: false });
-        doc.fillColor('#1a1a1a')
-           .text(detail.value, leftColumnX + 95, yPosition, { width: 150 });
-        yPosition += 14;
-      });
+      // DETAILS - Boxed layout with borders
+      const detailsBoxHeight = 42;
+      const leftCol = margin + 3;
+      const rightCol = margin + 133;
+      const startY = yPosition;
 
-      // RIGHT COLUMN - Customer Details (Delivery Address)
-      yPosition = columnStartY;
-      
-      doc.fontSize(10)
+      // Draw details box
+      doc.rect(margin, yPosition, contentWidth, detailsBoxHeight)
+         .strokeColor('#d1d5db')
+         .lineWidth(0.5)
+         .stroke();
+
+      // Vertical divider between left and right
+      doc.moveTo(rightCol - 3, yPosition)
+         .lineTo(rightCol - 3, yPosition + detailsBoxHeight)
+         .strokeColor('#d1d5db')
+         .lineWidth(0.5)
+         .stroke();
+
+      yPosition += 5;
+
+      // Left: Challan Details
+      doc.fontSize(6.5)
          .font('Helvetica-Bold')
-         .fillColor('#1a1a1a')
-         .text('Delivery To:', rightColumnX, yPosition);
+         .fillColor('#333')
+         .text('Challan No:', leftCol, yPosition);
+      yPosition += 9;
+      doc.fontSize(7.5)
+         .font('Helvetica-Bold')
+         .fillColor('#000')
+         .text(challanData.challanNumber || 'N/A', leftCol, yPosition);
+      yPosition += 11;
       
-      yPosition += 15;
+      doc.fontSize(6.5)
+         .font('Helvetica-Bold')
+         .fillColor('#333')
+         .text('Date:', leftCol, yPosition);
+      yPosition += 9;
+      doc.fontSize(7)
+         .font('Helvetica')
+         .fillColor('#000')
+         .text(formatDate(challanData.challanDate), leftCol, yPosition);
 
+      // Right: Customer Details
+      yPosition = startY + 5;
       const customerInfo = challanData.customerDetails || {};
       const customerAddress = challanData.customer?.address || {};
       
-      // Company Name
-      doc.fontSize(9)
+      doc.fontSize(6.5)
          .font('Helvetica-Bold')
-         .fillColor('#1a1a1a')
-         .text(customerInfo.companyName || challanData.customerName || 'N/A', 
-               rightColumnX, yPosition, { width: 200 });
-      yPosition += 14;
-
-      // Address
-      if (customerAddress.street || customerAddress.city) {
-        doc.font('Helvetica').fillColor('#4a4a4a');
-        
-        if (customerAddress.street) {
-          doc.text(customerAddress.street, rightColumnX, yPosition, { width: 200 });
-          yPosition += 12;
-        }
-        
-        const cityLine = [
-          customerAddress.city,
-          customerAddress.state,
-          customerAddress.pincode
-        ].filter(Boolean).join(', ');
-        
-        if (cityLine) {
-          doc.text(cityLine, rightColumnX, yPosition, { width: 200 });
-          yPosition += 12;
-        }
-        
-        if (customerAddress.country) {
-          doc.text(customerAddress.country, rightColumnX, yPosition, { width: 200 });
-          yPosition += 14;
-        }
+         .fillColor('#333')
+         .text('Delivery To:', rightCol, yPosition);
+      yPosition += 9;
+      doc.fontSize(7.5)
+         .font('Helvetica-Bold')
+         .fillColor('#000')
+         .text(customerInfo.companyName || challanData.customerName || 'N/A', rightCol, yPosition, { width: 126 });
+      yPosition += 9;
+      
+      const cityLine = [customerAddress.city, customerAddress.state].filter(Boolean).join(', ');
+      if (cityLine) {
+        doc.fontSize(6.5)
+           .font('Helvetica')
+           .fillColor('#666')
+           .text(cityLine, rightCol, yPosition, { width: 126 });
       }
 
-      // Contact Details
-      doc.fontSize(9).font('Helvetica');
-      const contactDetails = [
-        { label: 'Contact:', value: customerInfo.contactPerson || 'N/A' },
-        { label: 'Phone:', value: customerInfo.phone || 'N/A' },
-        { label: 'Email:', value: customerInfo.email || 'N/A' }
-      ];
-
-      contactDetails.forEach(detail => {
-        doc.fillColor('#4a4a4a')
-           .text(detail.label, rightColumnX, yPosition, { width: 60, continued: false });
-        doc.fillColor('#1a1a1a')
-           .text(detail.value, rightColumnX + 65, yPosition, { width: 135 });
-        yPosition += 12;
-      });
-
-      // Move to next section
-      yPosition = Math.max(yPosition, columnStartY + 90) + 20;
-
-      // ============================================
-      // ITEMS TABLE
-      // ============================================
+      yPosition = startY + detailsBoxHeight;
       
-      // Table Header Background
-      doc.rect(margin, yPosition, contentWidth, 25)
-         .fillColor('#0891b2')
-         .fill();
+      doc.moveTo(margin, yPosition)
+         .lineTo(margin + contentWidth, yPosition)
+         .strokeColor('#ddd')
+         .lineWidth(0.5)
+         .stroke();
+      yPosition += 8;
 
-      // Table Headers
-      const tableTop = yPosition + 8;
-      const col1X = margin + 5;          // S.No
-      const col2X = margin + 35;         // Product Code
-      const col3X = margin + 130;        // Product Name
-      const col4X = margin + 280;        // Ordered Qty
-      const col5X = margin + 360;        // Dispatched Qty
-      const col6X = margin + 450;        // Unit
-      const col7X = margin + 500;        // Weight (kg)
+      // TABLE - Proper column structure with borders
+      const tableHeaderHeight = 16;
+      doc.rect(margin, yPosition, contentWidth, tableHeaderHeight)
+         .fillAndStroke('#0891b2', '#0891b2');
 
-      doc.fontSize(9)
+      const tableTop = yPosition + 5;
+      const col1X = margin + 3;          // #
+      const col2X = margin + 15;         // Product
+      const col3X = margin + 105;        // Category
+      const col4X = margin + 165;        // Qty
+      const col5X = margin + 215;        // Weight
+
+      doc.fontSize(7.5)
          .font('Helvetica-Bold')
-         .fillColor('#ffffff')
-         .text('S.No', col1X, tableTop, { width: 25 })
-         .text('Product Code', col2X, tableTop, { width: 90 })
-         .text('Product Name', col3X, tableTop, { width: 145 })
-         .text('Ordered', col4X, tableTop, { width: 70, align: 'right' })
-         .text('Dispatched', col5X, tableTop, { width: 80, align: 'right' })
-         .text('Unit', col6X, tableTop, { width: 45 })
-         .text('Weight', col7X, tableTop, { width: 45, align: 'right' });
+         .fillColor('#fff')
+         .text('#', col1X, tableTop, { width: 10 })
+         .text('Product', col2X, tableTop, { width: 88 })
+         .text('Category', col3X, tableTop, { width: 58 })
+         .text('Qty', col4X, tableTop, { width: 48, align: 'right' })
+         .text('Weight', col5X, tableTop, { width: 45, align: 'right' });
 
-      yPosition += 25;
+      // Draw vertical lines in header
+      doc.strokeColor('#fff').lineWidth(0.5);
+      doc.moveTo(col2X - 2, yPosition).lineTo(col2X - 2, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col3X - 2, yPosition).lineTo(col3X - 2, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col4X - 2, yPosition).lineTo(col4X - 2, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col5X - 2, yPosition).lineTo(col5X - 2, yPosition + tableHeaderHeight).stroke();
+
+      yPosition += tableHeaderHeight;
 
       // Table Rows
       const items = challanData.items || [];
-      let totalOrderedQty = 0;
-      let totalDispatchedQty = 0;
+      let totalQty = 0;
       let totalWeight = 0;
-      let rowNumber = 1;
-
-      doc.fontSize(8).font('Helvetica').fillColor('#1a1a1a');
 
       items.forEach((item, index) => {
-        // Check if we need a new page
-        if (yPosition > pageHeight - 150) {
-          doc.addPage();
-          yPosition = margin;
-        }
+        const hasNotes = item.notes && item.notes.trim();
+        const rowHeight = hasNotes ? 22 : 13;
 
-        // Alternate row background
+        // Alternate row colors
         if (index % 2 === 0) {
-          doc.rect(margin, yPosition, contentWidth, 20)
+          doc.rect(margin, yPosition, contentWidth, rowHeight)
              .fillColor('#f9fafb')
              .fill();
         }
 
-        const rowY = yPosition + 6;
+        const rowY = yPosition + 3;
 
-        // Row data
-        doc.fillColor('#1a1a1a')
-           .text(rowNumber.toString(), col1X, rowY, { width: 25 })
-           .text(item.productCode || 'N/A', col2X, rowY, { width: 90 })
-           .text(item.productName || 'N/A', col3X, rowY, { width: 145 })
-           .text((item.orderedQuantity || 0).toString(), col4X, rowY, { width: 70, align: 'right' })
-           .text((item.dispatchQuantity || 0).toString(), col5X, rowY, { width: 80, align: 'right' })
-           .text(item.unit || 'PCS', col6X, rowY, { width: 45 })
-           .text((item.weight || 0).toFixed(2), col7X, rowY, { width: 45, align: 'right' });
-
-        // Accumulate totals
-        totalOrderedQty += item.orderedQuantity || 0;
-        totalDispatchedQty += item.dispatchQuantity || 0;
-        totalWeight += item.weight || 0;
-
-        yPosition += 20;
-        rowNumber++;
-      });
-
-      // Table border
-      doc.rect(margin, tableTop - 8, contentWidth, yPosition - (tableTop - 8))
-         .strokeColor('#cccccc')
-         .lineWidth(0.5)
-         .stroke();
-
-      // ============================================
-      // TOTALS ROW
-      // ============================================
-      yPosition += 5;
-
-      doc.rect(margin, yPosition, contentWidth, 25)
-         .fillColor('#f3f4f6')
-         .fill();
-
-      doc.fontSize(9)
-         .font('Helvetica-Bold')
-         .fillColor('#1a1a1a')
-         .text('TOTAL', col3X, yPosition + 8, { width: 145 })
-         .text(totalOrderedQty.toString(), col4X, yPosition + 8, { width: 70, align: 'right' })
-         .text(totalDispatchedQty.toString(), col5X, yPosition + 8, { width: 80, align: 'right' })
-         .text(`${totalWeight.toFixed(2)} kg`, col7X - 20, yPosition + 8, { width: 65, align: 'right' });
-
-      yPosition += 30;
-
-      // ============================================
-      // SUMMARY SECTION
-      // ============================================
-      if (yPosition > pageHeight - 200) {
-        doc.addPage();
-        yPosition = margin;
-      }
-
-      yPosition += 10;
-
-      // Summary box
-      const summaryBoxY = yPosition;
-      doc.rect(margin, summaryBoxY, contentWidth, 80)
-         .strokeColor('#0891b2')
-         .lineWidth(1)
-         .stroke();
-
-      yPosition += 10;
-
-      doc.fontSize(10)
-         .font('Helvetica-Bold')
-         .fillColor('#0891b2')
-         .text('Summary', margin + 10, yPosition);
-
-      yPosition += 18;
-
-      doc.fontSize(9)
-         .font('Helvetica')
-         .fillColor('#1a1a1a');
-
-      const summaryItems = [
-        `Total Items: ${items.length}`,
-        `Total Ordered Quantity: ${totalOrderedQty} units`,
-        `Total Dispatched Quantity: ${totalDispatchedQty} units`,
-        `Total Weight: ${totalWeight.toFixed(2)} kg`,
-        `Completion Status: ${totalOrderedQty === totalDispatchedQty ? 'Completed' : 'Partial'}`
-      ];
-
-      summaryItems.forEach(item => {
-        doc.text(`• ${item}`, margin + 15, yPosition);
-        yPosition += 14;
-      });
-
-      // ============================================
-      // NOTES SECTION (if any)
-      // ============================================
-      if (challanData.notes) {
-        yPosition += 15;
-
-        if (yPosition > pageHeight - 150) {
-          doc.addPage();
-          yPosition = margin;
+        let categoryName = 'N/A';
+        if (item.product?.category) {
+          categoryName = item.product.category.categoryName || item.product.category.name || item.product.category;
+        } else if (item.categoryName) {
+          categoryName = item.categoryName;
         }
 
-        doc.fontSize(10)
-           .font('Helvetica-Bold')
-           .fillColor('#1a1a1a')
-           .text('Notes:', margin, yPosition);
-
-        yPosition += 15;
-
-        doc.fontSize(9)
+        // Main row data
+        doc.fillColor('#1a1a1a')
+           .fontSize(7)
            .font('Helvetica')
-           .fillColor('#4a4a4a')
-           .text(challanData.notes, margin, yPosition, { 
-             width: contentWidth,
-             align: 'left'
-           });
+           .text((index + 1).toString(), col1X, rowY, { width: 10 })
+           .text(item.productName || 'N/A', col2X, rowY, { width: 88 })
+           .text(categoryName, col3X, rowY, { width: 58 })
+           .text(`${item.dispatchQuantity || 0} ${item.unit || 'Bags'}`, col4X, rowY, { width: 48, align: 'right' })
+           .text((item.weight || 0).toFixed(2), col5X, rowY, { width: 45, align: 'right' });
 
-        yPosition += 40;
-      }
+        // Product notes (if any) - displayed below product name in same cell
+        if (hasNotes) {
+          doc.fontSize(5.5)
+             .fillColor('#2563eb')
+             .font('Helvetica-Oblique')
+             .text(item.notes, col2X, rowY + 9, { width: 88, lineGap: -1 })
+             .font('Helvetica')
+             .fillColor('#1a1a1a');
+        }
 
-      // ============================================
-      // FOOTER SECTION
-      // ============================================
-      const footerY = pageHeight - 100;
+        // Draw vertical column borders
+        doc.strokeColor('#e5e7eb').lineWidth(0.5);
+        doc.moveTo(col2X - 2, yPosition).lineTo(col2X - 2, yPosition + rowHeight).stroke(); // After #
+        doc.moveTo(col3X - 2, yPosition).lineTo(col3X - 2, yPosition + rowHeight).stroke(); // After Product
+        doc.moveTo(col4X - 2, yPosition).lineTo(col4X - 2, yPosition + rowHeight).stroke(); // After Category
+        doc.moveTo(col5X - 2, yPosition).lineTo(col5X - 2, yPosition + rowHeight).stroke(); // After Qty
 
-      // Signature section
-      doc.fontSize(9)
-         .font('Helvetica')
-         .fillColor('#4a4a4a')
-         .text('Prepared By', margin, footerY)
-         .text('Authorized Signatory', pageWidth - margin - 120, footerY, { width: 120, align: 'right' });
+        // Bottom border
+        doc.moveTo(margin, yPosition + rowHeight)
+           .lineTo(margin + contentWidth, yPosition + rowHeight)
+           .strokeColor('#e5e7eb')
+           .lineWidth(0.5)
+           .stroke();
 
-      // Line for signature
-      doc.moveTo(margin, footerY + 40)
-         .lineTo(margin + 100, footerY + 40)
-         .strokeColor('#cccccc')
-         .lineWidth(0.5)
-         .stroke();
+        totalQty += item.dispatchQuantity || 0;
+        totalWeight += item.weight || 0;
+        yPosition += rowHeight;
+      });
 
-      doc.moveTo(pageWidth - margin - 120, footerY + 40)
-         .lineTo(pageWidth - margin, footerY + 40)
-         .stroke();
+      // TOTALS
+      doc.rect(margin, yPosition, contentWidth, 15)
+         .fillAndStroke('#e5e7eb', '#d1d5db');
 
-      // Footer note
-      const footerNoteY = pageHeight - 40;
+      const totalY = yPosition + 4.5;
       doc.fontSize(8)
-         .font('Helvetica')
-         .fillColor('#999999')
-         .text('This is a computer-generated delivery challan and does not require a signature.', 
-               margin, footerNoteY, { 
-                 width: contentWidth, 
-                 align: 'center' 
-               });
+         .font('Helvetica-Bold')
+         .fillColor('#1a1a1a')
+         .text('TOTAL', col2X, totalY, { width: 88 })
+         .text(totalQty.toString(), col4X, totalY, { width: 48, align: 'right' })
+         .text(`${totalWeight.toFixed(2)} kg`, col5X, totalY, { width: 45, align: 'right' });
 
-      doc.fontSize(7)
-         .text(`Generated on: ${formatDateTime(new Date())}`, 
-               margin, footerNoteY + 12, { 
-                 width: contentWidth, 
-                 align: 'center' 
-               });
+      yPosition += 15;
+
+      // FOOTER - Compact
+      yPosition += 6;
+      doc.fontSize(5.5)
+         .font('Helvetica')
+         .fillColor('#999')
+         .text('Computer-generated delivery challan', margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 7;
+      doc.fontSize(5)
+         .text(`Generated: ${formatDateTime(new Date())}`, margin, yPosition, { align: 'center', width: contentWidth });
 
       // Finalize PDF
       doc.end();
@@ -487,8 +346,8 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
-        size: 'A4',
-        margin: 40,
+        size: [298, 420], // A6: 105mm x 148mm
+        margin: 18,
         bufferPages: true
       });
 
@@ -507,120 +366,115 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
         ...companyInfo
       };
 
-      const pageWidth = doc.page.width;
-      const margin = 40;
-      const contentWidth = pageWidth - (2 * margin);
+      const margin = 18;
+      const pageWidth = 298;
+      const pageHeight = 420;
+      const contentWidth = 262;
       let yPosition = margin;
 
-      // ============================================
-      // HEADER
-      // ============================================
-      doc.fontSize(20)
+      // HEADER - Clean and readable
+      doc.fontSize(12)
          .font('Helvetica-Bold')
          .fillColor('#1a1a1a')
          .text(company.name, margin, yPosition, { align: 'center', width: contentWidth });
-      
-      yPosition += 25;
+      yPosition += 14;
 
-      doc.fontSize(9)
+      doc.fontSize(7)
          .font('Helvetica')
-         .fillColor('#4a4a4a')
-         .text(`${company.address}`, margin, yPosition, { align: 'center', width: contentWidth });
-      
-      yPosition += 12;
+         .fillColor('#666')
+         .text(`${company.city} | ${company.phone}`, margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 10;
 
-      doc.text(`${company.city}`, margin, yPosition, { align: 'center', width: contentWidth });
-      yPosition += 12;
-
-      doc.text(`Phone: ${company.phone} | Email: ${company.email}`, margin, yPosition, { align: 'center', width: contentWidth });
-      yPosition += 12;
-
-      doc.text(`${company.gstin}`, margin, yPosition, { align: 'center', width: contentWidth });
-      yPosition += 25;
-
-      // Title
-      doc.fontSize(16)
+      doc.fontSize(10)
          .font('Helvetica-Bold')
          .fillColor('#0891b2')
-         .text('CONSOLIDATED DELIVERY CHALLAN', margin, yPosition, { align: 'center', width: contentWidth });
-      
-      yPosition += 30;
-
-      // ============================================
-      // SO & CUSTOMER INFO
-      // ============================================
-      const leftColumnX = margin;
-      const rightColumnX = margin + (contentWidth / 2) + 10;
-      const columnStartY = yPosition;
-
-      // LEFT - SO Details
-      doc.fontSize(10)
-         .font('Helvetica-Bold')
-         .fillColor('#1a1a1a')
-         .text('Sales Order Details:', leftColumnX, yPosition);
-      
+         .text('DELIVERY CHALLAN', margin, yPosition, { align: 'center', width: contentWidth });
       yPosition += 15;
 
-      const soDetails = [
-        { label: 'SO Number:', value: consolidatedData.soNumber || 'N/A' },
-        { label: 'Order Date:', value: formatDate(consolidatedData.salesOrder?.orderDate) },
-        { label: 'Total Challans:', value: consolidatedData.totalChallans || 0 }
-      ];
+      // Line separator
+      doc.moveTo(margin, yPosition)
+         .lineTo(margin + contentWidth, yPosition)
+         .strokeColor('#ddd')
+         .lineWidth(0.5)
+         .stroke();
+      yPosition += 8;
 
-      doc.fontSize(9).font('Helvetica');
-      soDetails.forEach(detail => {
-        doc.fillColor('#4a4a4a')
-           .text(detail.label, leftColumnX, yPosition, { width: 80, continued: false });
-        doc.fillColor('#1a1a1a')
-           .text(detail.value, leftColumnX + 85, yPosition, { width: 150 });
-        yPosition += 14;
-      });
+      // DETAILS - Boxed layout with borders
+      const detailsBoxHeight = 42;
+      const leftCol = margin + 3;
+      const rightCol = margin + 133;
+      const startY = yPosition;
 
-      // RIGHT - Customer Address
-      yPosition = columnStartY;
-      
-      doc.fontSize(10)
+      // Draw details box
+      doc.rect(margin, yPosition, contentWidth, detailsBoxHeight)
+         .strokeColor('#d1d5db')
+         .lineWidth(0.5)
+         .stroke();
+
+      // Vertical divider between left and right
+      doc.moveTo(rightCol - 3, yPosition)
+         .lineTo(rightCol - 3, yPosition + detailsBoxHeight)
+         .strokeColor('#d1d5db')
+         .lineWidth(0.5)
+         .stroke();
+
+      yPosition += 5;
+
+      // Left: SO Details
+      doc.fontSize(6.5)
          .font('Helvetica-Bold')
-         .fillColor('#1a1a1a')
-         .text('Delivery To:', rightColumnX, yPosition);
+         .fillColor('#333')
+         .text('SO Number:', leftCol, yPosition);
+      yPosition += 9;
+      doc.fontSize(7.5)
+         .font('Helvetica-Bold')
+         .fillColor('#000')
+         .text(consolidatedData.soNumber || 'N/A', leftCol, yPosition);
+      yPosition += 11;
       
-      yPosition += 15;
+      doc.fontSize(6.5)
+         .font('Helvetica-Bold')
+         .fillColor('#333')
+         .text('Order Date:', leftCol, yPosition);
+      yPosition += 9;
+      doc.fontSize(7)
+         .font('Helvetica')
+         .fillColor('#000')
+         .text(formatDate(consolidatedData.salesOrder?.orderDate), leftCol, yPosition);
 
+      // Right: Customer Details
+      yPosition = startY + 5;
       const customerInfo = consolidatedData.customerDetails || {};
       const customerAddress = consolidatedData.customer?.address || {};
       
-      doc.fontSize(9)
+      doc.fontSize(6.5)
          .font('Helvetica-Bold')
-         .fillColor('#1a1a1a')
-         .text(customerInfo.companyName || 'N/A', rightColumnX, yPosition, { width: 200 });
-      yPosition += 14;
-
-      if (customerAddress.street || customerAddress.city) {
-        doc.font('Helvetica').fillColor('#4a4a4a');
-        
-        if (customerAddress.street) {
-          doc.text(customerAddress.street, rightColumnX, yPosition, { width: 200 });
-          yPosition += 12;
-        }
-        
-        const cityLine = [
-          customerAddress.city,
-          customerAddress.state,
-          customerAddress.pincode
-        ].filter(Boolean).join(', ');
-        
-        if (cityLine) {
-          doc.text(cityLine, rightColumnX, yPosition, { width: 200 });
-          yPosition += 12;
-        }
+         .fillColor('#333')
+         .text('Delivery To:', rightCol, yPosition);
+      yPosition += 9;
+      doc.fontSize(7.5)
+         .font('Helvetica-Bold')
+         .fillColor('#000')
+         .text(customerInfo.companyName || 'N/A', rightCol, yPosition, { width: 126 });
+      yPosition += 9;
+      
+      const cityLine = [customerAddress.city, customerAddress.state].filter(Boolean).join(', ');
+      if (cityLine) {
+        doc.fontSize(6.5)
+           .font('Helvetica')
+           .fillColor('#666')
+           .text(cityLine, rightCol, yPosition, { width: 126 });
       }
 
-      yPosition = Math.max(yPosition, columnStartY + 70) + 20;
-
-      // ============================================
-      // PRODUCTS TABLE
-      // ============================================
+      yPosition = startY + detailsBoxHeight;
       
+      doc.moveTo(margin, yPosition)
+         .lineTo(margin + contentWidth, yPosition)
+         .strokeColor('#ddd')
+         .lineWidth(0.5)
+         .stroke();
+      yPosition += 8;
+
       // Collect and consolidate products from all challans
       const productMap = new Map();
       
@@ -645,13 +499,12 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
             }
             
             productMap.set(productKey, {
-              productCode: item.productCode || item.product?.productCode || 'N/A',
               productName: item.productName || item.product?.productName || 'N/A',
               category: categoryName,
-              orderedQty: item.orderedQuantity || 0,
               dispatchedQty: item.dispatchQuantity || 0,
               unit: item.unit || 'Bags',
-              weight: item.weight || 0
+              weight: item.weight || 0,
+              notes: item.notes || ''
             });
           }
         });
@@ -659,153 +512,115 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
 
       const allProducts = Array.from(productMap.values());
 
-      // Table with borders
-      const tableStartY = yPosition;
-      const tableWidth = contentWidth;
-      const colWidths = [35, 160, 95, 65, 55, 75]; // Column widths
-      const rowHeight = 22;
-      
-      // Table Header
-      doc.rect(margin, yPosition, tableWidth, 25).fillAndStroke('#0891b2', '#0891b2');
-      
-      yPosition += 7;
+      // TABLE - Proper column structure with borders
+      const tableHeaderHeight = 16;
+      doc.rect(margin, yPosition, contentWidth, tableHeaderHeight)
+         .fillAndStroke('#0891b2', '#0891b2');
 
-      const tableHeaders = [
-        { text: 'S.No', width: colWidths[0] },
-        { text: 'Product Name', width: colWidths[1] },
-        { text: 'Category', width: colWidths[2] },
-        { text: 'Quantity', width: colWidths[3] },
-        { text: 'Unit', width: colWidths[4] },
-        { text: 'Weight (kg)', width: colWidths[5] }
-      ];
+      const tableTop = yPosition + 5;
+      const col1X = margin + 3;          // #
+      const col2X = margin + 15;         // Product
+      const col3X = margin + 105;        // Category
+      const col4X = margin + 165;        // Qty
+      const col5X = margin + 215;        // Weight
 
-      doc.fontSize(9)
+      doc.fontSize(7.5)
          .font('Helvetica-Bold')
-         .fillColor('#ffffff');
+         .fillColor('#fff')
+         .text('#', col1X, tableTop, { width: 10 })
+         .text('Product', col2X, tableTop, { width: 88 })
+         .text('Category', col3X, tableTop, { width: 58 })
+         .text('Qty', col4X, tableTop, { width: 48, align: 'right' })
+         .text('Weight', col5X, tableTop, { width: 45, align: 'right' });
 
-      let xPos = margin + 5;
-      tableHeaders.forEach((header, i) => {
-        doc.text(header.text, xPos, yPosition, { width: header.width - 10, align: i === 0 ? 'left' : 'left' });
-        xPos += header.width;
-      });
+      // Draw vertical lines in header
+      doc.strokeColor('#fff').lineWidth(0.5);
+      doc.moveTo(col2X - 2, yPosition).lineTo(col2X - 2, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col3X - 2, yPosition).lineTo(col3X - 2, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col4X - 2, yPosition).lineTo(col4X - 2, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col5X - 2, yPosition).lineTo(col5X - 2, yPosition + tableHeaderHeight).stroke();
 
-      yPosition += 20;
+      yPosition += tableHeaderHeight;
 
-      // Table Rows with borders
-      doc.fontSize(9).font('Helvetica').fillColor('#1a1a1a');
-
+      // Table Rows
       let totalQty = 0;
       let totalWeight = 0;
 
       allProducts.forEach((product, index) => {
-        if (yPosition > 720) {
-          doc.addPage();
-          yPosition = margin;
-        }
+        const hasNotes = product.notes && product.notes.trim();
+        const rowHeight = hasNotes ? 22 : 13;
 
-        const rowY = yPosition;
-
-        // Row background (alternate colors)
+        // Alternate row colors
         if (index % 2 === 0) {
-          doc.rect(margin, rowY, tableWidth, rowHeight).fillAndStroke('#f9fafb', '#d1d5db');
-        } else {
-          doc.rect(margin, rowY, tableWidth, rowHeight).stroke('#d1d5db');
+          doc.rect(margin, yPosition, contentWidth, rowHeight)
+             .fillColor('#f9fafb')
+             .fill();
         }
 
-        // Draw vertical lines for columns
-        let currentX = margin;
-        colWidths.forEach(width => {
-          doc.moveTo(currentX, rowY).lineTo(currentX, rowY + rowHeight).stroke('#d1d5db');
-          currentX += width;
-        });
-        doc.moveTo(currentX, rowY).lineTo(currentX, rowY + rowHeight).stroke('#d1d5db');
+        const rowY = yPosition + 3;
 
-        // Cell content
-        doc.fillColor('#1a1a1a');
-        xPos = margin + 5;
-        
-        doc.text((index + 1).toString(), xPos, rowY + 6, { width: colWidths[0] - 10, align: 'left' });
-        xPos += colWidths[0];
-        
-        doc.text(product.productName, xPos, rowY + 6, { width: colWidths[1] - 10, align: 'left' });
-        xPos += colWidths[1];
-        
-        doc.text(product.category, xPos, rowY + 6, { width: colWidths[2] - 10, align: 'left' });
-        xPos += colWidths[2];
-        
-        doc.text(product.dispatchedQty.toString(), xPos, rowY + 6, { width: colWidths[3] - 10, align: 'right' });
-        xPos += colWidths[3];
-        
-        doc.text(product.unit, xPos, rowY + 6, { width: colWidths[4] - 10, align: 'center' });
-        xPos += colWidths[4];
-        
-        doc.text(product.weight.toFixed(2), xPos, rowY + 6, { width: colWidths[5] - 10, align: 'right' });
+        // Main row data
+        doc.fillColor('#1a1a1a')
+           .fontSize(7)
+           .font('Helvetica')
+           .text((index + 1).toString(), col1X, rowY, { width: 10 })
+           .text(product.productName, col2X, rowY, { width: 88 })
+           .text(product.category, col3X, rowY, { width: 58 })
+           .text(`${product.dispatchedQty} ${product.unit}`, col4X, rowY, { width: 48, align: 'right' })
+           .text(product.weight.toFixed(2), col5X, rowY, { width: 45, align: 'right' });
+
+        // Product notes (if any) - displayed below product name in same cell
+        if (hasNotes) {
+          doc.fontSize(5.5)
+             .fillColor('#2563eb')
+             .font('Helvetica-Oblique')
+             .text(product.notes, col2X, rowY + 9, { width: 88, lineGap: -1 })
+             .font('Helvetica')
+             .fillColor('#1a1a1a');
+        }
+
+        // Draw vertical column borders
+        doc.strokeColor('#e5e7eb').lineWidth(0.5);
+        doc.moveTo(col2X - 2, yPosition).lineTo(col2X - 2, yPosition + rowHeight).stroke(); // After #
+        doc.moveTo(col3X - 2, yPosition).lineTo(col3X - 2, yPosition + rowHeight).stroke(); // After Product
+        doc.moveTo(col4X - 2, yPosition).lineTo(col4X - 2, yPosition + rowHeight).stroke(); // After Category
+        doc.moveTo(col5X - 2, yPosition).lineTo(col5X - 2, yPosition + rowHeight).stroke(); // After Qty
+
+        // Bottom border
+        doc.moveTo(margin, yPosition + rowHeight)
+           .lineTo(margin + contentWidth, yPosition + rowHeight)
+           .strokeColor('#e5e7eb')
+           .lineWidth(0.5)
+           .stroke();
 
         totalQty += product.dispatchedQty;
         totalWeight += product.weight;
-
         yPosition += rowHeight;
       });
 
-      // Totals Row with border
-      doc.rect(margin, yPosition, tableWidth, 24).fillAndStroke('#e5e7eb', '#d1d5db');
-      
-      // Draw vertical lines for totals row
-      let currentX = margin;
-      colWidths.forEach(width => {
-        doc.moveTo(currentX, yPosition).lineTo(currentX, yPosition + 24).stroke('#d1d5db');
-        currentX += width;
-      });
-      doc.moveTo(currentX, yPosition).lineTo(currentX, yPosition + 24).stroke('#d1d5db');
-      
-      yPosition += 7;
+      // TOTALS
+      doc.rect(margin, yPosition, contentWidth, 15)
+         .fillAndStroke('#e5e7eb', '#d1d5db');
 
-      doc.fontSize(10)
-         .font('Helvetica-Bold')
-         .fillColor('#1a1a1a');
-      
-      xPos = margin + colWidths[0] + colWidths[1] + 5;
-      doc.text('TOTAL', xPos, yPosition, { width: colWidths[2] - 10, align: 'left' });
-      xPos += colWidths[2];
-      
-      doc.text(totalQty.toString(), xPos, yPosition, { width: colWidths[3] - 10, align: 'right' });
-      xPos += colWidths[3] + colWidths[4];
-      
-      doc.text(totalWeight.toFixed(2), xPos, yPosition, { width: colWidths[5] - 10, align: 'right' });
-
-      yPosition += 30;
-
-      // Summary
-      doc.fontSize(10)
+      const totalY = yPosition + 4.5;
+      doc.fontSize(8)
          .font('Helvetica-Bold')
          .fillColor('#1a1a1a')
-         .text('Summary:', margin, yPosition);
-      
+         .text('TOTAL', col2X, totalY, { width: 88 })
+         .text(totalQty.toString(), col4X, totalY, { width: 48, align: 'right' })
+         .text(`${totalWeight.toFixed(2)} kg`, col5X, totalY, { width: 45, align: 'right' });
+
       yPosition += 15;
 
-      doc.fontSize(9)
+      // FOOTER - Compact
+      yPosition += 6;
+      doc.fontSize(5.5)
          .font('Helvetica')
-         .fillColor('#4a4a4a')
-         .text(`• Total Products: ${allProducts.length}`, margin, yPosition);
-      yPosition += 14;
-      doc.text(`• Total Quantity: ${totalQty} units`, margin, yPosition);
-      yPosition += 14;
-      doc.text(`• Total Weight: ${totalWeight.toFixed(2)} kg`, margin, yPosition);
-      yPosition += 14;
-      doc.text(`• Number of Challans: ${consolidatedData.totalChallans}`, margin, yPosition);
-      yPosition += 14;
-      doc.text(`• Status: Completed & Delivered`, margin, yPosition);
-
-      yPosition += 30;
-
-      // Footer
-      doc.fontSize(8)
-         .fillColor('#6b7280')
-         .text('This is a computer-generated document', margin, yPosition, { align: 'center', width: contentWidth });
-      
-      yPosition += 12;
-
-      doc.text(`Generated on: ${formatDateTime(new Date())}`, margin, yPosition, { align: 'center', width: contentWidth });
+         .fillColor('#999')
+         .text('Computer-generated delivery challan', margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 7;
+      doc.fontSize(5)
+         .text(`Generated: ${formatDateTime(new Date())}`, margin, yPosition, { align: 'center', width: contentWidth });
 
       doc.end();
     } catch (error) {

@@ -207,37 +207,11 @@ const purchaseOrderSchema = new mongoose.Schema({
 purchaseOrderSchema.pre('save', async function(next) {
   if (!this.poNumber) {
     try {
-      const currentDate = new Date();
-      const currentYear = currentDate.getFullYear();
-      const currentMonth = currentDate.getMonth(); // 0-11
+      // Count total POs to get next number
+      const count = await mongoose.model('PurchaseOrder').countDocuments({});
       
-      // Determine financial year (April to March)
-      let financialYearStart, financialYearEnd;
-      if (currentMonth >= 3) { // April (3) to December (11)
-        financialYearStart = currentYear;
-        financialYearEnd = currentYear + 1;
-      } else { // January (0) to March (2)
-        financialYearStart = currentYear - 1;
-        financialYearEnd = currentYear;
-      }
-      
-      const fyStart = String(financialYearStart).slice(-2); // Last 2 digits
-      const fyEnd = String(financialYearEnd).slice(-2);
-      
-      // Get start and end dates for current financial year
-      const fyStartDate = new Date(financialYearStart, 3, 1); // April 1st
-      const fyEndDate = new Date(financialYearEnd, 3, 1); // April 1st next year
-      
-      // Count POs for current financial year
-      const count = await mongoose.model('PurchaseOrder').countDocuments({
-        createdAt: {
-          $gte: fyStartDate,
-          $lt: fyEndDate
-        }
-      });
-      
-      // Generate PO number: PKRK/PO/25-26/001
-      this.poNumber = `PKRK/PO/${fyStart}-${fyEnd}/${String(count + 1).padStart(3, '0')}`;
+      // Generate PO number: PKRK/PO/01, PKRK/PO/02, etc.
+      this.poNumber = `PKRK/PO/${String(count + 1).padStart(2, '0')}`;
     } catch (error) {
       return next(error);
     }
