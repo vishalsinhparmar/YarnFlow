@@ -26,16 +26,22 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', (err) => reject(err));
 
-      // Default company info if not provided
+      // Fixed company info - no overrides allowed
       const company = {
-        name: companyInfo.name || 'YarnFlow',
-        address: companyInfo.address || 'Business Address Line 1',
-        city: companyInfo.city || 'City, State - 000000',
-        phone: companyInfo.phone || '+91 00000 00000',
-        email: companyInfo.email || 'info@yarnflow.com',
-        gstin: companyInfo.gstin || 'GSTIN: 00XXXXX0000X0X0',
-        ...companyInfo
+        name: 'Pavan Kumar Raj Kumar',
+        address: 'H.O. – Bajaji Road, Deoria (U.P.), B.O. – Chakenyat, Bhadohi',
+        phone: 'Mobile: 9415203756',
+        msmeNo: 'MSME No.: UP-66-0007062',
+        gstin: 'GST: 09ACBPA4526C1Z9',
+        city: 'Deoria U.P.'
       };
+
+      // Debug log to verify our code is being used
+      console.log('PDF Generator - Company Info:', {
+        name: company.name,
+        address: company.address,
+        gstin: company.gstin
+      });
 
       // Page dimensions
       const margin = 18;
@@ -44,18 +50,33 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
       const contentWidth = 262;
       let yPosition = margin;
 
-      // HEADER - Clean and readable
+      // HEADER - Clean and readable with complete address
       doc.fontSize(12)
          .font('Helvetica-Bold')
          .fillColor('#1a1a1a')
          .text(company.name, margin, yPosition, { align: 'center', width: contentWidth });
       yPosition += 14;
 
-      doc.fontSize(7)
+      // Full address line
+      doc.fontSize(6)
          .font('Helvetica')
          .fillColor('#666')
-         .text(`${company.city} | ${company.phone}`, margin, yPosition, { align: 'center', width: contentWidth });
+         .text(company.address, margin, yPosition, { align: 'center', width: contentWidth });
       yPosition += 10;
+
+      // Phone and MSME number
+      doc.fontSize(6)
+         .font('Helvetica')
+         .fillColor('#666')
+         .text(`${company.phone}, ${company.msmeNo}`, margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 10;
+
+      // GST Number
+      doc.fontSize(7)
+         .font('Helvetica-Bold')
+         .fillColor('#333')
+         .text(company.gstin, margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 12;
 
       doc.fontSize(10)
          .font('Helvetica-Bold')
@@ -147,33 +168,46 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
          .stroke();
       yPosition += 8;
 
-      // TABLE - Proper column structure with borders
+      // TABLE - Simple professional structure with black borders
       const tableHeaderHeight = 16;
       doc.rect(margin, yPosition, contentWidth, tableHeaderHeight)
-         .fillAndStroke('#0891b2', '#0891b2');
+         .fillAndStroke('#f5f5f5', '#000000');
 
       const tableTop = yPosition + 5;
-      const col1X = margin + 3;          // #
-      const col2X = margin + 15;         // Product
-      const col3X = margin + 105;        // Category
-      const col4X = margin + 165;        // Qty
-      const col5X = margin + 215;        // Weight
+      // Improved column positioning with better padding
+      const col1X = margin + 5;          // # (with left padding)
+      const col2X = margin + 20;         // Product
+      const col3X = margin + 110;        // Category
+      const col4X = margin + 170;        // Qty
+      const col5X = margin + 220;        // Weight
+      
+      // Column widths with proper padding
+      const col1W = 12;   // #
+      const col2W = 85;   // Product
+      const col3W = 55;   // Category
+      const col4W = 45;   // Qty
+      const col5W = 40;   // Weight
 
       doc.fontSize(7.5)
          .font('Helvetica-Bold')
-         .fillColor('#fff')
-         .text('#', col1X, tableTop, { width: 10 })
-         .text('Product', col2X, tableTop, { width: 88 })
-         .text('Category', col3X, tableTop, { width: 58 })
-         .text('Qty', col4X, tableTop, { width: 48, align: 'right' })
-         .text('Weight', col5X, tableTop, { width: 45, align: 'right' });
+         .fillColor('#000000')
+         .text('#', col1X, tableTop, { width: col1W, align: 'center' })
+         .text('Product', col2X, tableTop, { width: col2W, align: 'center' })
+         .text('Category', col3X, tableTop, { width: col3W, align: 'center' })
+         .text('Qty', col4X, tableTop, { width: col4W, align: 'center' })
+         .text('Weight', col5X, tableTop, { width: col5W, align: 'center' });
 
-      // Draw vertical lines in header
-      doc.strokeColor('#fff').lineWidth(0.5);
-      doc.moveTo(col2X - 2, yPosition).lineTo(col2X - 2, yPosition + tableHeaderHeight).stroke();
-      doc.moveTo(col3X - 2, yPosition).lineTo(col3X - 2, yPosition + tableHeaderHeight).stroke();
-      doc.moveTo(col4X - 2, yPosition).lineTo(col4X - 2, yPosition + tableHeaderHeight).stroke();
-      doc.moveTo(col5X - 2, yPosition).lineTo(col5X - 2, yPosition + tableHeaderHeight).stroke();
+      // Draw complete table borders including left and right edges
+      doc.strokeColor('#000000').lineWidth(0.5);
+      // Left border
+      doc.moveTo(margin, yPosition).lineTo(margin, yPosition + tableHeaderHeight).stroke();
+      // Internal vertical lines
+      doc.moveTo(col2X - 3, yPosition).lineTo(col2X - 3, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col3X - 3, yPosition).lineTo(col3X - 3, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col4X - 3, yPosition).lineTo(col4X - 3, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col5X - 3, yPosition).lineTo(col5X - 3, yPosition + tableHeaderHeight).stroke();
+      // Right border
+      doc.moveTo(margin + contentWidth, yPosition).lineTo(margin + contentWidth, yPosition + tableHeaderHeight).stroke();
 
       yPosition += tableHeaderHeight;
 
@@ -184,55 +218,95 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
 
       items.forEach((item, index) => {
         const hasNotes = item.notes && item.notes.trim();
-        const rowHeight = hasNotes ? 22 : 13;
+        // Calculate dynamic row height based on notes length
+        let rowHeight = 13; // Base height
+        if (hasNotes) {
+          const notesLength = item.notes.length;
+          if (notesLength > 80) {
+            rowHeight = 28; // Very long notes
+          } else if (notesLength > 40) {
+            rowHeight = 22; // Medium notes
+          } else {
+            rowHeight = 18; // Short notes
+          }
+        }
 
-        // Alternate row colors
+        // Simple alternate row colors
         if (index % 2 === 0) {
           doc.rect(margin, yPosition, contentWidth, rowHeight)
-             .fillColor('#f9fafb')
+             .fillColor('#fafafa')
              .fill();
         }
 
-        const rowY = yPosition + 3;
+        const rowY = yPosition + 5; // Better vertical padding
 
         let categoryName = 'N/A';
+        // Try multiple sources for category information
         if (item.product?.category) {
-          categoryName = item.product.category.categoryName || item.product.category.name || item.product.category;
+          categoryName = item.product.category.categoryName || 
+                       item.product.category.name || 
+                       item.product.category;
         } else if (item.categoryName) {
           categoryName = item.categoryName;
+        } else if (item.category) {
+          categoryName = item.category.categoryName || 
+                       item.category.name || 
+                       item.category;
+        } else if (item.product?.categoryName) {
+          categoryName = item.product.categoryName;
+        } else if (item.product?.category_name) {
+          categoryName = item.product.category_name;
+        }
+        
+        // If still N/A, try to extract from product name or use a default
+        if (categoryName === 'N/A' && item.productName) {
+          // You can add logic here to derive category from product name if needed
+          categoryName = 'General'; // or keep as 'N/A'
         }
 
-        // Main row data
+        // Main row data with improved alignment
         doc.fillColor('#1a1a1a')
            .fontSize(7)
            .font('Helvetica')
-           .text((index + 1).toString(), col1X, rowY, { width: 10 })
-           .text(item.productName || 'N/A', col2X, rowY, { width: 88 })
-           .text(categoryName, col3X, rowY, { width: 58 })
-           .text(`${item.dispatchQuantity || 0} ${item.unit || 'Bags'}`, col4X, rowY, { width: 48, align: 'right' })
-           .text((item.weight || 0).toFixed(2), col5X, rowY, { width: 45, align: 'right' });
+           .text((index + 1).toString(), col1X, rowY, { width: col1W, align: 'center' })
+           .text(item.productName || 'N/A', col2X + 2, rowY, { width: col2W - 4 })
+           .text(categoryName, col3X, rowY, { width: col3W, align: 'center' })
+           .text(`${item.dispatchQuantity || 0} ${item.unit || 'Bags'}`, col4X, rowY, { width: col4W, align: 'center' })
+           .text(`${(item.weight || 0).toFixed(2)} kg`, col5X, rowY, { width: col5W, align: 'center' });
 
         // Product notes (if any) - displayed below product name in same cell
         if (hasNotes) {
+          const notesY = rowY + 9;
+          const maxNotesHeight = rowHeight - 12; // Leave some padding
           doc.fontSize(5.5)
              .fillColor('#2563eb')
              .font('Helvetica-Oblique')
-             .text(item.notes, col2X, rowY + 9, { width: 88, lineGap: -1 })
+             .text(item.notes, col2X + 2, notesY, { 
+               width: col2W - 4, 
+               height: maxNotesHeight,
+               lineGap: -1,
+               ellipsis: true // Add ellipsis if text is too long
+             })
              .font('Helvetica')
              .fillColor('#1a1a1a');
         }
 
-        // Draw vertical column borders
-        doc.strokeColor('#e5e7eb').lineWidth(0.5);
-        doc.moveTo(col2X - 2, yPosition).lineTo(col2X - 2, yPosition + rowHeight).stroke(); // After #
-        doc.moveTo(col3X - 2, yPosition).lineTo(col3X - 2, yPosition + rowHeight).stroke(); // After Product
-        doc.moveTo(col4X - 2, yPosition).lineTo(col4X - 2, yPosition + rowHeight).stroke(); // After Category
-        doc.moveTo(col5X - 2, yPosition).lineTo(col5X - 2, yPosition + rowHeight).stroke(); // After Qty
+        // Draw complete row borders including left and right edges
+        doc.strokeColor('#000000').lineWidth(0.5);
+        // Left border
+        doc.moveTo(margin, yPosition).lineTo(margin, yPosition + rowHeight).stroke();
+        // Internal vertical lines
+        doc.moveTo(col2X - 3, yPosition).lineTo(col2X - 3, yPosition + rowHeight).stroke(); // After #
+        doc.moveTo(col3X - 3, yPosition).lineTo(col3X - 3, yPosition + rowHeight).stroke(); // After Product
+        doc.moveTo(col4X - 3, yPosition).lineTo(col4X - 3, yPosition + rowHeight).stroke(); // After Category
+        doc.moveTo(col5X - 3, yPosition).lineTo(col5X - 3, yPosition + rowHeight).stroke(); // After Qty
+        // Right border
+        doc.moveTo(margin + contentWidth, yPosition).lineTo(margin + contentWidth, yPosition + rowHeight).stroke();
 
         // Bottom border
         doc.moveTo(margin, yPosition + rowHeight)
            .lineTo(margin + contentWidth, yPosition + rowHeight)
-           .strokeColor('#e5e7eb')
+           .strokeColor('#000000')
            .lineWidth(0.5)
            .stroke();
 
@@ -243,15 +317,15 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
 
       // TOTALS
       doc.rect(margin, yPosition, contentWidth, 15)
-         .fillAndStroke('#e5e7eb', '#d1d5db');
+         .fillAndStroke('#f0f0f0', '#000000');
 
       const totalY = yPosition + 4.5;
       doc.fontSize(8)
          .font('Helvetica-Bold')
          .fillColor('#1a1a1a')
          .text('TOTAL', col2X, totalY, { width: 88 })
-         .text(totalQty.toString(), col4X, totalY, { width: 48, align: 'right' })
-         .text(`${totalWeight.toFixed(2)} kg`, col5X, totalY, { width: 45, align: 'right' });
+         .text(totalQty.toString(), col4X, totalY, { width: 48, align: 'center' })
+         .text(`${totalWeight.toFixed(2)} kg`, col5X, totalY, { width: 45, align: 'center' });
 
       yPosition += 15;
 
@@ -357,14 +431,20 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       doc.on('error', (err) => reject(err));
 
       const company = {
-        name: companyInfo.name || 'YarnFlow',
-        address: companyInfo.address || 'Business Address',
-        city: companyInfo.city || 'City, State',
-        phone: companyInfo.phone || 'Phone',
-        email: companyInfo.email || 'Email',
-        gstin: companyInfo.gstin || 'GSTIN',
-        ...companyInfo
+        name: 'Pavan Kumar Raj Kumar',
+        address: 'H.O. – Bajaji Road, Deoria (U.P.), B.O. – Chakenyat, Bhadohi',
+        phone: 'Mobile: 9415203756',
+        msmeNo: 'MSME No.: UP-66-0007062',
+        gstin: 'GST: 09ACBPA4526C1Z9',
+        city: 'Deoria U.P.'
       };
+
+      // Debug log for consolidated PDF
+      console.log('🔥 CONSOLIDATED PDF Generator - Company Info:', {
+        name: company.name,
+        address: company.address,
+        gstin: company.gstin
+      });
 
       const margin = 18;
       const pageWidth = 298;
@@ -372,18 +452,33 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       const contentWidth = 262;
       let yPosition = margin;
 
-      // HEADER - Clean and readable
+      // HEADER - Clean and readable with complete address
       doc.fontSize(12)
          .font('Helvetica-Bold')
          .fillColor('#1a1a1a')
          .text(company.name, margin, yPosition, { align: 'center', width: contentWidth });
       yPosition += 14;
 
-      doc.fontSize(7)
+      // Full address line
+      doc.fontSize(6)
          .font('Helvetica')
          .fillColor('#666')
-         .text(`${company.city} | ${company.phone}`, margin, yPosition, { align: 'center', width: contentWidth });
+         .text(company.address, margin, yPosition, { align: 'center', width: contentWidth });
       yPosition += 10;
+
+      // Phone and MSME number
+      doc.fontSize(6)
+         .font('Helvetica')
+         .fillColor('#666')
+         .text(`${company.phone}, ${company.msmeNo}`, margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 10;
+
+      // GST Number
+      doc.fontSize(7)
+         .font('Helvetica-Bold')
+         .fillColor('#333')
+         .text(company.gstin, margin, yPosition, { align: 'center', width: contentWidth });
+      yPosition += 12;
 
       doc.fontSize(10)
          .font('Helvetica-Bold')
@@ -490,12 +585,24 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
             // Get category from multiple possible sources
             let categoryName = 'N/A';
             if (item.product?.category) {
-              // Try different field names for category
-              categoryName = item.product.category.name || 
-                           item.product.category.categoryName || 
+              categoryName = item.product.category.categoryName || 
+                           item.product.category.name || 
                            item.product.category;
             } else if (item.categoryName) {
               categoryName = item.categoryName;
+            } else if (item.category) {
+              categoryName = item.category.categoryName || 
+                           item.category.name || 
+                           item.category;
+            } else if (item.product?.categoryName) {
+              categoryName = item.product.categoryName;
+            } else if (item.product?.category_name) {
+              categoryName = item.product.category_name;
+            }
+            
+            // If still N/A, use a default
+            if (categoryName === 'N/A' && item.productName) {
+              categoryName = 'General';
             }
             
             productMap.set(productKey, {
@@ -512,33 +619,46 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
 
       const allProducts = Array.from(productMap.values());
 
-      // TABLE - Proper column structure with borders
+      // TABLE - Simple professional structure with black borders
       const tableHeaderHeight = 16;
       doc.rect(margin, yPosition, contentWidth, tableHeaderHeight)
-         .fillAndStroke('#0891b2', '#0891b2');
+         .fillAndStroke('#f5f5f5', '#000000');
 
       const tableTop = yPosition + 5;
-      const col1X = margin + 3;          // #
-      const col2X = margin + 15;         // Product
-      const col3X = margin + 105;        // Category
-      const col4X = margin + 165;        // Qty
-      const col5X = margin + 215;        // Weight
+      // Improved column positioning with better padding
+      const col1X = margin + 5;          // # (with left padding)
+      const col2X = margin + 20;         // Product
+      const col3X = margin + 110;        // Category
+      const col4X = margin + 170;        // Qty
+      const col5X = margin + 220;        // Weight
+      
+      // Column widths with proper padding
+      const col1W = 12;   // #
+      const col2W = 85;   // Product
+      const col3W = 55;   // Category
+      const col4W = 45;   // Qty
+      const col5W = 40;   // Weight
 
       doc.fontSize(7.5)
          .font('Helvetica-Bold')
-         .fillColor('#fff')
-         .text('#', col1X, tableTop, { width: 10 })
-         .text('Product', col2X, tableTop, { width: 88 })
-         .text('Category', col3X, tableTop, { width: 58 })
-         .text('Qty', col4X, tableTop, { width: 48, align: 'right' })
-         .text('Weight', col5X, tableTop, { width: 45, align: 'right' });
+         .fillColor('#000000')
+         .text('#', col1X, tableTop, { width: col1W, align: 'center' })
+         .text('Product', col2X, tableTop, { width: col2W, align: 'center' })
+         .text('Category', col3X, tableTop, { width: col3W, align: 'center' })
+         .text('Qty', col4X, tableTop, { width: col4W, align: 'center' })
+         .text('Weight', col5X, tableTop, { width: col5W, align: 'center' });
 
-      // Draw vertical lines in header
-      doc.strokeColor('#fff').lineWidth(0.5);
-      doc.moveTo(col2X - 2, yPosition).lineTo(col2X - 2, yPosition + tableHeaderHeight).stroke();
-      doc.moveTo(col3X - 2, yPosition).lineTo(col3X - 2, yPosition + tableHeaderHeight).stroke();
-      doc.moveTo(col4X - 2, yPosition).lineTo(col4X - 2, yPosition + tableHeaderHeight).stroke();
-      doc.moveTo(col5X - 2, yPosition).lineTo(col5X - 2, yPosition + tableHeaderHeight).stroke();
+      // Draw complete table borders including left and right edges
+      doc.strokeColor('#000000').lineWidth(0.5);
+      // Left border
+      doc.moveTo(margin, yPosition).lineTo(margin, yPosition + tableHeaderHeight).stroke();
+      // Internal vertical lines
+      doc.moveTo(col2X - 3, yPosition).lineTo(col2X - 3, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col3X - 3, yPosition).lineTo(col3X - 3, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col4X - 3, yPosition).lineTo(col4X - 3, yPosition + tableHeaderHeight).stroke();
+      doc.moveTo(col5X - 3, yPosition).lineTo(col5X - 3, yPosition + tableHeaderHeight).stroke();
+      // Right border
+      doc.moveTo(margin + contentWidth, yPosition).lineTo(margin + contentWidth, yPosition + tableHeaderHeight).stroke();
 
       yPosition += tableHeaderHeight;
 
@@ -550,46 +670,51 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
         const hasNotes = product.notes && product.notes.trim();
         const rowHeight = hasNotes ? 22 : 13;
 
-        // Alternate row colors
+        // Simple alternate row colors
         if (index % 2 === 0) {
           doc.rect(margin, yPosition, contentWidth, rowHeight)
-             .fillColor('#f9fafb')
+             .fillColor('#fafafa')
              .fill();
         }
 
-        const rowY = yPosition + 3;
+        const rowY = yPosition + 5; // Better vertical padding
 
         // Main row data
         doc.fillColor('#1a1a1a')
            .fontSize(7)
            .font('Helvetica')
-           .text((index + 1).toString(), col1X, rowY, { width: 10 })
-           .text(product.productName, col2X, rowY, { width: 88 })
-           .text(product.category, col3X, rowY, { width: 58 })
-           .text(`${product.dispatchedQty} ${product.unit}`, col4X, rowY, { width: 48, align: 'right' })
-           .text(product.weight.toFixed(2), col5X, rowY, { width: 45, align: 'right' });
+           .text((index + 1).toString(), col1X, rowY, { width: col1W, align: 'center' })
+           .text(product.productName, col2X + 2, rowY, { width: col2W - 4 })
+           .text(product.category, col3X, rowY, { width: col3W, align: 'center' })
+           .text(`${product.dispatchedQty} ${product.unit}`, col4X, rowY, { width: col4W, align: 'center' })
+           .text(`${product.weight.toFixed(2)} kg`, col5X, rowY, { width: col5W, align: 'center' });
 
         // Product notes (if any) - displayed below product name in same cell
         if (hasNotes) {
           doc.fontSize(5.5)
              .fillColor('#2563eb')
              .font('Helvetica-Oblique')
-             .text(product.notes, col2X, rowY + 9, { width: 88, lineGap: -1 })
+             .text(product.notes, col2X + 2, rowY + 9, { width: col2W - 4, lineGap: -1 })
              .font('Helvetica')
              .fillColor('#1a1a1a');
         }
 
-        // Draw vertical column borders
-        doc.strokeColor('#e5e7eb').lineWidth(0.5);
-        doc.moveTo(col2X - 2, yPosition).lineTo(col2X - 2, yPosition + rowHeight).stroke(); // After #
-        doc.moveTo(col3X - 2, yPosition).lineTo(col3X - 2, yPosition + rowHeight).stroke(); // After Product
-        doc.moveTo(col4X - 2, yPosition).lineTo(col4X - 2, yPosition + rowHeight).stroke(); // After Category
-        doc.moveTo(col5X - 2, yPosition).lineTo(col5X - 2, yPosition + rowHeight).stroke(); // After Qty
+        // Draw complete row borders including left and right edges
+        doc.strokeColor('#000000').lineWidth(0.5);
+        // Left border
+        doc.moveTo(margin, yPosition).lineTo(margin, yPosition + rowHeight).stroke();
+        // Internal vertical lines
+        doc.moveTo(col2X - 3, yPosition).lineTo(col2X - 3, yPosition + rowHeight).stroke(); // After #
+        doc.moveTo(col3X - 3, yPosition).lineTo(col3X - 3, yPosition + rowHeight).stroke(); // After Product
+        doc.moveTo(col4X - 3, yPosition).lineTo(col4X - 3, yPosition + rowHeight).stroke(); // After Category
+        doc.moveTo(col5X - 3, yPosition).lineTo(col5X - 3, yPosition + rowHeight).stroke(); // After Qty
+        // Right border
+        doc.moveTo(margin + contentWidth, yPosition).lineTo(margin + contentWidth, yPosition + rowHeight).stroke();
 
         // Bottom border
         doc.moveTo(margin, yPosition + rowHeight)
            .lineTo(margin + contentWidth, yPosition + rowHeight)
-           .strokeColor('#e5e7eb')
+           .strokeColor('#000000')
            .lineWidth(0.5)
            .stroke();
 
@@ -600,15 +725,15 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
 
       // TOTALS
       doc.rect(margin, yPosition, contentWidth, 15)
-         .fillAndStroke('#e5e7eb', '#d1d5db');
+         .fillAndStroke('#f0f0f0', '#000000');
 
       const totalY = yPosition + 4.5;
       doc.fontSize(8)
          .font('Helvetica-Bold')
          .fillColor('#1a1a1a')
          .text('TOTAL', col2X, totalY, { width: 88 })
-         .text(totalQty.toString(), col4X, totalY, { width: 48, align: 'right' })
-         .text(`${totalWeight.toFixed(2)} kg`, col5X, totalY, { width: 45, align: 'right' });
+         .text(totalQty.toString(), col4X, totalY, { width: 48, align: 'center' })
+         .text(`${totalWeight.toFixed(2)} kg`, col5X, totalY, { width: 45, align: 'center' });
 
       yPosition += 15;
 
