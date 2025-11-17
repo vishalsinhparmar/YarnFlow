@@ -81,11 +81,6 @@ const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
                   </span>
                 </div>
 
-                {/* Category Code */}
-                <div className="text-xs text-gray-500 mb-3">
-                  Code: {category.categoryCode}
-                </div>
-
                 {/* Description */}
                 <div className="mb-4">
                   <p className="text-sm text-gray-600 line-clamp-3">

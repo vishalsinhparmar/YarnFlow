@@ -17,8 +17,8 @@ export const getAllCustomers = async (req, res) => {
     if (search) {
       query.$or = [
         { companyName: { $regex: search, $options: 'i' } },
-        { contactPerson: { $regex: search, $options: 'i' } },
-        { customerCode: { $regex: search, $options: 'i' } }
+        { gstNumber: { $regex: search, $options: 'i' } },
+        { panNumber: { $regex: search, $options: 'i' } }
       ];
     }
     
@@ -72,7 +72,7 @@ export const getCustomerById = async (req, res) => {
       data: customer
     });
     
-    logger.info(`Retrieved customer: ${customer.customerCode}`);
+    logger.info(`Retrieved customer: ${customer.companyName}`);
   } catch (error) {
     logger.error('Error fetching customer:', error);
     res.status(500).json({
@@ -97,18 +97,9 @@ export const createCustomer = async (req, res) => {
       data: customer
     });
     
-    logger.info(`Created new customer: ${customer.customerCode}`);
+    logger.info(`Created new customer: ${customer.companyName}`);
   } catch (error) {
     logger.error('Error creating customer:', error);
-    
-    // Handle duplicate key error specifically
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Customer code already exists. Please try again.',
-        error: 'Duplicate customer code'
-      });
-    }
     
     res.status(400).json({
       success: false,
@@ -140,7 +131,7 @@ export const updateCustomer = async (req, res) => {
       data: customer
     });
     
-    logger.info(`Updated customer: ${customer.customerCode}`);
+    logger.info(`Updated customer: ${customer.companyName}`);
   } catch (error) {
     logger.error('Error updating customer:', error);
     res.status(400).json({
@@ -168,7 +159,7 @@ export const deleteCustomer = async (req, res) => {
       message: 'Customer deleted successfully'
     });
     
-    logger.info(`Deleted customer: ${customer.customerCode}`);
+    logger.info(`Deleted customer: ${customer.companyName}`);
   } catch (error) {
     logger.error('Error deleting customer:', error);
     res.status(500).json({
@@ -191,8 +182,8 @@ export const getAllSuppliers = async (req, res) => {
     if (search) {
       query.$or = [
         { companyName: { $regex: search, $options: 'i' } },
-        { contactPerson: { $regex: search, $options: 'i' } },
-        { supplierCode: { $regex: search, $options: 'i' } }
+        { gstNumber: { $regex: search, $options: 'i' } },
+        { panNumber: { $regex: search, $options: 'i' } }
       ];
     }
     
@@ -241,7 +232,7 @@ export const getSupplierById = async (req, res) => {
       data: supplier
     });
     
-    logger.info(`Retrieved supplier: ${supplier.supplierCode}`);
+    logger.info(`Retrieved supplier: ${supplier.companyName}`);
   } catch (error) {
     logger.error('Error fetching supplier:', error);
     res.status(500).json({
@@ -252,51 +243,27 @@ export const getSupplierById = async (req, res) => {
   }
 };
 
-// Create new supplier with retry mechanism
+// Create new supplier
 export const createSupplier = async (req, res) => {
-  const maxRetries = 3;
-  let attempt = 0;
-  
-  while (attempt < maxRetries) {
-    try {
-      const supplier = new Supplier(req.body);
-      await supplier.save();
-      
-      res.status(201).json({
-        success: true,
-        message: 'Supplier created successfully',
-        data: supplier
-      });
-      
-      logger.info(`Created new supplier: ${supplier.supplierCode} (attempt ${attempt + 1})`);
-      return; // Success, exit the function
-      
-    } catch (error) {
-      attempt++;
-      logger.error(`Error creating supplier (attempt ${attempt}):`, error);
-      
-      // Handle duplicate key error specifically
-      if (error.code === 11000) {
-        if (attempt < maxRetries) {
-          // Wait a bit before retrying
-          await new Promise(resolve => setTimeout(resolve, 100 * attempt));
-          continue;
-        } else {
-          return res.status(400).json({
-            success: false,
-            message: 'Unable to generate unique supplier code after multiple attempts. Please try again.',
-            error: 'Duplicate supplier code - retry limit exceeded'
-          });
-        }
-      }
-      
-      // For non-duplicate errors, don't retry
-      return res.status(400).json({
-        success: false,
-        message: 'Error creating supplier',
-        error: error.message
-      });
-    }
+  try {
+    const supplier = new Supplier(req.body);
+    await supplier.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Supplier created successfully',
+      data: supplier
+    });
+    
+    logger.info(`Created new supplier: ${supplier.companyName}`);
+  } catch (error) {
+    logger.error('Error creating supplier:', error);
+    
+    res.status(400).json({
+      success: false,
+      message: 'Error creating supplier',
+      error: error.message
+    });
   }
 };
 
@@ -322,7 +289,7 @@ export const updateSupplier = async (req, res) => {
       data: supplier
     });
     
-    logger.info(`Updated supplier: ${supplier.supplierCode}`);
+    logger.info(`Updated supplier: ${supplier.companyName}`);
   } catch (error) {
     logger.error('Error updating supplier:', error);
     res.status(400).json({
@@ -350,7 +317,7 @@ export const deleteSupplier = async (req, res) => {
       message: 'Supplier deleted successfully'
     });
     
-    logger.info(`Deleted supplier: ${supplier.supplierCode}`);
+    logger.info(`Deleted supplier: ${supplier.companyName}`);
   } catch (error) {
     logger.error('Error deleting supplier:', error);
     res.status(500).json({
@@ -403,18 +370,9 @@ export const createCategory = async (req, res) => {
       data: category
     });
     
-    logger.info(`Created new category: ${category.categoryCode}`);
+    logger.info(`Created new category: ${category.categoryName}`);
   } catch (error) {
     logger.error('Error creating category:', error);
-    
-    // Handle duplicate key error specifically
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Category code already exists. Please try again.',
-        error: 'Duplicate category code'
-      });
-    }
     
     res.status(400).json({
       success: false,
@@ -446,7 +404,7 @@ export const updateCategory = async (req, res) => {
       data: category
     });
     
-    logger.info(`Updated category: ${category.categoryCode}`);
+    logger.info(`Updated category: ${category.categoryName}`);
   } catch (error) {
     logger.error('Error updating category:', error);
     res.status(400).json({
@@ -474,7 +432,7 @@ export const deleteCategory = async (req, res) => {
       message: 'Category deleted successfully'
     });
     
-    logger.info(`Deleted category: ${category.categoryCode}`);
+    logger.info(`Deleted category: ${category.categoryName}`);
   } catch (error) {
     logger.error('Error deleting category:', error);
     res.status(400).json({
@@ -497,7 +455,6 @@ export const getAllProducts = async (req, res) => {
     if (search) {
       query.$or = [
         { productName: { $regex: search, $options: 'i' } },
-        { productCode: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } }
       ];
     }
@@ -552,18 +509,9 @@ export const createProduct = async (req, res) => {
       data: product
     });
     
-    logger.info(`Created new product: ${product.productCode}`);
+    logger.info(`Created new product: ${product.productName}`);
   } catch (error) {
     logger.error('Error creating product:', error);
-    
-    // Handle duplicate key error specifically
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Product code already exists. Please try again.',
-        error: 'Duplicate product code'
-      });
-    }
     
     res.status(400).json({
       success: false,
@@ -626,18 +574,9 @@ export const updateProduct = async (req, res) => {
       data: product
     });
     
-    logger.info(`Updated product: ${product.productCode}`);
+    logger.info(`Updated product: ${product.productName}`);
   } catch (error) {
     logger.error('Error updating product:', error);
-    
-    // Handle duplicate key error specifically
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Product code already exists. Please try again.',
-        error: 'Duplicate product code'
-      });
-    }
     
     res.status(400).json({
       success: false,
@@ -667,7 +606,7 @@ export const deleteProduct = async (req, res) => {
       data: product
     });
     
-    logger.info(`Deleted product: ${product.productCode}`);
+    logger.info(`Deleted product: ${product.productName}`);
   } catch (error) {
     logger.error('Error deleting product:', error);
     res.status(500).json({

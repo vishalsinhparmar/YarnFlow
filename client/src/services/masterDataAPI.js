@@ -124,16 +124,7 @@ export const categoryAPI = {
     return apiRequest(`/categories/${categoryId}`, {
       method: 'DELETE',
     });
-  },
-
-  // Get categories by type
-  getByType: async (categoryType) => {
-    const response = await categoryAPI.getAll();
-    return {
-      ...response,
-      data: response.data.filter(cat => cat.categoryType === categoryType)
-    };
-  },
+  }
 };
 
 // ============ PRODUCT API ============
@@ -214,8 +205,7 @@ export const getDropdownOptions = async () => {
     return {
       categories: categoriesResponse.data.map(cat => ({
         value: cat._id,
-        label: cat.categoryName,
-        type: cat.categoryType
+        label: cat.categoryName
       })),
       suppliers: suppliersResponse.data.map(sup => ({
         value: sup._id,

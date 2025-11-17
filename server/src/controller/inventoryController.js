@@ -52,7 +52,6 @@ export const getInventoryProducts = async (req, res) => {
         productAggregation[productKey] = {
           productId: lot.product._id,
           productName: lot.product.productName || 'Unknown Product',
-          productCode: lot.product.productCode || 'N/A',
           categoryName: lot.product.category?.categoryName || 'Uncategorized',
           categoryId: lot.product.category?._id,
           unit: lot.unit || 'Units',
@@ -132,7 +131,6 @@ export const getInventoryProducts = async (req, res) => {
       return {
         productId: product.productId,
         productName: product.productName,
-        productCode: product.productCode,
         categoryName: product.categoryName,
         categoryId: product.categoryId,
         unit: product.unit,

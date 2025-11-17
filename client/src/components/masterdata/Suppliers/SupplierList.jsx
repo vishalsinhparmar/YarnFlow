@@ -77,19 +77,7 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
         </div>
         
         {/* Type Filter */}
-        <div>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="">All Types</option>
-            <option value="Yarn Supplier">Yarn Supplier</option>
-            <option value="Raw Material">Raw Material</option>
-            <option value="Equipment">Equipment</option>
-            <option value="Service Provider">Service Provider</option>
-          </select>
-        </div>
+
       </div>
 
       {/* Error Message */}
@@ -138,13 +126,8 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 suppliers.map((supplier) => (
                   <tr key={supplier._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {supplier.companyName}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Code: {supplier.supplierCode}
-                        </div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {supplier.companyName}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -209,24 +192,7 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
               <span className="text-gray-500">Total Suppliers:</span>
               <span className="font-medium ml-2">{pagination.total}</span>
             </div>
-            <div>
-              <span className="text-gray-500">Yarn Suppliers:</span>
-              <span className="font-medium text-blue-600 ml-2">
-                {suppliers.filter(s => s.supplierType === 'Yarn Supplier').length}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500">Raw Material:</span>
-              <span className="font-medium text-green-600 ml-2">
-                {suppliers.filter(s => s.supplierType === 'Raw Material').length}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500">Service Providers:</span>
-              <span className="font-medium text-orange-600 ml-2">
-                {suppliers.filter(s => s.supplierType === 'Service Provider').length}
-              </span>
-            </div>
+            
           </div>
         </div>
       )}

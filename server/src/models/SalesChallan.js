@@ -55,7 +55,6 @@ const salesChallanSchema = new mongoose.Schema({
       required: true
     },
     productName: { type: String, required: true },
-    productCode: { type: String, required: true },
     
     // Quantities
     orderedQuantity: { type: Number, required: true, min: 0 },

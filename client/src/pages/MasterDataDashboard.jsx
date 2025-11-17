@@ -244,33 +244,21 @@ const MasterDataDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {categories && categories.length > 0 ? (
             categories.slice(0, 3).map((category) => {
-              const categoryColors = {
-                'Cotton Yarn': 'bg-green-100 text-green-800',
-                'Polyester': 'bg-blue-100 text-blue-800',
-                'Blended Yarn': 'bg-purple-100 text-purple-800',
-                'Raw Material': 'bg-orange-100 text-orange-800',
-                'Finished Goods': 'bg-indigo-100 text-indigo-800'
-              };
-              
-              const colorClass = categoryColors[category.categoryType] || 'bg-gray-100 text-gray-800';
-              
               return (
                 <div key={category._id} className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-semibold text-gray-900">{category.categoryName}</h3>
-                    <span className={`text-xs px-2 py-1 rounded ${colorClass}`}>
-                      {category.categoryType}
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      category.status === 'Active' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {category.status}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 mb-3">
+                  <p className="text-sm text-gray-600">
                     {category.description || 'No description available'}
                   </p>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500">Unit:</span>
-                      <span className="font-medium">{category.specifications?.unit}</span>
-                    </div>
-                  </div>
                 </div>
               );
             })

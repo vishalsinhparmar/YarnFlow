@@ -60,9 +60,9 @@ export const getAllPurchaseOrders = async (req, res) => {
     }
     
     const purchaseOrders = await PurchaseOrder.find(query)
-      .populate('supplier', 'companyName supplierCode contactPerson phone')
-      .populate('category', 'categoryName categoryCode')
-      .populate('items.product', 'productName productCode specifications')
+      .populate('supplier', 'companyName gstNumber')
+      .populate('category', 'categoryName')
+      .populate('items.product', 'productName')
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
@@ -95,9 +95,9 @@ export const getPurchaseOrderById = async (req, res) => {
     const { id } = req.params;
     
     const purchaseOrder = await PurchaseOrder.findById(id)
-      .populate('supplier', 'companyName supplierCode contactPerson phone address')
-      .populate('category', 'categoryName categoryCode')
-      .populate('items.product', 'productName productCode specifications inventory');
+      .populate('supplier', 'companyName gstNumber')
+      .populate('category', 'categoryName')
+      .populate('items.product', 'productName');
     
     if (!purchaseOrder) {
       return res.status(404).json({
@@ -174,16 +174,8 @@ export const createPurchaseOrder = async (req, res) => {
       const populatedItem = {
         product: product._id,
         productName: product.productName,
-        productCode: product.productCode,
-        specifications: {
-          yarnCount: product.specifications?.yarnCount || item.specifications?.yarnCount || '',
-          color: product.specifications?.color || item.specifications?.color || '',
-          quality: product.specifications?.quality || item.specifications?.quality || '',
-          weight: item.weight || product.specifications?.weight || 0,
-          composition: product.specifications?.composition || item.specifications?.composition || ''
-        },
         quantity: item.quantity,
-        unit: item.unit || product.inventory?.unit || 'Bags',
+        unit: item.unit || 'Bags',
         notes: item.notes || ''
       };
       
@@ -209,9 +201,9 @@ export const createPurchaseOrder = async (req, res) => {
     
     // Populate the saved PO for response
     const populatedPO = await PurchaseOrder.findById(purchaseOrder._id)
-      .populate('supplier', 'companyName supplierCode contactPerson phone')
-      .populate('category', 'categoryName categoryCode')
-      .populate('items.product', 'productName productCode specifications');
+      .populate('supplier', 'companyName gstNumber')
+      .populate('category', 'categoryName')
+      .populate('items.product', 'productName');
     
     res.status(201).json({
       success: true,
@@ -277,8 +269,8 @@ export const updatePurchaseOrder = async (req, res) => {
       { ...updateData, lastModifiedBy: updateData.lastModifiedBy || 'System' },
       { new: true, runValidators: true }
     )
-    .populate('supplier', 'companyName supplierCode contactPerson email phone')
-    .populate('items.product', 'productName productCode specifications');
+    .populate('supplier', 'companyName gstNumber')
+    .populate('items.product', 'productName');
     
     res.status(200).json({
       success: true,
@@ -359,7 +351,7 @@ export const updatePurchaseOrderStatus = async (req, res) => {
       updateData,
       { new: true, runValidators: true }
     )
-    .populate('supplier', 'companyName supplierCode contactPerson email phone');
+    .populate('supplier', 'companyName gstNumber');
     
     if (!updatedPO) {
       return res.status(404).json({

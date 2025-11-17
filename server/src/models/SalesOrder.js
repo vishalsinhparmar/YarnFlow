@@ -58,7 +58,6 @@ const salesOrderSchema = new mongoose.Schema({
       required: true
     },
     productName: { type: String, required: true },
-    productCode: { type: String, required: true },
     
     // Quantities (simplified for inventory-based sales)
     quantity: { type: Number, required: true, min: 0 },
