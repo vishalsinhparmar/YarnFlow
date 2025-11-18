@@ -10,17 +10,6 @@ const purchaseOrderItemSchema = new mongoose.Schema({
     type: String,
     required: true // Store name for historical reference
   },
-  productCode: {
-    type: String,
-    required: true // Store code for historical reference
-  },
-  specifications: {
-    yarnCount: String,
-    color: String,
-    quality: String,
-    weight: Number,
-    composition: String
-  },
   quantity: {
     type: Number,
     required: true,
@@ -272,7 +261,7 @@ purchaseOrderSchema.methods.updateReceiptStatus = function() {
     } else {
       // Calculate pending quantities only if NOT manually completed
       const pendingQty = item.quantity - (item.receivedQuantity || 0);
-      const pendingWt = (item.specifications?.weight || 0) - (item.receivedWeight || 0);
+      const pendingWt = 0; // Weight tracking removed from product model
       
       this.items[i].set('pendingQuantity', pendingQty);
       this.items[i].set('pendingWeight', pendingWt);

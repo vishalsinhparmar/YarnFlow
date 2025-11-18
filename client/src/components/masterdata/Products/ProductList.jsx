@@ -138,13 +138,8 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
                   return (
                     <tr key={product._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {product.productName}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Code: {product.productCode}
-                          </div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {product.productName}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

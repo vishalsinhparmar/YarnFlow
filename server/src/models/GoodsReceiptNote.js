@@ -15,17 +15,6 @@ const grnItemSchema = new mongoose.Schema({
     type: String,
     required: true // Store for historical reference
   },
-  productCode: {
-    type: String,
-    required: true // Store for historical reference
-  },
-  specifications: {
-    yarnCount: String,
-    color: String,
-    quality: String,
-    weight: Number,
-    composition: String
-  },
   
   // Quantities
   orderedQuantity: {

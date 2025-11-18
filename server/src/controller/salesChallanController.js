@@ -78,9 +78,9 @@ export const getAllSalesChallans = async (req, res) => {
     // Execute queries in parallel for better performance
     const [challans, total] = await Promise.all([
       SalesChallan.find(query)
-        .populate('customer', 'companyName contactPerson email phone')
+        .populate('customer', 'companyName gstNumber address')
         .populate('salesOrder', 'soNumber orderDate totalAmount status')
-        .populate('items.product', 'productName productCode')
+        .populate('items.product', 'productName')
         .sort({ challanDate: -1 })
         .skip(skip)
         .limit(validatedLimit),
@@ -118,9 +118,9 @@ export const getSalesChallanById = async (req, res) => {
     const { id } = req.params;
     
     const challan = await SalesChallan.findById(id)
-      .populate('customer', 'companyName contactPerson email phone address')
+      .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
-      .populate('items.product', 'productName productCode specifications')
+      .populate('items.product', 'productName')
       .populate('items.inventoryAllocations.inventoryLot', 'lotNumber availableQuantity');
     
     if (!challan) {
@@ -245,7 +245,6 @@ export const createSalesChallan = async (req, res) => {
           salesOrderItem: item.salesOrderItem,
           product: item.product,
           productName: item.productName,
-          productCode: item.productCode,
           orderedQuantity: item.orderedQuantity,
           dispatchQuantity: item.dispatchQuantity,
           unit: item.unit,
@@ -453,9 +452,9 @@ export const createSalesChallan = async (req, res) => {
 
     // Populate challan before returning
     const populatedChallan = await SalesChallan.findById(challan._id)
-      .populate('customer', 'companyName contactPerson email phone')
+      .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate totalAmount status')
-      .populate('items.product', 'productName productCode');
+      .populate('items.product', 'productName');
 
     res.status(201).json({
       success: true,
@@ -521,9 +520,9 @@ export const updateSalesChallan = async (req, res) => {
     await challan.save();
     
     const updatedChallan = await SalesChallan.findById(id)
-      .populate('customer', 'companyName contactPerson email phone')
+      .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate totalAmount')
-      .populate('items.product', 'productName productCode');
+      .populate('items.product', 'productName');
     
     res.status(200).json({
       success: true,
@@ -607,7 +606,7 @@ export const updateChallanStatus = async (req, res) => {
     await challan.save();
     
     const updatedChallan = await SalesChallan.findById(id)
-      .populate('customer', 'companyName contactPerson email phone')
+      .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate totalAmount');
     
     res.status(200).json({
@@ -709,7 +708,7 @@ export const getChallansBySalesOrder = async (req, res) => {
     const { soId } = req.params;
     
     const challans = await SalesChallan.find({ salesOrder: soId })
-      .populate('customer', 'companyName contactPerson')
+      .populate('customer', 'companyName')
       .sort({ challanDate: -1 });
     
     res.status(200).json({
@@ -732,7 +731,7 @@ export const trackChallan = async (req, res) => {
     const { challanNumber } = req.params;
     
     const challan = await SalesChallan.findOne({ challanNumber })
-      .populate('customer', 'companyName contactPerson')
+      .populate('customer', 'companyName')
       .populate('salesOrder', 'soNumber')
       .select('challanNumber status statusHistory deliveryDetails transportDetails');
     
@@ -774,9 +773,9 @@ export const generateChallanPDF = async (req, res) => {
 
     // Fetch complete challan data with all populated fields including customer address
     const challan = await SalesChallan.findById(id)
-      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
-      .populate('items.product', 'productName productCode specifications');
+      .populate('items.product', 'productName');
 
     if (!challan) {
       return res.status(404).json({
@@ -835,11 +834,11 @@ export const generateSOConsolidatedPDF = async (req, res) => {
 
     // Fetch all challans for this Sales Order
     const challans = await SalesChallan.find({ salesOrder: soId })
-      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
       .populate({
         path: 'items.product',
-        select: 'productName productCode specifications category',
+        select: 'productName category',
         populate: {
           path: 'category',
           select: 'categoryName name' // Include both field names for compatibility
@@ -907,11 +906,11 @@ export const previewSOConsolidatedPDF = async (req, res) => {
 
     // Fetch all challans for this Sales Order
     const challans = await SalesChallan.find({ salesOrder: soId })
-      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
       .populate({
         path: 'items.product',
-        select: 'productName productCode specifications category',
+        select: 'productName category',
         populate: {
           path: 'category',
           select: 'categoryName name' // Include both field names for compatibility
@@ -978,9 +977,9 @@ export const previewChallanPDF = async (req, res) => {
 
     // Fetch complete challan data with all populated fields including customer address
     const challan = await SalesChallan.findById(id)
-      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
-      .populate('items.product', 'productName productCode specifications');
+      .populate('items.product', 'productName');
 
     if (!challan) {
       return res.status(404).json({

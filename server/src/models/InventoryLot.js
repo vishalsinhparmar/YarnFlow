@@ -36,10 +36,6 @@ const inventoryLotSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  productCode: {
-    type: String,
-    required: true
-  },
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category'
@@ -349,8 +345,8 @@ inventoryLotSchema.statics.findByProduct = function(productId, options = {}) {
   }
   
   return this.find(query)
-    .populate('product', 'productName productCode')
-    .populate('supplier', 'companyName supplierCode')
+    .populate('product', 'productName')
+    .populate('supplier', 'companyName')
     .sort({ receivedDate: -1 });
 };
 

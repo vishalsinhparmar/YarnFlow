@@ -117,13 +117,8 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 customers.map((customer) => (
                   <tr key={customer._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {customer.companyName}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Code: {customer.customerCode}
-                        </div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {customer.companyName}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

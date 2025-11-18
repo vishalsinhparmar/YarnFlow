@@ -61,7 +61,7 @@ export const getAllGRNs = async (req, res) => {
     }
     
     const grns = await GoodsReceiptNote.find(query)
-      .populate('supplier', 'companyName supplierCode contactPerson phone')
+      .populate('supplier', 'companyName gstNumber')
       .populate({
         path: 'purchaseOrder',
         select: 'poNumber orderDate expectedDeliveryDate category items',
@@ -120,9 +120,9 @@ export const getGRNById = async (req, res) => {
     const { id } = req.params;
     
     const grn = await GoodsReceiptNote.findById(id)
-      .populate('supplier', 'companyName supplierCode contactPerson phone address')
+      .populate('supplier', 'companyName gstNumber')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate items')
-      .populate('items.product', 'productName productCode specifications inventory');
+      .populate('items.product', 'productName');
     
     if (!grn) {
       return res.status(404).json({
@@ -227,8 +227,6 @@ export const createGRN = async (req, res) => {
         purchaseOrderItem: item.purchaseOrderItem,
         product: product._id,
         productName: product.productName,
-        productCode: product.productCode,
-        specifications: product.specifications || {},
         orderedQuantity: poItem.quantity,
         orderedWeight: orderedWeight,
         previouslyReceived: previouslyReceived,
@@ -430,7 +428,6 @@ export const createGRN = async (req, res) => {
                 poNumber: prevGRN.poNumber,
                 product: item.product,
                 productName: product.productName,
-                productCode: product.productCode,
                 category: product.category,
                 supplier: prevGRN.supplier,
                 supplierName: prevGRN.supplierDetails?.companyName || grn.supplierDetails.companyName,
@@ -496,7 +493,6 @@ export const createGRN = async (req, res) => {
           poNumber: grn.poNumber,
           product: item.product,
           productName: product.productName,
-          productCode: product.productCode,
           category: product.category,
           supplier: grn.supplier,
           supplierName: grn.supplierDetails.companyName,
@@ -551,9 +547,9 @@ export const createGRN = async (req, res) => {
     
     // Populate the saved GRN for response
     const populatedGRN = await GoodsReceiptNote.findById(grn._id)
-      .populate('supplier', 'companyName supplierCode contactPerson phone')
+      .populate('supplier', 'companyName gstNumber')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
-      .populate('items.product', 'productName productCode specifications');
+      .populate('items.product', 'productName');
     
     res.status(201).json({
       success: true,
@@ -603,9 +599,9 @@ export const updateGRN = async (req, res) => {
       { ...updateData, lastModifiedBy: updateData.lastModifiedBy || 'System' },
       { new: true, runValidators: true }
     )
-    .populate('supplier', 'companyName supplierCode contactPerson phone')
+    .populate('supplier', 'companyName gstNumber')
     .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
-    .populate('items.product', 'productName productCode specifications');
+    .populate('items.product', 'productName');
     
     res.status(200).json({
       success: true,
@@ -682,7 +678,7 @@ export const updateGRNStatus = async (req, res) => {
       updateData,
       { new: true, runValidators: true }
     )
-    .populate('supplier', 'companyName supplierCode contactPerson phone');
+    .populate('supplier', 'companyName gstNumber');
     
     if (!updatedGRN) {
       return res.status(404).json({
@@ -751,7 +747,6 @@ export const approveGRN = async (req, res) => {
           poNumber: grn.poNumber,
           product: item.product._id,
           productName: item.productName,
-          productCode: item.productCode,
           category: item.product.category,
           supplier: grn.supplier._id,
           supplierName: grn.supplierDetails.companyName,
@@ -788,17 +783,14 @@ export const approveGRN = async (req, res) => {
         console.log(`📦 Created inventory lot for ${item.productName}: ${lotQuantity} ${item.unit}`);
         
         // Update product inventory
-        await Product.findByIdAndUpdate(
-          item.product._id,
-          { $inc: { 'inventory.currentStock': lotQuantity } }
-        );
+        // Note: Product inventory tracking removed - use InventoryLot aggregation instead
       }
     }
     
     const populatedGRN = await GoodsReceiptNote.findById(grn._id)
-      .populate('supplier', 'companyName supplierCode contactPerson phone')
+      .populate('supplier', 'companyName gstNumber')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
-      .populate('items.product', 'productName productCode specifications');
+      .populate('items.product', 'productName');
     
     res.status(200).json({
       success: true,
@@ -894,7 +886,7 @@ export const getGRNsByPO = async (req, res) => {
     const { poId } = req.params;
     
     const grns = await GoodsReceiptNote.find({ purchaseOrder: poId })
-      .populate('supplier', 'companyName supplierCode')
+      .populate('supplier', 'companyName gstNumber')
       .sort({ createdAt: -1 });
     
     res.status(200).json({

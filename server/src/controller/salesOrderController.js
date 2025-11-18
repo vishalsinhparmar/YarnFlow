@@ -51,9 +51,9 @@ export const getAllSalesOrders = async (req, res) => {
 
     // Execute query with population
     const salesOrders = await SalesOrder.find(filter)
-      .populate('customer', 'companyName contactPerson email phone')
+      .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName productCode specifications')
+      .populate('items.product', 'productName')
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit));
@@ -89,9 +89,9 @@ export const getSalesOrderById = async (req, res) => {
     const { id } = req.params;
 
     const salesOrder = await SalesOrder.findById(id)
-      .populate('customer', 'companyName contactPerson email phone address gstNumber')
+      .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName productCode specifications')
+      .populate('items.product', 'productName')
       .populate('items.inventoryAllocations.inventoryLot', 'lotNumber currentQuantity');
 
     if (!salesOrder) {
@@ -177,7 +177,6 @@ export const createSalesOrder = async (req, res) => {
       validatedItems.push({
         product: product._id,
         productName: product.productName,
-        productCode: product.productCode,
         quantity: item.quantity,
         unit: item.unit,
         weight: item.weight || 0,
@@ -211,9 +210,9 @@ export const createSalesOrder = async (req, res) => {
 
     // Populate the saved sales order for response
     const populatedSalesOrder = await SalesOrder.findById(salesOrder._id)
-      .populate('customer', 'companyName contactPerson email phone')
+      .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName productCode specifications');
+      .populate('items.product', 'productName');
 
     res.status(201).json({
       success: true,
@@ -270,9 +269,9 @@ export const updateSalesOrder = async (req, res) => {
 
     // Populate the updated sales order for response
     const populatedSalesOrder = await SalesOrder.findById(salesOrder._id)
-      .populate('customer', 'companyName contactPerson email phone')
+      .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName productCode specifications');
+      .populate('items.product', 'productName');
 
     res.status(200).json({
       success: true,
@@ -754,7 +753,7 @@ export const getSalesOrdersByCustomer = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const salesOrders = await SalesOrder.find({ customer: customerId })
-      .populate('customer', 'companyName contactPerson')
+      .populate('customer', 'companyName')
       .sort({ orderDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
