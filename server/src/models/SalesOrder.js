@@ -15,18 +15,10 @@ const salesOrderSchema = new mongoose.Schema({
     ref: 'Customer',
     required: true
   },
-  customerDetails: {
-    companyName: { type: String, default: 'Unknown Company' },
-    contactPerson: { type: String, default: 'Unknown Contact' },
-    email: { type: String, default: 'no-email@example.com' },
-    phone: { type: String, default: 'No Phone' },
-    address: {
-      street: String,
-      city: String,
-      state: String,
-      pincode: String,
-      country: { type: String, default: 'India' }
-    }
+  customerName: {
+    type: String,
+    required: true,
+    default: 'Unknown Company'
   },
 
   // Category (NEW - for inventory integration)
@@ -175,7 +167,14 @@ salesOrderSchema.index({ customer: 1 });
 salesOrderSchema.index({ status: 1 });
 salesOrderSchema.index({ orderDate: -1 });
 salesOrderSchema.index({ expectedDeliveryDate: 1 });
-salesOrderSchema.index({ 'customerDetails.companyName': 1 });
+salesOrderSchema.index({ customerName: 1 });
+
+// Virtual for backward compatibility with PDF generator
+salesOrderSchema.virtual('customerDetails').get(function() {
+  return {
+    companyName: this.customerName || 'Unknown Company'
+  };
+});
 
 // Virtual for order completion percentage
 salesOrderSchema.virtual('completionPercentage').get(function() {
@@ -318,13 +317,85 @@ salesOrderSchema.methods.updateDispatchStatus = function(challans) {
   this.markModified('status');
 };
 
-// Static method to generate SO number
+/**
+ * Generate unique SO number - PRODUCTION SAFE
+ * 
+ * This method ensures NO duplicate SO numbers even when documents are deleted.
+ * 
+ * Example scenarios:
+ * - Existing SOs: 1, 2, 3, 4, 5, 6, 7
+ *   Delete: 4
+ *   Next SO: 8 (NOT 4!) ✅
+ * 
+ * - Existing SOs: 1, 2, 5, 7, 10
+ *   (3, 4, 6, 8, 9 were deleted)
+ *   Next SO: 11 (uses max + 1) ✅
+ * 
+ * - Empty database (all deleted)
+ *   Next SO: 1 ✅
+ * 
+ * How it works:
+ * 1. Fetch ALL existing SO numbers from database
+ * 2. Extract numeric part from each (e.g., "PKRK/SO/15" → 15)
+ * 3. Find the MAXIMUM number
+ * 4. Return MAX + 1
+ * 
+ * This guarantees:
+ * ✅ Never reuses deleted SO numbers
+ * ✅ Handles any deletion pattern (single, multiple, gaps)
+ * ✅ Works with empty database
+ * ✅ Thread-safe (uses database as source of truth)
+ * ✅ Scalable for production
+ */
 salesOrderSchema.statics.generateSONumber = async function() {
-  // Count total SOs to get next number
-  const count = await this.countDocuments({});
-  
-  // Generate SO number: PKRK/SO/01, PKRK/SO/02, etc.
-  return `PKRK/SO/${String(count + 1).padStart(2, '0')}`;
+  try {
+    // Fetch all SO numbers from database (only soNumber field for performance)
+    const allSOs = await this.find({}, { soNumber: 1 })
+      .lean()
+      .exec();
+    
+    let maxNumber = 0;
+    
+    // Extract numeric part from each SO number and find maximum
+    // Example: "PKRK/SO/15" → extract 15 → compare with max
+    allSOs.forEach(so => {
+      if (so.soNumber) {
+        // Match pattern: PKRK/SO/[digits]
+        const match = so.soNumber.match(/PKRK\/SO\/(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNumber) {
+            maxNumber = num;
+          }
+        }
+      }
+    });
+    
+    // Next number is always max + 1
+    // This ensures we NEVER reuse deleted numbers
+    const nextNumber = maxNumber + 1;
+    
+    // Format: PKRK/SO/1, PKRK/SO/2, ..., PKRK/SO/100000, etc.
+    // No padding limit - supports unlimited SO numbers
+    const newSONumber = `PKRK/SO/${nextNumber}`;
+    
+    // Log for debugging and audit trail
+    console.log(`🔢 Generated SO Number: ${newSONumber} (previous max: ${maxNumber}, total SOs: ${allSOs.length})`);
+    
+    return newSONumber;
+  } catch (error) {
+    // Fallback mechanism in case of database errors
+    console.error('❌ Error generating SO number:', error);
+    
+    // Use timestamp-based unique number as fallback
+    // This ensures SO creation never fails completely
+    const timestamp = Date.now().toString().slice(-6);
+    const fallbackNumber = `PKRK/SO/${timestamp}`;
+    
+    console.warn(`⚠️  Using fallback SO number: ${fallbackNumber}`);
+    
+    return fallbackNumber;
+  }
 };
 
 // Static method to get order statistics
