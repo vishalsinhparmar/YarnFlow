@@ -226,11 +226,11 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
       const totalStock = updatedItems[index].productStock || 1;
       
       // Calculate weight per unit from inventory
-      const weightPerUnit = totalStock > 0 ? totalWeight / totalStock : 0;
+      const weightPerUnit = totalStock > 0 ? parseFloat((totalWeight / totalStock).toFixed(4)) : 0;
       
       // Suggest weight based on quantity (user can still edit)
       if (weightPerUnit > 0 && qty > 0) {
-        updatedItems[index].weight = (qty * weightPerUnit).toFixed(2);
+        updatedItems[index].weight = parseFloat((qty * weightPerUnit).toFixed(2));
       }
     }
 
@@ -266,16 +266,32 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
     }
   };
 
-  const handleCustomerSaved = async (newCustomer) => {
-    setShowCustomerModal(false);
-    // Reload customers
-    await loadCustomers();
-    // Auto-select the new customer
-    if (newCustomer && newCustomer._id) {
-      setFormData(prev => ({
-        ...prev,
-        customer: newCustomer._id
-      }));
+  const handleCustomerSaved = async (customerData) => {
+    try {
+      // Create customer via API
+      const response = await apiRequest('/master-data/customers', {
+        method: 'POST',
+        body: JSON.stringify(customerData)
+      });
+      
+      setShowCustomerModal(false);
+      
+      // Reload customers and wait for state update
+      await loadCustomers();
+      
+      // Use setTimeout to ensure state is updated before setting selection
+      setTimeout(() => {
+        if (response && response._id) {
+          setFormData(prev => ({
+            ...prev,
+            customer: response._id
+          }));
+        }
+      }, 100);
+      
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      alert('Failed to create customer: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -443,9 +459,12 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                 <button
                   type="button"
                   onClick={() => setShowCustomerModal(true)}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  className="flex items-center gap-1 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
                 >
-                  + Add Customer
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add New
                 </button>
               </div>
               <select
@@ -453,7 +472,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                 value={formData.customer}
                 onChange={handleInputChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">Select Customer</option>
                 {customers.map(customer => (

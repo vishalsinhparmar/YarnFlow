@@ -548,7 +548,6 @@ const GoodsReceipt = () => {
                                 {grn.items?.map((item, idx) => (
                                   <div key={idx} className="text-sm mb-1">
                                     <span className="font-medium text-gray-900">{item.productName}</span>
-                                    <span className="text-gray-500 ml-2">({item.productCode})</span>
                                   </div>
                                 ))}
                               </td>
@@ -675,8 +674,6 @@ const GoodsReceipt = () => {
         >
           <GRNDetail
             grn={selectedGRN}
-            onStatusUpdate={handleStatusUpdate}
-            onApprove={handleApproveGRN}
             onClose={() => setShowGRNDetail(false)}
           />
         </Modal>

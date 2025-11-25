@@ -141,8 +141,8 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           // Calculate proportional weight based on remaining quantity
           const totalWeight = item.weight || 0;
           const totalQuantity = item.quantity || 1;
-          const weightPerUnit = totalWeight / totalQuantity;
-          const remainingWeight = remaining * weightPerUnit;
+          const weightPerUnit = parseFloat((totalWeight / totalQuantity).toFixed(4));
+          const remainingWeight = parseFloat((remaining * weightPerUnit).toFixed(2));
           
           return {
             salesOrderItem: item._id,
@@ -292,7 +292,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       
       // Auto-calculate proportional weight based on dispatch quantity
       const weightPerUnit = updatedItems[index].weightPerUnit || 0;
-      updatedItems[index].weight = dispatchQty * weightPerUnit;
+      updatedItems[index].weight = parseFloat((dispatchQty * weightPerUnit).toFixed(2));
     }
 
     setFormData(prev => ({
@@ -688,7 +688,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                         {/* Ordered */}
                         <div className="col-span-2 text-center">
                           <div className="text-sm font-medium text-gray-900">{item.orderedQuantity} {item.unit}</div>
-                          <div className="text-xs text-gray-500">{item.weight} kg</div>
+                          <div className="text-xs text-gray-500">{parseFloat(item.totalSOWeight || item.weight || 0).toFixed(2)} kg</div>
                         </div>
 
                         {/* Previously Dispatched */}
@@ -721,7 +721,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                           <div className="relative mt-1">
                             <input
                               type="number"
-                              value={item.weight}
+                              value={parseFloat(item.weight || 0).toFixed(2)}
                               onChange={(e) => handleItemChange(index, 'weight', e.target.value)}
                               min="0"
                               step="0.01"

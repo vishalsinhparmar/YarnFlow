@@ -6,6 +6,7 @@ import {
   updatePurchaseOrder,
   deletePurchaseOrder,
   updatePurchaseOrderStatus,
+  cancelPurchaseOrder,
   getPurchaseOrderStats
 } from '../controller/purchaseOrderController.js';
 
@@ -31,5 +32,6 @@ router.delete('/:id', deletePurchaseOrder);
 
 // Status Management
 router.patch('/:id/status', validateStatusUpdate, updatePurchaseOrderStatus);
+router.patch('/:id/cancel', cancelPurchaseOrder);
 
 export default router;

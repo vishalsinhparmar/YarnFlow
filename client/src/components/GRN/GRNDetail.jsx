@@ -3,14 +3,7 @@ import { grnUtils } from '../../services/grnAPI';
 import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
 import { getWarehouseName } from '../../constants/warehouseLocations';
 
-const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
-  const [loading, setLoading] = useState(false);
-  const [showStatusUpdate, setShowStatusUpdate] = useState(false);
-  const [showApproval, setShowApproval] = useState(false);
-  const [newStatus, setNewStatus] = useState('');
-  const [statusNotes, setStatusNotes] = useState('');
-  const [approvedBy, setApprovedBy] = useState('');
-  const [approvalNotes, setApprovalNotes] = useState('');
+const GRNDetail = ({ grn, onClose }) => {
   const [poData, setPOData] = useState(null);
   
   // Fetch PO data to get previouslyReceived information
@@ -36,47 +29,6 @@ const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
     
     fetchPOData();
   }, [grn.purchaseOrder]);
-
-  const handleStatusUpdate = async () => {
-    if (!newStatus) return;
-    
-    try {
-      setLoading(true);
-      await onStatusUpdate(grn._id, newStatus, statusNotes);
-      setShowStatusUpdate(false);
-      setNewStatus('');
-      setStatusNotes('');
-    } catch (error) {
-      console.error('Error updating status:', error);
-      alert('Failed to update status');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleApproval = async () => {
-    if (!approvedBy) {
-      alert('Please enter approver name');
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      await onApprove(grn._id, approvedBy, approvalNotes);
-      setShowApproval(false);
-      setApprovedBy('');
-      setApprovalNotes('');
-    } catch (error) {
-      console.error('Error approving GRN:', error);
-      alert('Failed to approve GRN');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getNextStatuses = () => {
-    return grnUtils.getNextStatuses(grn.status);
-  };
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -109,85 +61,11 @@ const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
           <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${grnUtils.getStatusColor(grn.status)}`}>
             {grnUtils.formatStatus(grn.status)}
           </span>
-          {getNextStatuses().length > 0 && (
-            <button
-              onClick={() => setShowStatusUpdate(true)}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-            >
-              Update Status
-            </button>
-          )}
-          {grnUtils.canApprove(grn.status, grn.qualityCheckStatus) && (
-            <button
-              onClick={() => setShowApproval(true)}
-              className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
-            >
-              Approve GRN
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Status Update Modal */}
-      {showStatusUpdate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Update GRN Status</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  New Status
-                </label>
-                <select
-                  value={newStatus}
-                  onChange={(e) => setNewStatus(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Status</option>
-                  {getNextStatuses().map(status => (
-                    <option key={status} value={status}>
-                      {grnUtils.formatStatus(status)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes (Optional)
-                </label>
-                <textarea
-                  value={statusNotes}
-                  onChange={(e) => setStatusNotes(e.target.value)}
-                  rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Add notes about this status change..."
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowStatusUpdate(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleStatusUpdate}
-                disabled={!newStatus || loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? 'Updating...' : 'Update Status'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Approval Modal */}
-      {showApproval && (
+      {/* Approval Modal - Keeping for quality check approval */}
+      {false && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Approve GRN</h3>
@@ -416,9 +294,18 @@ const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
                   receivedWeight = item.receivedQuantity * weightPerUnit;
                 }
                 
+                // Check if item is manually completed in PO
+                let isManuallyCompleted = false;
+                if (poData && poData.items) {
+                  const poItem = poData.items.find(pi => pi._id === item.purchaseOrderItem);
+                  if (poItem) {
+                    isManuallyCompleted = poItem.manuallyCompleted || false;
+                  }
+                }
+                
                 // Calculate pending
-                const pendingQty = Math.max(0, (item.orderedQuantity || 0) - (previouslyReceived + item.receivedQuantity));
-                const pendingWeight = Math.max(0, (item.orderedWeight || 0) - (previousWeight + receivedWeight));
+                const pendingQty = isManuallyCompleted ? 0 : Math.max(0, (item.orderedQuantity || 0) - (previouslyReceived + item.receivedQuantity));
+                const pendingWeight = isManuallyCompleted ? 0 : Math.max(0, (item.orderedWeight || 0) - (previousWeight + receivedWeight));
                 
                 const completionPct = item.orderedQuantity > 0 ? Math.round((previouslyReceived + item.receivedQuantity) / item.orderedQuantity * 100) : 0;
                 
@@ -486,11 +373,11 @@ const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
                     </td>
                     <td className="px-6 py-4">
                       <span className={'inline-flex px-2 py-1 text-xs font-semibold rounded-full ' + (
-                        pendingQty === 0 && item.receivedQuantity > 0 ? 'bg-green-100 text-green-800' :
+                        isManuallyCompleted || (pendingQty === 0 && item.receivedQuantity > 0) ? 'bg-green-100 text-green-800' :
                         item.receivedQuantity > 0 ? 'bg-yellow-100 text-yellow-800' :
                         'bg-gray-100 text-gray-800'
                       )}>
-                        {pendingQty === 0 && item.receivedQuantity > 0 ? 'Complete' : item.receivedQuantity > 0 ? 'Partial' : 'Pending'}
+                        {isManuallyCompleted ? 'Complete ✓' : pendingQty === 0 && item.receivedQuantity > 0 ? 'Complete' : item.receivedQuantity > 0 ? 'Partial' : 'Pending'}
                       </span>
                     </td>
                   </tr>
@@ -531,18 +418,12 @@ const GRNDetail = ({ grn, onStatusUpdate, onApprove, onClose }) => {
 
 
       {/* Actions */}
-      <div className="flex justify-end space-x-4 pt-6 border-t">
+      <div className="flex justify-end pt-6 border-t">
         <button
           onClick={onClose}
-          className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
         >
           Close
-        </button>
-        <button
-          onClick={() => window.print()}
-          className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-        >
-          Print GRN
         </button>
       </div>
     </div>

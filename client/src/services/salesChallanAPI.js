@@ -70,7 +70,7 @@ export const salesChallanAPI = {
 
   // Generate PDF (download)
   generatePDF: async (id) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3050/api';
     const url = `${API_BASE_URL}/sales-challans/${id}/pdf/download`;
     
     try {
@@ -118,7 +118,7 @@ export const salesChallanAPI = {
 
   // Preview PDF (open in new tab)
   previewPDF: async (id) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3050/api';
     const url = `${API_BASE_URL}/sales-challans/${id}/pdf/preview`;
     
     try {
@@ -154,7 +154,7 @@ export const salesChallanAPI = {
 
   // Generate Consolidated PDF for SO (download)
   generateConsolidatedPDF: async (soId) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3050/api';
     const url = `${API_BASE_URL}/sales-challans/so/${soId}/pdf/download`;
     
     try {
@@ -202,7 +202,7 @@ export const salesChallanAPI = {
 
   // Preview Consolidated PDF for SO (open in new tab)
   previewConsolidatedPDF: async (soId) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3050/api';
     const url = `${API_BASE_URL}/sales-challans/so/${soId}/pdf/preview`;
     
     try {

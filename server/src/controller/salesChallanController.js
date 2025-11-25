@@ -771,10 +771,17 @@ export const generateChallanPDF = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Fetch complete challan data with all populated fields including customer address
+    // Fetch complete challan data with all populated fields including customer address and category
     const challan = await SalesChallan.findById(id)
       .populate('customer', 'companyName gstNumber address')
-      .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
+      .populate({
+        path: 'salesOrder',
+        select: 'soNumber orderDate totalAmount expectedDeliveryDate category',
+        populate: {
+          path: 'category',
+          select: 'categoryName'
+        }
+      })
       .populate('items.product', 'productName');
 
     if (!challan) {
@@ -975,10 +982,17 @@ export const previewChallanPDF = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Fetch complete challan data with all populated fields including customer address
+    // Fetch complete challan data with all populated fields including customer address and category
     const challan = await SalesChallan.findById(id)
       .populate('customer', 'companyName gstNumber address')
-      .populate('salesOrder', 'soNumber orderDate totalAmount expectedDeliveryDate')
+      .populate({
+        path: 'salesOrder',
+        select: 'soNumber orderDate totalAmount expectedDeliveryDate category',
+        populate: {
+          path: 'category',
+          select: 'categoryName'
+        }
+      })
       .populate('items.product', 'productName');
 
     if (!challan) {
