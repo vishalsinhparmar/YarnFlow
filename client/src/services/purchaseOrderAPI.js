@@ -56,6 +56,14 @@ export const purchaseOrderAPI = {
     });
   },
 
+  // Cancel purchase order
+  cancel: async (id, cancellationData) => {
+    return apiRequest(`/purchase-orders/${id}/cancel`, {
+      method: 'PATCH',
+      body: JSON.stringify(cancellationData),
+    });
+  },
+
   // Get PO statistics
   getStats: async () => {
     return apiRequest('/purchase-orders/stats');

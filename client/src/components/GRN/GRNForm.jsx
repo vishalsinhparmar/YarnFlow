@@ -123,7 +123,8 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
       
       // Populate items from PO with receipt tracking
       const items = po.items.map(item => {
-        const orderedWeight = item.specifications?.weight || 0;
+        // Get weight from item.weight (new) or specifications.weight (old) for backward compatibility
+        const orderedWeight = item.weight || item.specifications?.weight || 0;
         const receivedQty = item.receivedQuantity || 0;
         
         // Calculate received weight from backend OR calculate from quantity
@@ -164,10 +165,11 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
           warehouseLocation: formData.warehouseLocation,
           notes: '',
           
-          // Track if item is already completed
-          isCompleted: pendingQty <= 0
+          // Track if item is already completed (either fully received OR manually completed)
+          isCompleted: pendingQty <= 0 || item.manuallyCompleted,
+          manuallyCompleted: item.manuallyCompleted || false
         };
-      }).filter(item => !item.isCompleted); // Only show items with pending qty
+      }).filter(item => !item.isCompleted); // Only show items with pending qty or not manually completed
       
       setFormData(prev => ({
         ...prev,

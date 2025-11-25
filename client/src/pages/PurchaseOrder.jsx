@@ -90,15 +90,22 @@ const PurchaseOrder = () => {
     return () => clearTimeout(timeoutId);
   }, [searchTerm, statusFilter]);
 
-  // Handle PO creation
+  // Handle PO creation/update
   const handleCreatePO = async (poData) => {
     try {
-      await purchaseOrderAPI.create(poData);
+      if (selectedPO && selectedPO._id) {
+        // Update existing PO
+        await purchaseOrderAPI.update(selectedPO._id, poData);
+      } else {
+        // Create new PO
+        await purchaseOrderAPI.create(poData);
+      }
       setShowCreatePO(false);
+      setSelectedPO(null);
       fetchPurchaseOrders(currentPage, searchTerm, statusFilter);
       fetchStats();
     } catch (err) {
-      console.error('Error creating PO:', err);
+      console.error('Error saving PO:', err);
       throw err;
     }
   };
@@ -116,6 +123,45 @@ const PurchaseOrder = () => {
     } catch (err) {
       console.error('Error updating PO status:', err);
       alert('Failed to update PO status');
+    }
+  };
+
+  // Handle order actions (edit, cancel, delete)
+  const handleOrderAction = async (action, po) => {
+    try {
+      switch (action) {
+        case 'view':
+          handleViewPO(po);
+          break;
+        case 'edit':
+          setSelectedPO(po);
+          setShowCreatePO(true);
+          break;
+        case 'cancel':
+          if (confirm('Are you sure you want to cancel this purchase order?')) {
+            await purchaseOrderAPI.cancel(po._id, { 
+              cancellationReason: 'Cancelled by admin',
+              cancelledBy: 'Admin'
+            });
+            await fetchPurchaseOrders(currentPage, searchTerm, statusFilter);
+            await fetchStats();
+            alert('Purchase order cancelled successfully');
+          }
+          break;
+        case 'delete':
+          if (confirm('Are you sure you want to permanently delete this purchase order? This action cannot be undone.')) {
+            await purchaseOrderAPI.delete(po._id);
+            await fetchPurchaseOrders(currentPage, searchTerm, statusFilter);
+            await fetchStats();
+            alert('Purchase order deleted successfully');
+          }
+          break;
+        default:
+          break;
+      }
+    } catch (err) {
+      console.error('Error performing action:', err);
+      alert('Failed to perform action');
     }
   };
 
@@ -148,7 +194,10 @@ const PurchaseOrder = () => {
             <p className="text-gray-600">Manage and track purchase orders from suppliers</p>
           </div>
           <button 
-            onClick={() => setShowCreatePO(true)}
+            onClick={() => {
+              setSelectedPO(null);
+              setShowCreatePO(true);
+            }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
             + New PO
@@ -221,6 +270,7 @@ const PurchaseOrder = () => {
               <option value="Draft">Draft</option>
               <option value="Partially_Received">Partially Received</option>
               <option value="Fully_Received">Fully Received</option>
+              <option value="Cancelled">Cancelled</option>
             </select>
           </div>
         </div>
@@ -251,7 +301,10 @@ const PurchaseOrder = () => {
           <div className="p-8 text-center">
             <p className="text-gray-600">No purchase orders found</p>
             <button 
-              onClick={() => setShowCreatePO(true)}
+              onClick={() => {
+                setSelectedPO(null);
+                setShowCreatePO(true);
+              }}
               className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Create First PO
@@ -309,20 +362,39 @@ const PurchaseOrder = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button 
-                          onClick={() => handleViewPO(po)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          View
-                        </button>
-                        {po.status === 'Sent' && (
-                          <button 
-                            onClick={() => handleStatusUpdate(po._id, 'Approved')}
-                            className="text-green-600 hover:text-green-900 mr-3"
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleOrderAction('view', po)}
+                            className="text-blue-600 hover:text-blue-900 text-xs px-2 py-1 rounded border border-blue-200 hover:bg-blue-50"
                           >
-                            Approve
+                            View
                           </button>
-                        )}
+                          {po.status === 'Draft' && (
+                            <>
+                              <button
+                                onClick={() => handleOrderAction('edit', po)}
+                                className="text-green-600 hover:text-green-900 text-xs px-2 py-1 rounded border border-green-200 hover:bg-green-50"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleOrderAction('cancel', po)}
+                                className="text-orange-600 hover:text-orange-900 text-xs px-2 py-1 rounded border border-orange-200 hover:bg-orange-50"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                          {po.status === 'Cancelled' && (
+                            <button
+                              onClick={() => handleOrderAction('delete', po)}
+                              className="text-red-600 hover:text-red-900 text-xs px-2 py-1 rounded border border-red-200 hover:bg-red-50"
+                              title="Permanently delete this cancelled order"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -380,13 +452,21 @@ const PurchaseOrder = () => {
       {showCreatePO && (
         <Modal
           isOpen={showCreatePO}
-          onClose={() => setShowCreatePO(false)}
-          title="Create New Purchase Order"
+          onClose={() => {
+            setShowCreatePO(false);
+            setSelectedPO(null);
+          }}
+          title={selectedPO ? `Edit Purchase Order - ${selectedPO.poNumber}` : "Create New Purchase Order"}
           size="xl"
         >
           <PurchaseOrderForm
+            key={selectedPO ? selectedPO._id : 'new-po'}
+            purchaseOrder={selectedPO}
             onSubmit={handleCreatePO}
-            onCancel={() => setShowCreatePO(false)}
+            onCancel={() => {
+              setShowCreatePO(false);
+              setSelectedPO(null);
+            }}
           />
         </Modal>
       )}
@@ -400,7 +480,6 @@ const PurchaseOrder = () => {
         >
           <PurchaseOrderDetail
             purchaseOrder={selectedPO}
-            onStatusUpdate={handleStatusUpdate}
             onClose={() => setShowPODetail(false)}
           />
         </Modal>

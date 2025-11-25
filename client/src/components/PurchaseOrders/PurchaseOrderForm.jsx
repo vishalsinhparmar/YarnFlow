@@ -17,9 +17,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const [modalLoading, setModalLoading] = useState(false);
   
   // Dynamic units
-  const [units, setUnits] = useState(['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces']);
-  const [customUnitInput, setCustomUnitInput] = useState({});
-  const [showCustomUnitInput, setShowCustomUnitInput] = useState({});
+  const [units, setUnits] = useState(['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces', 'Tons', 'Liters', 'Units']);
 
   const [formData, setFormData] = useState({
     supplier: '',
@@ -54,7 +52,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     fetchData();
   }, []);
 
-  // Populate form if editing
+  // Populate form if editing, reset if null
   useEffect(() => {
     if (purchaseOrder) {
       setFormData({
@@ -65,7 +63,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
         items: purchaseOrder.items?.map(item => ({
           product: item.product?._id || item.product || '',
           quantity: item.quantity || 1,
-          weight: item.specifications?.weight || 0,
+          weight: item.weight || item.specifications?.weight || 0,
           unit: item.unit || 'Bags',
           notes: item.notes || ''
         })) || [{
@@ -76,6 +74,21 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
           notes: ''
         }]
       });
+    } else {
+      // Reset form when purchaseOrder is null (creating new PO)
+      setFormData({
+        supplier: '',
+        expectedDeliveryDate: '',
+        category: '',
+        items: [{
+          product: '',
+          quantity: 1,
+          weight: 0,
+          unit: 'Bags',
+          notes: ''
+        }]
+      });
+      setErrors({});
     }
   }, [purchaseOrder]);
 
@@ -292,6 +305,11 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
         }))
       };
 
+      // Remove empty expectedDeliveryDate to avoid validation issues
+      if (!submitData.expectedDeliveryDate || submitData.expectedDeliveryDate === '') {
+        delete submitData.expectedDeliveryDate;
+      }
+
       await onSubmit(submitData);
     } catch (error) {
       console.error('Error submitting form:', error);
@@ -351,7 +369,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
               <option value="">Select Supplier</option>
               {suppliers.map(supplier => (
                 <option key={supplier._id} value={supplier._id}>
-                  {supplier.companyName} 
+                  {supplier.companyName}
                 </option>
               ))}
             </select>
@@ -498,7 +516,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                       <option value="">{!formData.category ? '⚠️ Select Category First' : 'Select Product'}</option>
                       {getFilteredProducts().map(product => (
                         <option key={product._id} value={product._id}>
-                          {product.productName} ({product.productCode})
+                          {product.productName}
                         </option>
                       ))}
                     </select>
@@ -544,60 +562,37 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Unit
                   </label>
-                  {showCustomUnitInput[index] ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={customUnitInput[index] || ''}
-                        onChange={(e) => setCustomUnitInput(prev => ({ ...prev, [index]: e.target.value }))}
-                        placeholder="Enter custom unit"
-                        className="flex-1 px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newUnit = customUnitInput[index]?.trim();
-                          if (newUnit && !units.includes(newUnit)) {
-                            setUnits(prev => [...prev, newUnit]);
-                            handleItemChange(index, 'unit', newUnit);
-                          }
-                          setShowCustomUnitInput(prev => ({ ...prev, [index]: false }));
-                          setCustomUnitInput(prev => ({ ...prev, [index]: '' }));
-                        }}
-                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                      >
-                        ✓
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowCustomUnitInput(prev => ({ ...prev, [index]: false }));
-                          setCustomUnitInput(prev => ({ ...prev, [index]: '' }));
-                        }}
-                        className="px-3 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 text-sm"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
+                  <div className="relative">
                     <select
                       value={item.unit}
                       onChange={(e) => {
                         if (e.target.value === '__add_custom__') {
-                          setShowCustomUnitInput(prev => ({ ...prev, [index]: true }));
+                          const newUnit = prompt('Enter custom unit name:');
+                          if (newUnit && newUnit.trim()) {
+                            const trimmedUnit = newUnit.trim();
+                            if (!units.includes(trimmedUnit)) {
+                              setUnits(prev => [...prev, trimmedUnit]);
+                            }
+                            handleItemChange(index, 'unit', trimmedUnit);
+                          }
                         } else {
                           handleItemChange(index, 'unit', e.target.value);
                         }
                       }}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none"
                     >
                       {units.map(unit => (
                         <option key={unit} value={unit}>{unit}</option>
                       ))}
-                      <option value="__add_custom__" className="text-blue-600 font-medium">+ Add Custom Unit</option>
+                      <option value="__add_custom__" className="text-blue-600 font-medium">➕ Add Custom Unit</option>
                     </select>
-                  )}
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Select or add custom unit</p>
                 </div>
 
                 <div>

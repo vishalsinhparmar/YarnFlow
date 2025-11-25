@@ -174,7 +174,9 @@ export const createPurchaseOrder = async (req, res) => {
       const populatedItem = {
         product: product._id,
         productName: product.productName,
+        productCode: product.productCode,
         quantity: item.quantity,
+        weight: item.weight || 0,
         unit: item.unit || 'Bags',
         notes: item.notes || ''
       };
@@ -182,8 +184,12 @@ export const createPurchaseOrder = async (req, res) => {
       populatedItems.push(populatedItem);
     }
     
+    // Generate PO number using static method (prevents duplicate key errors)
+    const poNumber = await PurchaseOrder.generatePONumber();
+    
     // Create purchase order
     const purchaseOrder = new PurchaseOrder({
+      poNumber,
       supplier: supplierId,
       category: categoryId,
       supplierDetails: {
@@ -249,8 +255,9 @@ export const updatePurchaseOrder = async (req, res) => {
       }
     }
     
-    // If updating items, validate products
+    // If updating items, validate and populate product details
     if (updateData.items) {
+      const populatedItems = [];
       for (const item of updateData.items) {
         if (item.product) {
           const product = await Product.findById(item.product);
@@ -260,8 +267,27 @@ export const updatePurchaseOrder = async (req, res) => {
               message: `Product not found: ${item.product}`
             });
           }
+          
+          // Populate item with product details
+          populatedItems.push({
+            product: product._id,
+            productName: product.productName,
+            productCode: product.productCode,
+            quantity: item.quantity,
+            weight: item.weight || 0,
+            unit: item.unit || 'Bags',
+            notes: item.notes || '',
+            // Preserve existing receipt data if any
+            receivedQuantity: item.receivedQuantity || 0,
+            receivedWeight: item.receivedWeight || 0,
+            pendingQuantity: item.pendingQuantity || 0,
+            pendingWeight: item.pendingWeight || 0,
+            receiptStatus: item.receiptStatus || 'Pending',
+            manuallyCompleted: item.manuallyCompleted || false
+          });
         }
       }
+      updateData.items = populatedItems;
     }
     
     const updatedPO = await PurchaseOrder.findByIdAndUpdate(
@@ -300,11 +326,11 @@ export const deletePurchaseOrder = async (req, res) => {
       });
     }
     
-    // Only allow deletion of Draft POs
-    if (purchaseOrder.status !== 'Draft') {
+    // Only allow deletion of Draft and Cancelled POs
+    if (purchaseOrder.status !== 'Draft' && purchaseOrder.status !== 'Cancelled') {
       return res.status(400).json({
         success: false,
-        message: 'Only draft purchase orders can be deleted'
+        message: 'Only draft and cancelled purchase orders can be deleted'
       });
     }
     
@@ -370,6 +396,58 @@ export const updatePurchaseOrderStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to update purchase order status',
+      error: error.message
+    });
+  }
+};
+
+// Cancel purchase order
+export const cancelPurchaseOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { cancellationReason, cancelledBy } = req.body;
+    
+    const purchaseOrder = await PurchaseOrder.findById(id);
+    if (!purchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Purchase order not found'
+      });
+    }
+    
+    // Don't allow cancelling already cancelled or completed POs
+    if (purchaseOrder.status === 'Cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Purchase order is already cancelled'
+      });
+    }
+    
+    if (purchaseOrder.status === 'Fully_Received') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot cancel a fully received purchase order'
+      });
+    }
+    
+    // Update PO with cancellation details
+    purchaseOrder.status = 'Cancelled';
+    purchaseOrder.cancellationReason = cancellationReason || 'Cancelled by user';
+    purchaseOrder.cancelledBy = cancelledBy || 'Admin';
+    purchaseOrder.cancelledDate = new Date();
+    
+    await purchaseOrder.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Purchase order cancelled successfully',
+      data: purchaseOrder
+    });
+  } catch (error) {
+    console.error('Error cancelling purchase order:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to cancel purchase order',
       error: error.message
     });
   }

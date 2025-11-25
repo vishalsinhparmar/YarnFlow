@@ -10,10 +10,18 @@ const purchaseOrderItemSchema = new mongoose.Schema({
     type: String,
     required: true // Store name for historical reference
   },
+  productCode: {
+    type: String
+  },
   quantity: {
     type: Number,
     required: true,
     min: 1
+  },
+  weight: {
+    type: Number,
+    default: 0,
+    min: 0
   },
   unit: {
     type: String,
@@ -98,13 +106,8 @@ const purchaseOrderSchema = new mongoose.Schema({
     required: true
   },
   expectedDeliveryDate: {
-    type: Date,
-    default: function() {
-      // Default to 7 days from now
-      const date = new Date();
-      date.setDate(date.getDate() + 7);
-      return date;
-    }
+    type: Date
+    // No default - will be null if not provided
   },
   items: [purchaseOrderItemSchema],
   
@@ -179,6 +182,11 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   lastModifiedBy: String,
   
+  // Cancellation Information
+  cancellationReason: String,
+  cancelledBy: String,
+  cancelledDate: Date,
+  
   // Revision Control
   revisionNumber: {
     type: Number,
@@ -192,20 +200,64 @@ const purchaseOrderSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Auto-generate PO number before saving
-purchaseOrderSchema.pre('save', async function(next) {
-  if (!this.poNumber) {
-    try {
-      // Count total POs to get next number
-      const count = await mongoose.model('PurchaseOrder').countDocuments({});
-      
-      // Generate PO number: PKRK/PO/01, PKRK/PO/02, etc.
-      this.poNumber = `PKRK/PO/${String(count + 1).padStart(2, '0')}`;
-    } catch (error) {
-      return next(error);
-    }
+/**
+ * Generate unique PO number - PRODUCTION SAFE
+ * 
+ * This method ensures NO duplicate PO numbers even when documents are deleted.
+ * Same approach as SalesOrder to prevent E11000 duplicate key errors.
+ */
+purchaseOrderSchema.statics.generatePONumber = async function() {
+  try {
+    // Fetch all PO numbers from database (only poNumber field for performance)
+    const allPOs = await this.find({}, { poNumber: 1 })
+      .lean()
+      .exec();
+    
+    let maxNumber = 0;
+    
+    // Extract numeric part from each PO number and find maximum
+    // Example: "PKRK/PO/15" → extract 15 → compare with max
+    allPOs.forEach(po => {
+      if (po.poNumber) {
+        // Match pattern: PKRK/PO/[digits]
+        const match = po.poNumber.match(/PKRK\/PO\/(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNumber) {
+            maxNumber = num;
+          }
+        }
+      }
+    });
+    
+    // Next number is always max + 1
+    // This ensures we NEVER reuse deleted numbers
+    const nextNumber = maxNumber + 1;
+    
+    // Format: PKRK/PO/1, PKRK/PO/2, ..., PKRK/PO/100000, etc.
+    // No padding limit - supports unlimited PO numbers
+    const newPONumber = `PKRK/PO/${nextNumber}`;
+    
+    // Log for debugging and audit trail
+    console.log(`🔢 Generated PO Number: ${newPONumber} (previous max: ${maxNumber}, total POs: ${allPOs.length})`);
+    
+    return newPONumber;
+  } catch (error) {
+    // Fallback mechanism in case of database errors
+    console.error('❌ Error generating PO number:', error);
+    
+    // Use timestamp-based unique number as fallback
+    const timestamp = Date.now().toString().slice(-6);
+    const fallbackNumber = `PKRK/PO/${timestamp}`;
+    
+    console.warn(`⚠️  Using fallback PO number: ${fallbackNumber}`);
+    
+    return fallbackNumber;
   }
-  
+};
+
+// Pre-save hook for calculating quantities and status
+purchaseOrderSchema.pre('save', async function(next) {
   // Calculate pending quantities for items
   this.items.forEach(item => {
     item.pendingQuantity = item.quantity - item.receivedQuantity;

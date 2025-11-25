@@ -218,17 +218,18 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
 
       items.forEach((item, index) => {
         const hasNotes = item.notes && item.notes.trim();
-        // Calculate dynamic row height based on notes length
-        let rowHeight = 13; // Base height
+        // Calculate dynamic row height based on notes length and wrapping
+        let rowHeight = 13; // Base height without notes
         if (hasNotes) {
           const notesLength = item.notes.length;
-          if (notesLength > 80) {
-            rowHeight = 28; // Very long notes
-          } else if (notesLength > 40) {
-            rowHeight = 22; // Medium notes
-          } else {
-            rowHeight = 18; // Short notes
-          }
+          const avgCharsPerLine = 35; // Approximate characters per line in the cell
+          const estimatedLines = Math.ceil(notesLength / avgCharsPerLine);
+          
+          // Base height (13) + space for product name (9) + lines of notes (7 per line) + padding (3)
+          rowHeight = 13 + (estimatedLines * 7) + 3;
+          
+          // Set minimum and maximum heights
+          rowHeight = Math.max(18, Math.min(rowHeight, 40)); // Min 18, Max 40
         }
 
         // Simple alternate row colors
@@ -242,7 +243,16 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
 
         let categoryName = 'N/A';
         // Try multiple sources for category information
-        if (item.product?.category) {
+        // First check if challan has salesOrder category (most reliable)
+        if (challanData.salesOrder?.category) {
+          categoryName = challanData.salesOrder.category.categoryName || 
+                       challanData.salesOrder.category.name || 
+                       challanData.salesOrder.category;
+        } else if (challanData.category) {
+          categoryName = challanData.category.categoryName || 
+                       challanData.category.name || 
+                       challanData.category;
+        } else if (item.product?.category) {
           categoryName = item.product.category.categoryName || 
                        item.product.category.name || 
                        item.product.category;
@@ -256,12 +266,6 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
           categoryName = item.product.categoryName;
         } else if (item.product?.category_name) {
           categoryName = item.product.category_name;
-        }
-        
-        // If still N/A, try to extract from product name or use a default
-        if (categoryName === 'N/A' && item.productName) {
-          // You can add logic here to derive category from product name if needed
-          categoryName = 'General'; // or keep as 'N/A'
         }
 
         // Main row data with improved alignment
@@ -278,14 +282,15 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
         if (hasNotes) {
           const notesY = rowY + 9;
           const maxNotesHeight = rowHeight - 12; // Leave some padding
-          doc.fontSize(5.5)
-             .fillColor('#2563eb')
+          doc.fontSize(7)
+             .fillColor('#1e40af')
              .font('Helvetica-Oblique')
              .text(item.notes, col2X + 2, notesY, { 
                width: col2W - 4, 
                height: maxNotesHeight,
-               lineGap: -1,
-               ellipsis: true // Add ellipsis if text is too long
+               lineGap: 0,
+               align: 'left',
+               continued: false
              })
              .font('Helvetica')
              .fillColor('#1a1a1a');
@@ -668,7 +673,15 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
 
       allProducts.forEach((product, index) => {
         const hasNotes = product.notes && product.notes.trim();
-        const rowHeight = hasNotes ? 22 : 13;
+        // Calculate dynamic row height based on notes length
+        let rowHeight = 13; // Base height without notes
+        if (hasNotes) {
+          const notesLength = product.notes.length;
+          const avgCharsPerLine = 35;
+          const estimatedLines = Math.ceil(notesLength / avgCharsPerLine);
+          rowHeight = 13 + (estimatedLines * 7) + 3;
+          rowHeight = Math.max(18, Math.min(rowHeight, 40));
+        }
 
         // Simple alternate row colors
         if (index % 2 === 0) {
@@ -691,10 +704,18 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
 
         // Product notes (if any) - displayed below product name in same cell
         if (hasNotes) {
-          doc.fontSize(5.5)
-             .fillColor('#2563eb')
+          const notesY = rowY + 9;
+          const maxNotesHeight = rowHeight - 12;
+          doc.fontSize(7)
+             .fillColor('#1e40af')
              .font('Helvetica-Oblique')
-             .text(product.notes, col2X + 2, rowY + 9, { width: col2W - 4, lineGap: -1 })
+             .text(product.notes, col2X + 2, notesY, { 
+               width: col2W - 4, 
+               height: maxNotesHeight,
+               lineGap: 0,
+               align: 'left',
+               continued: false
+             })
              .font('Helvetica')
              .fillColor('#1a1a1a');
         }

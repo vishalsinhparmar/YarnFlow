@@ -95,11 +95,6 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                 <span className="text-sm font-medium text-gray-500">Total Weight</span>
                 <p className="text-base font-semibold text-gray-900 mt-1">{totalWeight.toFixed(2)} Kg</p>
               </div>
-              
-              <div>
-                <span className="text-sm font-medium text-gray-500">Created By</span>
-                <p className="text-base font-semibold text-gray-900 mt-1">{order.createdBy || 'Admin'}</p>
-              </div>
             </div>
           </div>
 
