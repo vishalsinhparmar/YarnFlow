@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supplierAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
+import Pagination from '../../common/Pagination';
 
 const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
   const [suppliers, setSuppliers] = useState([]);
@@ -7,6 +8,8 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50);
   const [pagination, setPagination] = useState({
     current: 1,
     pages: 1,
@@ -14,15 +17,14 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
   });
 
   // Fetch suppliers
-  const fetchSuppliers = async (params = {}) => {
+  const fetchSuppliers = async (page = currentPage) => {
     try {
       setLoading(true);
       setError(null);
       
       const queryParams = {
-        page: 1,
-        limit: 10,
-        ...params
+        page,
+        limit: itemsPerPage
       };
       
       if (searchTerm) queryParams.search = searchTerm;
@@ -41,10 +43,22 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
     }
   };
 
-  // Load data when component mounts or refresh is triggered
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchSuppliers(newPage);
+  };
+
+  // Reset to page 1 when search/filter changes
   useEffect(() => {
-    fetchSuppliers();
-  }, [searchTerm, typeFilter, refreshTrigger]);
+    setCurrentPage(1);
+    fetchSuppliers(1);
+  }, [searchTerm, typeFilter]);
+
+  // Refresh when trigger changes
+  useEffect(() => {
+    fetchSuppliers(currentPage);
+  }, [refreshTrigger]);
 
   // Handle delete supplier
   const handleDeleteSupplier = async (supplierId, supplierName) => {
@@ -102,6 +116,9 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Sr. No.
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Company Name
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -123,8 +140,13 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {suppliers.length > 0 ? (
-                suppliers.map((supplier) => (
+                suppliers.map((supplier, index) => (
                   <tr key={supplier._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {(pagination.current - 1) * itemsPerPage + index + 1}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {supplier.companyName}
@@ -174,7 +196,7 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                     No suppliers found
                   </td>
                 </tr>
@@ -184,17 +206,15 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
         </div>
       )}
 
-      {/* Summary */}
+      {/* Pagination */}
       {!loading && suppliers.length > 0 && (
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500">Total Suppliers:</span>
-              <span className="font-medium ml-2">{pagination.total}</span>
-            </div>
-            
-          </div>
-        </div>
+        <Pagination
+          currentPage={pagination.current}
+          totalPages={pagination.pages}
+          totalItems={pagination.total}
+          onPageChange={handlePageChange}
+          itemsPerPage={itemsPerPage}
+        />
       )}
     </div>
   );

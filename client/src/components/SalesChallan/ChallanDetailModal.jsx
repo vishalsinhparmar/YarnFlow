@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { FileText, X, Info, Package, Download, Printer } from 'lucide-react';
 import { salesChallanUtils, salesChallanAPI } from '../../services/salesChallanAPI';
 import { salesOrderAPI } from '../../services/salesOrderAPI';
 
@@ -106,26 +107,33 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-8 py-6 bg-gradient-to-r from-teal-600 to-emerald-600 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">{challan.challanNumber}</h2>
-              <p className="text-gray-600">Created on {formatDate(challan.createdAt)}</p>
+            <div className="text-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">{challan.challanNumber}</h2>
+                  <p className="text-teal-100 text-sm">Created on {formatDate(challan.createdAt)}</p>
+                </div>
+              </div>
             </div>
             <div className="flex items-center space-x-3">
-              <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${
-                challanStatus === 'Delivered' ? 'bg-green-100 text-green-800' :
-                challanStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
+              <span className={`inline-flex px-4 py-1.5 text-sm font-semibold rounded-lg shadow-sm ${
+                challanStatus === 'Delivered' ? 'bg-green-500 text-white' :
+                challanStatus === 'Partial' ? 'bg-yellow-500 text-white' :
                 'bg-gray-100 text-gray-800'
               }`}>
                 {challanStatus}
               </span>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-all"
               >
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -135,47 +143,60 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Basic Information */}
-          <div className="bg-gray-50 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Challan Information</h3>
+        <div className="flex-1 overflow-y-auto p-8 space-y-8">
+          {/* Challan Information */}
+          <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center mb-6">
+              <svg className="h-6 w-6 text-gray-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="text-xl font-semibold text-gray-900">Challan Information</h3>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <span className="text-sm font-medium text-gray-500">Challan Number</span>
-                <p className="text-base font-semibold text-gray-900 mt-1">{challan.challanNumber}</p>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Challan Number</span>
+                <p className="text-base font-bold text-gray-900 mt-1">{challan.challanNumber}</p>
               </div>
               
-              <div>
-                <span className="text-sm font-medium text-gray-500">SO Reference</span>
-                <p className="text-base font-semibold text-gray-900 mt-1">{challan.soReference || 'N/A'}</p>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">SO Reference</span>
+                <p className="text-base font-bold text-teal-600 mt-1">{challan.soReference || 'N/A'}</p>
               </div>
               
-              <div>
-                <span className="text-sm font-medium text-gray-500">Dispatch Date</span>
-                <p className="text-base font-semibold text-gray-900 mt-1">{formatDate(challan.challanDate)}</p>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Dispatch Date</span>
+                <p className="text-base font-bold text-gray-900 mt-1">{formatDate(challan.challanDate)}</p>
               </div>
               
-              <div>
-                <span className="text-sm font-medium text-gray-500">Customer</span>
-                <p className="text-base font-semibold text-gray-900 mt-1">{challan.customerDetails?.companyName || challan.customerName || 'N/A'}</p>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</span>
+                <p className="text-base font-bold text-gray-900 mt-1">{challan.customerDetails?.companyName || challan.customerName || 'N/A'}</p>
               </div>
               
-              <div>
-                <span className="text-sm font-medium text-gray-500">Warehouse Location</span>
-                <p className="text-base font-semibold text-gray-900 mt-1">{challan.warehouseLocation || 'N/A'}</p>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Warehouse Location</span>
+                <p className="text-base font-bold text-purple-600 mt-1">{challan.warehouseLocation || 'N/A'}</p>
               </div>
               
-              <div>
-                <span className="text-sm font-medium text-gray-500">Expected Delivery</span>
-                <p className="text-base font-semibold text-gray-900 mt-1">{formatDate(challan.expectedDeliveryDate)}</p>
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Expected Delivery</span>
+                <p className="text-base font-bold text-gray-900 mt-1">{formatDate(challan.expectedDeliveryDate)}</p>
               </div>
             </div>
           </div>
 
           {/* Items */}
-          <div className="bg-gray-50 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Dispatched Items</h3>
+          <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 shadow-sm border border-orange-100">
+            <div className="flex items-center mb-6">
+              <svg className="h-6 w-6 text-orange-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              <h3 className="text-xl font-semibold text-gray-900">Dispatched Items</h3>
+              <span className="ml-3 bg-orange-100 text-orange-800 text-sm font-medium px-3 py-1 rounded-full">
+                {challan.items?.length || 0} item(s)
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-white">
@@ -332,18 +353,23 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
 
           {/* Notes */}
           {challan.notes && (
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Notes</h3>
-              <p className="text-sm text-gray-700">{challan.notes}</p>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-100">
+              <div className="flex items-center mb-3">
+                <svg className="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-gray-900">Dispatch Notes</h3>
+              </div>
+              <p className="text-sm text-gray-700 bg-white rounded-lg p-3 border border-blue-100">{challan.notes}</p>
             </div>
           )}
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-gray-200">
+        <div className="px-8 py-5 border-t border-gray-200 bg-gray-50 flex-shrink-0 rounded-b-2xl">
           {/* PDF Error Message */}
           {pdfError && (
-            <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-3">
+            <div className="mb-4 bg-red-50 border-l-4 border-red-500 rounded-lg p-3">
               <p className="text-sm text-red-800">{pdfError}</p>
             </div>
           )}
@@ -354,7 +380,7 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
               <button
                 onClick={handleViewPDF}
                 disabled={pdfLoading}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {pdfLoading ? (
                   <>
@@ -366,7 +392,7 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                   </>
                 ) : (
                   <>
-                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
@@ -378,7 +404,7 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
               <button
                 onClick={handleDownloadPDF}
                 disabled={pdfLoading}
-                className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {pdfLoading ? (
                   <>
@@ -390,7 +416,7 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                   </>
                 ) : (
                   <>
-                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     Download PDF
@@ -402,7 +428,7 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 font-medium transition-colors"
             >
               Close
             </button>

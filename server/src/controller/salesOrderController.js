@@ -14,7 +14,6 @@ export const getAllSalesOrders = async (req, res) => {
       status,
       customer,
       orderDate,
-      priority,
       search,
       sortBy = 'orderDate',
       sortOrder = 'desc'
@@ -25,7 +24,6 @@ export const getAllSalesOrders = async (req, res) => {
     
     if (status) filter.status = status;
     if (customer) filter.customer = customer;
-    if (priority) filter.priority = priority;
     
     if (orderDate) {
       const date = new Date(orderDate);
@@ -38,8 +36,7 @@ export const getAllSalesOrders = async (req, res) => {
     if (search) {
       filter.$or = [
         { soNumber: { $regex: search, $options: 'i' } },
-        { customerName: { $regex: search, $options: 'i' } },
-        { customerPONumber: { $regex: search, $options: 'i' } }
+        { customerName: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -90,8 +87,7 @@ export const getSalesOrderById = async (req, res) => {
     const salesOrder = await SalesOrder.findById(id)
       .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName')
-      .populate('items.inventoryAllocations.inventoryLot', 'lotNumber currentQuantity');
+      .populate('items.product', 'productName');
 
     if (!salesOrder) {
       return res.status(404).json({
@@ -132,8 +128,6 @@ export const createSalesOrder = async (req, res) => {
       expectedDeliveryDate,
       category,
       items,
-      notes,
-      shippingAddress,
       createdBy
     } = req.body;
 
@@ -195,8 +189,6 @@ export const createSalesOrder = async (req, res) => {
       category,
       expectedDeliveryDate,
       items: validatedItems,
-      notes: notes || '',
-      shippingAddress: shippingAddress || customerDoc.address,
       createdBy: createdBy || 'Admin'
     });
 
@@ -355,274 +347,10 @@ export const updateSalesOrderStatus = async (req, res) => {
   }
 };
 
-// Reserve inventory for sales order
-export const reserveInventory = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { reservedBy } = req.body;
-
-    const salesOrder = await SalesOrder.findById(id)
-      .populate('items.product');
-
-    if (!salesOrder) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sales order not found'
-      });
-    }
-
-    if (salesOrder.status !== 'Confirmed') {
-      return res.status(400).json({
-        success: false,
-        message: 'Can only reserve inventory for confirmed orders'
-      });
-    }
-
-    const reservationResults = [];
-
-    // Process each item
-    for (const item of salesOrder.items) {
-      const requiredQuantity = item.orderedQuantity - item.reservedQuantity;
-      
-      if (requiredQuantity <= 0) {
-        reservationResults.push({
-          productName: item.productName,
-          status: 'Already Reserved',
-          reservedQuantity: item.reservedQuantity
-        });
-        continue;
-      }
-
-      // Find available inventory lots for this product
-      const availableLots = await InventoryLot.find({
-        product: item.product._id,
-        status: 'Active',
-        currentQuantity: { $gt: 0 }
-      }).sort({ receivedDate: 1 }); // FIFO
-
-      let remainingToReserve = requiredQuantity;
-      const allocations = [];
-
-      for (const lot of availableLots) {
-        if (remainingToReserve <= 0) break;
-
-        const availableInLot = lot.currentQuantity - (lot.reservedQuantity || 0);
-        if (availableInLot <= 0) continue;
-
-        const toReserve = Math.min(remainingToReserve, availableInLot);
-        
-        // Update inventory lot
-        lot.reservedQuantity = (lot.reservedQuantity || 0) + toReserve;
-        await lot.save();
-
-        // Add allocation to sales order item
-        allocations.push({
-          inventoryLot: lot._id,
-          lotNumber: lot.lotNumber,
-          allocatedQuantity: toReserve,
-          reservedDate: new Date(),
-          status: 'Reserved'
-        });
-
-        remainingToReserve -= toReserve;
-      }
-
-      // Update sales order item
-      item.reservedQuantity += (requiredQuantity - remainingToReserve);
-      item.inventoryAllocations.push(...allocations);
-      
-      if (remainingToReserve === 0) {
-        item.itemStatus = 'Reserved';
-      }
-
-      reservationResults.push({
-        productName: item.productName,
-        requiredQuantity,
-        reservedQuantity: requiredQuantity - remainingToReserve,
-        shortfall: remainingToReserve,
-        status: remainingToReserve === 0 ? 'Fully Reserved' : 'Partially Reserved'
-      });
-    }
-
-    // Update overall order status if all items are reserved
-    const allItemsReserved = salesOrder.items.every(item => 
-      item.itemStatus === 'Reserved'
-    );
-    
-    if (allItemsReserved) {
-      salesOrder.status = 'Processing';
-    }
-
-    salesOrder.updatedBy = reservedBy || 'System';
-    await salesOrder.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Inventory reservation completed',
-      data: {
-        salesOrder,
-        reservationResults
-      }
-    });
-  } catch (error) {
-    console.error('Error reserving inventory:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to reserve inventory',
-      error: error.message
-    });
-  }
-};
-
-// Ship sales order
-export const shipSalesOrder = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { trackingNumber, courierCompany, shippedBy, notes } = req.body;
-
-    const salesOrder = await SalesOrder.findById(id);
-    if (!salesOrder) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sales order not found'
-      });
-    }
-
-    if (salesOrder.status !== 'Processing') {
-      return res.status(400).json({
-        success: false,
-        message: 'Can only ship orders in Processing status'
-      });
-    }
-
-    // Update sales order
-    salesOrder.status = 'Shipped';
-    salesOrder.trackingNumber = trackingNumber;
-    salesOrder.courierCompany = courierCompany;
-    salesOrder.updatedBy = shippedBy || 'System';
-
-    // Update inventory lots - reduce current quantity
-    for (const item of salesOrder.items) {
-      for (const allocation of item.inventoryAllocations) {
-        const lot = await InventoryLot.findById(allocation.inventoryLot);
-        if (lot) {
-          // Reduce current quantity and reserved quantity
-          lot.currentQuantity -= allocation.allocatedQuantity;
-          lot.reservedQuantity -= allocation.allocatedQuantity;
-          
-          // Add movement record
-          lot.movements.push({
-            type: 'Issued',
-            quantity: allocation.allocatedQuantity,
-            date: new Date(),
-            reference: salesOrder.soNumber,
-            notes: `Shipped for sales order ${salesOrder.soNumber}`,
-            performedBy: shippedBy || 'System'
-          });
-          
-          await lot.save();
-        }
-        
-        // Update allocation status
-        allocation.status = 'Shipped';
-      }
-      
-      // Update item quantities and status
-      item.shippedQuantity = item.orderedQuantity;
-      item.itemStatus = 'Shipped';
-    }
-
-    // Add to workflow history
-    salesOrder.workflowHistory.push({
-      status: 'Shipped',
-      changedBy: shippedBy || 'System',
-      changedDate: new Date(),
-      notes: notes || `Shipped via ${courierCompany}, Tracking: ${trackingNumber}`
-    });
-
-    await salesOrder.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Sales order shipped successfully',
-      data: salesOrder
-    });
-  } catch (error) {
-    console.error('Error shipping sales order:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to ship sales order',
-      error: error.message
-    });
-  }
-};
-
-// Mark sales order as delivered
-export const markAsDelivered = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { deliveredBy, notes, actualDeliveryDate } = req.body;
-
-    const salesOrder = await SalesOrder.findById(id);
-    if (!salesOrder) {
-      return res.status(404).json({
-        success: false,
-        message: 'Sales order not found'
-      });
-    }
-
-    if (salesOrder.status !== 'Shipped') {
-      return res.status(400).json({
-        success: false,
-        message: 'Can only mark shipped orders as delivered'
-      });
-    }
-
-    // Update sales order
-    salesOrder.status = 'Delivered';
-    salesOrder.actualDeliveryDate = actualDeliveryDate ? new Date(actualDeliveryDate) : new Date();
-    salesOrder.updatedBy = deliveredBy || 'System';
-
-    // Update item status and allocations
-    salesOrder.items.forEach(item => {
-      item.deliveredQuantity = item.shippedQuantity;
-      item.itemStatus = 'Delivered';
-      
-      item.inventoryAllocations.forEach(allocation => {
-        allocation.status = 'Delivered';
-      });
-    });
-
-    // Add to workflow history
-    salesOrder.workflowHistory.push({
-      status: 'Delivered',
-      changedBy: deliveredBy || 'System',
-      changedDate: new Date(),
-      notes: notes || 'Order delivered successfully'
-    });
-
-    await salesOrder.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Sales order marked as delivered',
-      data: salesOrder
-    });
-  } catch (error) {
-    console.error('Error marking as delivered:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to mark as delivered',
-      error: error.message
-    });
-  }
-};
-
 // Cancel sales order
 export const cancelSalesOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const { cancellationReason, cancelledBy, notes } = req.body;
 
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) {
@@ -639,34 +367,8 @@ export const cancelSalesOrder = async (req, res) => {
       });
     }
 
-    // Release reserved inventory
-    for (const item of salesOrder.items) {
-      for (const allocation of item.inventoryAllocations) {
-        if (allocation.status === 'Reserved') {
-          const lot = await InventoryLot.findById(allocation.inventoryLot);
-          if (lot) {
-            lot.reservedQuantity -= allocation.allocatedQuantity;
-            await lot.save();
-          }
-        }
-      }
-    }
-
-    // Update sales order
+    // Update sales order status
     salesOrder.status = 'Cancelled';
-    salesOrder.cancellationReason = cancellationReason;
-    salesOrder.cancelledBy = cancelledBy || 'System';
-    salesOrder.cancelledDate = new Date();
-    salesOrder.updatedBy = cancelledBy || 'System';
-
-    // Add to workflow history
-    salesOrder.workflowHistory.push({
-      status: 'Cancelled',
-      changedBy: cancelledBy || 'System',
-      changedDate: new Date(),
-      notes: notes || cancellationReason
-    });
-
     await salesOrder.save();
 
     res.status(200).json({

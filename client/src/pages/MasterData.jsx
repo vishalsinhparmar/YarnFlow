@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMasterData } from '../hooks/useMasterData';
 import { formatters } from '../services/masterDataAPI';
+import ImportModal from '../components/ImportModal';
 
 const MasterData = () => {
   const navigate = useNavigate();
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedImportType, setSelectedImportType] = useState('customers');
   const {
     stats,
     customers,
@@ -16,6 +19,18 @@ const MasterData = () => {
     fetchSuppliers,
     fetchStats
   } = useMasterData();
+
+  const handleImportSuccess = () => {
+    // Refresh all data after successful import
+    fetchStats();
+    fetchCustomers();
+    fetchSuppliers();
+  };
+
+  const openImportModal = (type) => {
+    setSelectedImportType(type);
+    setShowImportModal(true);
+  };
 
   if (loading && !stats) {
     return (
@@ -46,8 +61,21 @@ const MasterData = () => {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Master Data Management</h1>
-        <p className="text-gray-600">Manage customers, suppliers, products, and categories</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Master Data Management</h1>
+            <p className="text-gray-600">Manage customers, suppliers, products, and categories</p>
+          </div>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Import Excel
+          </button>
+        </div>
       </div>
 
       {/* Master Data Categories */}
@@ -65,12 +93,23 @@ const MasterData = () => {
           <p className="text-sm text-gray-600 mb-3">
             {stats?.customers?.active || 0} active customers
           </p>
-          <button 
-            onClick={() => navigate('/master-data/customers')}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            Manage Customers
-          </button>
+          <div className="space-y-2">
+            <button 
+              onClick={() => navigate('/master-data/customers')}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Manage Customers
+            </button>
+            <button 
+              onClick={() => openImportModal('customers')}
+              className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-blue-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Import Excel
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer">
@@ -86,12 +125,23 @@ const MasterData = () => {
           <p className="text-sm text-gray-600 mb-3">
             Total suppliers count
           </p>
-          <button 
-            onClick={() => navigate('/master-data/suppliers')}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            Manage Suppliers
-          </button>
+          <div className="space-y-2">
+            <button 
+              onClick={() => navigate('/master-data/suppliers')}
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Manage Suppliers
+            </button>
+            <button 
+              onClick={() => openImportModal('suppliers')}
+              className="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-purple-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Import Excel
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer">
@@ -107,12 +157,23 @@ const MasterData = () => {
           <p className="text-sm text-gray-600 mb-3">
             {stats?.products?.lowStock || 0} low stock alerts
           </p>
-          <button 
-            onClick={() => navigate('/master-data/products')}
-            className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            Manage Products
-          </button>
+          <div className="space-y-2">
+            <button 
+              onClick={() => navigate('/master-data/products')}
+              className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Manage Products
+            </button>
+            <button 
+              onClick={() => openImportModal('products')}
+              className="w-full bg-green-50 hover:bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-green-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Import Excel
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer">
@@ -126,12 +187,23 @@ const MasterData = () => {
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Categories</h3>
           <p className="text-sm text-gray-600 mb-3">Product categories and classifications</p>
-          <button 
-            onClick={() => navigate('/master-data/categories')}
-            className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            Manage Categories
-          </button>
+          <div className="space-y-2">
+            <button 
+              onClick={() => navigate('/master-data/categories')}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Manage Categories
+            </button>
+            <button 
+              onClick={() => openImportModal('categories')}
+              className="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-orange-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Import Excel
+            </button>
+          </div>
         </div>
       </div>
 
@@ -332,6 +404,13 @@ const MasterData = () => {
         </div>
       </div>
 
+      {/* Import Modal */}
+      <ImportModal 
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={handleImportSuccess}
+        defaultType={selectedImportType}
+      />
     </div>
   );
 };

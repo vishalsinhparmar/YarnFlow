@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { customerAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
+import Pagination from '../../common/Pagination';
 
 const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50); // Default 50 items per page
   const [pagination, setPagination] = useState({
     current: 1,
     pages: 1,
@@ -13,15 +16,14 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
   });
 
   // Fetch customers
-  const fetchCustomers = async (params = {}) => {
+  const fetchCustomers = async (page = currentPage) => {
     try {
       setLoading(true);
       setError(null);
       
       const queryParams = {
-        page: 1,
-        limit: 10,
-        ...params
+        page,
+        limit: itemsPerPage
       };
       
       if (searchTerm) queryParams.search = searchTerm;
@@ -39,10 +41,22 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
     }
   };
 
-  // Load data when component mounts or refresh is triggered
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchCustomers(newPage);
+  };
+
+  // Reset to page 1 when search changes
   useEffect(() => {
-    fetchCustomers();
-  }, [searchTerm, refreshTrigger]);
+    setCurrentPage(1);
+    fetchCustomers(1);
+  }, [searchTerm]);
+
+  // Refresh when trigger changes
+  useEffect(() => {
+    fetchCustomers(currentPage);
+  }, [refreshTrigger]);
 
   // Handle delete customer
   const handleDeleteCustomer = async (customerId, customerName) => {
@@ -96,6 +110,9 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Sr. No.
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Company
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -114,8 +131,13 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {customers.length > 0 ? (
-                customers.map((customer) => (
+                customers.map((customer, index) => (
                   <tr key={customer._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {(pagination.current - 1) * itemsPerPage + index + 1}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {customer.companyName}
@@ -154,7 +176,7 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
                     No customers found
                   </td>
                 </tr>
@@ -164,13 +186,15 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
         </div>
       )}
 
-      {/* Summary */}
+      {/* Pagination */}
       {!loading && customers.length > 0 && (
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <div className="text-sm text-gray-600">
-            Total Customers: <span className="font-medium">{pagination.total}</span>
-          </div>
-        </div>
+        <Pagination
+          currentPage={pagination.current}
+          totalPages={pagination.pages}
+          totalItems={pagination.total}
+          onPageChange={handlePageChange}
+          itemsPerPage={itemsPerPage}
+        />
       )}
     </div>
   );

@@ -62,17 +62,8 @@ const salesChallanSchema = new mongoose.Schema({
     unit: { type: String, required: true },
     weight: { type: Number, default: 0 },
     
-    // Manual completion support (like GRN)
+    // Manual completion support
     manuallyCompleted: { type: Boolean, default: false },
-    completionReason: { type: String },
-    completedAt: { type: Date },
-    
-    // Item status (Simplified)
-    itemStatus: {
-      type: String,
-      enum: ['Prepared', 'Dispatched', 'Delivered'],
-      default: 'Prepared'
-    },
     
     // Item-specific notes (from Sales Order)
     notes: {
@@ -101,11 +92,11 @@ const salesChallanSchema = new mongoose.Schema({
     notes: String
   }],
   
-  // System Fields
-  createdBy: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-  updatedBy: String,
-  updatedAt: { type: Date, default: Date.now }
+  // Dispatch Notes
+  notes: { type: String, default: '' },
+  
+  // Audit
+  createdBy: { type: String, required: true }
 }, {
   timestamps: true
 });
@@ -113,7 +104,7 @@ const salesChallanSchema = new mongoose.Schema({
 salesChallanSchema.index({ challanDate: -1 });
 salesChallanSchema.index({ status: 1, challanDate: -1 });
 salesChallanSchema.index({ customer: 1, challanDate: -1 });
-salesChallanSchema.index({ 'deliveryDetails.expectedDeliveryDate': 1 });
+salesChallanSchema.index({ expectedDeliveryDate: 1 });
 
 // Pre-save middleware to generate challan number and handle status history
 salesChallanSchema.pre('save', async function(next) {
@@ -132,13 +123,10 @@ salesChallanSchema.pre('save', async function(next) {
       this.statusHistory.push({
         status: this.status,
         timestamp: new Date(),
-        updatedBy: this.updatedBy || 'System',
+        updatedBy: 'System',
         notes: `Status changed to ${this.status}`
       });
     }
-    
-    // Update timestamp
-    this.updatedAt = new Date();
     
     next();
   } catch (error) {

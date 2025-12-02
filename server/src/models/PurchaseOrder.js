@@ -63,9 +63,6 @@ const purchaseOrderItemSchema = new mongoose.Schema({
   completionReason: {
     type: String,
     trim: true
-  },
-  completedAt: {
-    type: Date
   }
 });
 
@@ -89,15 +86,6 @@ const purchaseOrderSchema = new mongoose.Schema({
     companyName: {
       type: String,
       required: true
-    },
-    contactPerson: String,
-    email: String,
-    phone: String,
-    address: {
-      street: String,
-      city: String,
-      state: String,
-      pincode: String
     }
   },
   orderDate: {
@@ -111,45 +99,12 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   items: [purchaseOrderItemSchema],
   
-  // Status and Workflow
+  // Status
   status: {
     type: String,
-    enum: ['Draft', 'Sent', 'Acknowledged', 'Approved', 'Partially_Received', 'Fully_Received', 'Cancelled', 'Closed'],
+    enum: ['Draft', 'Partially_Received', 'Fully_Received', 'Cancelled'],
     default: 'Draft'
   },
-  
-  // Approval Workflow
-  approvalStatus: {
-    type: String,
-    enum: ['Pending', 'Approved', 'Rejected'],
-    default: 'Pending'
-  },
-  approvedBy: {
-    type: String, // User ID or name
-    trim: true
-  },
-  approvedDate: Date,
-  rejectionReason: {
-    type: String,
-    trim: true
-  },
-  
-  // Payment Status
-  paymentStatus: {
-    type: String,
-    enum: ['Pending', 'Partial', 'Paid'],
-    default: 'Pending'
-  },
-  
-  // Internal Notes
-  internalNotes: {
-    type: String,
-    trim: true
-  },
-  
-  // Tracking
-  sentDate: Date,
-  acknowledgedDate: Date,
   
   // Receipt Tracking
   totalGRNs: {
@@ -163,38 +118,11 @@ const purchaseOrderSchema = new mongoose.Schema({
     max: 100
   },
   
-  // File Attachments
-  attachments: [{
-    fileName: String,
-    fileUrl: String,
-    fileType: String,
-    uploadDate: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  
-  // Audit Trail
+  // Audit
   createdBy: {
     type: String,
     required: true,
     default: 'System'
-  },
-  lastModifiedBy: String,
-  
-  // Cancellation Information
-  cancellationReason: String,
-  cancelledBy: String,
-  cancelledDate: Date,
-  
-  // Revision Control
-  revisionNumber: {
-    type: Number,
-    default: 1
-  },
-  originalPO: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'PurchaseOrder'
   }
 }, {
   timestamps: true
@@ -291,7 +219,7 @@ purchaseOrderSchema.virtual('isOverdue').get(function() {
   if (!this.expectedDeliveryDate || !this.status) {
     return false;
   }
-  return this.expectedDeliveryDate < new Date() && !['Fully_Received', 'Cancelled', 'Closed'].includes(this.status);
+  return this.expectedDeliveryDate < new Date() && !['Fully_Received', 'Cancelled'].includes(this.status);
 });
 
 // Method to update receipt status and calculations

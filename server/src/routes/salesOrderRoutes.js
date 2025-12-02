@@ -5,9 +5,6 @@ import {
   createSalesOrder,
   updateSalesOrder,
   updateSalesOrderStatus,
-  reserveInventory,
-  shipSalesOrder,
-  markAsDelivered,
   cancelSalesOrder,
   deleteSalesOrder,
   getSalesOrderStats,
@@ -33,11 +30,6 @@ router.delete('/:id', deleteSalesOrder);
 
 // Status Management
 router.patch('/:id/status', updateSalesOrderStatus);
-
-// Inventory Operations
-router.patch('/:id/reserve', reserveInventory);
-router.patch('/:id/ship', shipSalesOrder);
-router.patch('/:id/deliver', markAsDelivered);
 router.patch('/:id/cancel', cancelSalesOrder);
 
 // Customer-specific orders

@@ -79,8 +79,8 @@ export const getDashboardStats = async (req, res) => {
       
       // GRN
       GoodsReceiptNote.countDocuments(),
-      GoodsReceiptNote.countDocuments({ status: { $in: ['approved', 'completed'] } }),
-      GoodsReceiptNote.countDocuments({ status: 'pending' }),
+      GoodsReceiptNote.countDocuments({ status: 'Complete' }),
+      GoodsReceiptNote.countDocuments({ receiptStatus: 'Partial' }),
       GoodsReceiptNote.countDocuments({ createdAt: { $gte: startOfMonth } }),
       
       // Inventory

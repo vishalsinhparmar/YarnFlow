@@ -1,15 +1,34 @@
+import { useState } from 'react';
 import { useMasterData } from '../hooks/useMasterData';
 import { Link } from 'react-router-dom';
+import ImportModal from '../components/ImportModal';
 
 const MasterDataDashboard = () => {
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedImportType, setSelectedImportType] = useState('customers');
+  
   const {
     stats,
     customers,
     suppliers,
     categories,
     loading,
-    error
+    error,
+    fetchStats,
+    fetchCustomers,
+    fetchSuppliers
   } = useMasterData();
+
+  const handleImportSuccess = () => {
+    fetchStats();
+    fetchCustomers();
+    fetchSuppliers();
+  };
+
+  const openImportModal = (type) => {
+    setSelectedImportType(type);
+    setShowImportModal(true);
+  };
 
   if (loading && !stats) {
     return (
@@ -40,13 +59,26 @@ const MasterDataDashboard = () => {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Master Data Management</h1>
-        <p className="text-gray-600">Manage customers, suppliers, products, and categories</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Master Data Management</h1>
+            <p className="text-gray-600">Manage customers, suppliers, products, and categories</p>
+          </div>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Import Excel
+          </button>
+        </div>
       </div>
 
       {/* Master Data Categories */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link to="/master-data/customers" className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer block">
+        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <span className="text-blue-600 text-xl">👥</span>
@@ -56,15 +88,23 @@ const MasterDataDashboard = () => {
             </span>
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Customers</h3>
-          <p className="text-sm text-gray-600 mb-3">
-            {stats?.customers?.active || 0} active customers
-          </p>
-          <div className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center">
-            Manage Customers
+          <div className="space-y-2">
+            <Link to="/master-data/customers" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
+              Manage Customers
+            </Link>
+            <button
+              onClick={() => openImportModal('customers')}
+              className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-blue-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Import Excel
+            </button>
           </div>
-        </Link>
+        </div>
 
-        <Link to="/master-data/suppliers" className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer block">
+        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
               <span className="text-purple-600 text-xl">🏭</span>
@@ -74,15 +114,23 @@ const MasterDataDashboard = () => {
             </span>
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Suppliers</h3>
-          <p className="text-sm text-gray-600 mb-3">
-            {stats?.suppliers?.verified || 0} verified suppliers
-          </p>
-          <div className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center">
-            Manage Suppliers
+          <div className="space-y-2">
+            <Link to="/master-data/suppliers" className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
+              Manage Suppliers
+            </Link>
+            <button
+              onClick={() => openImportModal('suppliers')}
+              className="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-purple-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Import Excel
+            </button>
           </div>
-        </Link>
+        </div>
 
-        <Link to="/master-data/products" className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer block">
+        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <span className="text-green-600 text-xl">🧶</span>
@@ -92,15 +140,23 @@ const MasterDataDashboard = () => {
             </span>
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Products</h3>
-          <p className="text-sm text-gray-600 mb-3">
-            {stats?.products?.lowStock || 0} low stock alerts
-          </p>
-          <div className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center">
-            Manage Products
+          <div className="space-y-2">
+            <Link to="/master-data/products" className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
+              Manage Products
+            </Link>
+            <button
+              onClick={() => openImportModal('products')}
+              className="w-full bg-green-50 hover:bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-green-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Import Excel
+            </button>
           </div>
-        </Link>
+        </div>
 
-        <Link to="/master-data/categories" className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer block">
+        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
               <span className="text-orange-600 text-xl">📂</span>
@@ -110,11 +166,21 @@ const MasterDataDashboard = () => {
             </span>
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Categories</h3>
-          <p className="text-sm text-gray-600 mb-3">Product categories and classifications</p>
-          <div className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center">
-            Manage Categories
+          <div className="space-y-2">
+            <Link to="/master-data/categories" className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
+              Manage Categories
+            </Link>
+            <button
+              onClick={() => openImportModal('categories')}
+              className="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-orange-200 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Import Excel
+            </button>
           </div>
-        </Link>
+        </div>
       </div>
 
       {/* Recent Activity */}
@@ -275,6 +341,14 @@ const MasterDataDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={handleImportSuccess}
+        defaultType={selectedImportType}
+      />
     </div>
   );
 };

@@ -50,52 +50,10 @@ const grnItemSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  acceptedQuantity: {
-    type: Number,
-    default: 0
-  },
-  rejectedQuantity: {
-    type: Number,
-    default: 0
-  },
   unit: {
     type: String,
     enum: ['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'],
     default: 'Bags'
-  },
-  
-  // Quality Control
-  qualityStatus: {
-    type: String,
-    enum: ['Pending', 'Approved', 'Rejected', 'Partial'],
-    default: 'Pending'
-  },
-  qualityNotes: {
-    type: String,
-    trim: true
-  },
-  
-  // Storage Information
-  warehouseLocation: {
-    type: String,
-    trim: true
-  },
-  batchNumber: {
-    type: String,
-    trim: true
-  },
-  expiryDate: {
-    type: Date
-  },
-  
-  // Pricing (from PO)
-  unitPrice: {
-    type: Number,
-    default: 0
-  },
-  totalValue: {
-    type: Number,
-    default: 0
   },
   
   // Manual Completion (for partial qty acceptance)
@@ -104,24 +62,6 @@ const grnItemSchema = new mongoose.Schema({
     default: false
   },
   completionReason: {
-    type: String,
-    trim: true
-  },
-  completedAt: {
-    type: Date
-  },
-  
-  // Damage/Issues
-  damageQuantity: {
-    type: Number,
-    default: 0
-  },
-  damageNotes: {
-    type: String,
-    trim: true
-  },
-  
-  notes: {
     type: String,
     trim: true
   }
@@ -153,10 +93,7 @@ const grnSchema = new mongoose.Schema({
     required: true
   },
   supplierDetails: {
-    companyName: String,
-    contactPerson: String,
-    email: String,
-    phone: String
+    companyName: String
   },
   
   // Receipt Information
@@ -168,78 +105,16 @@ const grnSchema = new mongoose.Schema({
   // Items Received
   items: [grnItemSchema],
   
-  // Status and Workflow
+  // Status
   status: {
     type: String,
-    enum: ['Draft', 'Received', 'Under_Review', 'Approved', 'Rejected', 'Completed'],
+    enum: ['Draft', 'Received', 'Partial', 'Complete'],
     default: 'Draft'
   },
-  
-  // Receipt Status
   receiptStatus: {
     type: String,
     enum: ['Partial', 'Complete'],
     default: 'Partial'
-  },
-  isPartialReceipt: {
-    type: Boolean,
-    default: false
-  },
-  
-  // Quality Control
-  qualityCheckStatus: {
-    type: String,
-    enum: ['Pending', 'In_Progress', 'Completed', 'Failed'],
-    default: 'Pending'
-  },
-  qualityCheckBy: {
-    type: String,
-    trim: true
-  },
-  qualityCheckDate: {
-    type: Date
-  },
-  qualityRemarks: {
-    type: String,
-    trim: true
-  },
-  
-  // Financial Summary
-  totalReceivedValue: {
-    type: Number,
-    default: 0
-  },
-  totalAcceptedValue: {
-    type: Number,
-    default: 0
-  },
-  totalRejectedValue: {
-    type: Number,
-    default: 0
-  },
-  
-  // Approval Workflow
-  approvalStatus: {
-    type: String,
-    enum: ['Pending', 'Approved', 'Rejected'],
-    default: 'Pending'
-  },
-  approvedBy: {
-    type: String,
-    trim: true
-  },
-  approvedDate: {
-    type: Date
-  },
-  rejectionReason: {
-    type: String,
-    trim: true
-  },
-  
-  // Additional Information
-  checkedBy: {
-    type: String,
-    trim: true
   },
   
   // Storage and Warehouse
@@ -252,35 +127,17 @@ const grnSchema = new mongoose.Schema({
     trim: true
   },
   
-  // Notes and Remarks
+  // Notes
   generalNotes: {
     type: String,
     trim: true
   },
-  internalNotes: {
-    type: String,
-    trim: true
-  },
-  
-  // File Attachments
-  attachments: [{
-    fileName: String,
-    fileUrl: String,
-    fileType: String,
-    uploadDate: {
-      type: Date,
-      default: Date.now
-    }
-  }],
   
   // Audit Trail
   createdBy: {
     type: String,
     required: true,
     default: 'System'
-  },
-  lastModifiedBy: {
-    type: String
   }
 }, {
   timestamps: true
@@ -303,44 +160,6 @@ grnSchema.pre('save', async function(next) {
   next();
 });
 
-// Calculate financial totals before saving
-grnSchema.pre('save', function(next) {
-  // Calculate item-level totals
-  this.items.forEach(item => {
-    // Set accepted quantity to received if not specified
-    if (item.acceptedQuantity === 0 && item.receivedQuantity > 0) {
-      item.acceptedQuantity = item.receivedQuantity - (item.rejectedQuantity || 0) - (item.damageQuantity || 0);
-    }
-    
-    // Calculate total value for item
-    item.totalValue = (item.receivedQuantity || 0) * (item.unitPrice || 0);
-  });
-  
-  // Calculate GRN totals
-  this.totalReceivedValue = this.items.reduce((sum, item) => sum + (item.totalValue || 0), 0);
-  this.totalAcceptedValue = this.items.reduce((sum, item) => sum + ((item.acceptedQuantity || 0) * (item.unitPrice || 0)), 0);
-  this.totalRejectedValue = this.items.reduce((sum, item) => sum + ((item.rejectedQuantity || 0) * (item.unitPrice || 0)), 0);
-  
-  next();
-});
-
-// Update status based on quality check
-grnSchema.pre('save', function(next) {
-  const totalItems = this.items.length;
-  const approvedItems = this.items.filter(item => item.qualityStatus === 'Approved').length;
-  const rejectedItems = this.items.filter(item => item.qualityStatus === 'Rejected').length;
-  
-  if (approvedItems === totalItems) {
-    this.qualityCheckStatus = 'Completed';
-  } else if (rejectedItems === totalItems) {
-    this.qualityCheckStatus = 'Failed';
-  } else if (approvedItems > 0 || rejectedItems > 0) {
-    this.qualityCheckStatus = 'In_Progress';
-  }
-  
-  next();
-});
-
 // Indexes for better query performance
 grnSchema.index({ grnNumber: 1 });
 grnSchema.index({ purchaseOrder: 1 });
@@ -351,24 +170,7 @@ grnSchema.index({ createdAt: -1 });
 
 // Virtual for checking if GRN is complete
 grnSchema.virtual('isComplete').get(function() {
-  if (!this.status || !this.qualityCheckStatus) {
-    return false;
-  }
-  return this.status === 'Completed' && this.qualityCheckStatus === 'Completed';
-});
-
-// Virtual for completion percentage
-grnSchema.virtual('completionPercentage').get(function() {
-  // Safety check for items array
-  if (!this.items || !Array.isArray(this.items)) {
-    return 0;
-  }
-  
-  const totalItems = this.items.length;
-  const completedItems = this.items.filter(item => 
-    item.qualityStatus === 'Approved' || item.qualityStatus === 'Rejected'
-  ).length;
-  return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+  return this.receiptStatus === 'Complete';
 });
 
 // Ensure virtuals are included in JSON output

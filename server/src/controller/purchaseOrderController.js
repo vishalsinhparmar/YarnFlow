@@ -14,7 +14,6 @@ export const getAllPurchaseOrders = async (req, res) => {
       search, 
       supplier, 
       status, 
-      priority,
       dateFrom,
       dateTo,
       overdue 
@@ -26,8 +25,7 @@ export const getAllPurchaseOrders = async (req, res) => {
     if (search) {
       query.$or = [
         { poNumber: { $regex: search, $options: 'i' } },
-        { 'supplierDetails.companyName': { $regex: search, $options: 'i' } },
-        { notes: { $regex: search, $options: 'i' } }
+        { 'supplierDetails.companyName': { $regex: search, $options: 'i' } }
       ];
     }
     
@@ -39,11 +37,6 @@ export const getAllPurchaseOrders = async (req, res) => {
     // Filter by status
     if (status) {
       query.status = status;
-    }
-    
-    // Filter by priority
-    if (priority) {
-      query.priority = priority;
     }
     
     // Date range filter
@@ -193,10 +186,7 @@ export const createPurchaseOrder = async (req, res) => {
       supplier: supplierId,
       category: categoryId,
       supplierDetails: {
-        companyName: supplier.companyName,
-        contactPerson: supplier.contactPerson,
-        phone: supplier.phone,
-        address: supplier.address
+        companyName: supplier.companyName
       },
       expectedDeliveryDate,
       items: populatedItems,
@@ -241,9 +231,9 @@ export const updatePurchaseOrder = async (req, res) => {
       });
     }
     
-    if (['Sent', 'Acknowledged', 'Approved'].includes(purchaseOrder.status)) {
-      // Only allow status updates and notes for sent POs
-      const allowedFields = ['status', 'notes', 'internalNotes', 'approvalStatus', 'approvedBy', 'approvedDate', 'rejectionReason'];
+    if (['Partially_Received', 'Fully_Received'].includes(purchaseOrder.status)) {
+      // Only allow status updates for received POs
+      const allowedFields = ['status'];
       const updateKeys = Object.keys(updateData);
       const hasRestrictedFields = updateKeys.some(key => !allowedFields.includes(key));
       
@@ -292,7 +282,7 @@ export const updatePurchaseOrder = async (req, res) => {
     
     const updatedPO = await PurchaseOrder.findByIdAndUpdate(
       id,
-      { ...updateData, lastModifiedBy: updateData.lastModifiedBy || 'System' },
+      updateData,
       { new: true, runValidators: true }
     )
     .populate('supplier', 'companyName gstNumber')
@@ -356,7 +346,7 @@ export const updatePurchaseOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status, notes } = req.body;
     
-    const validStatuses = ['Draft', 'Sent', 'Acknowledged', 'Approved', 'Partially_Received', 'Fully_Received', 'Cancelled', 'Closed'];
+    const validStatuses = ['Draft', 'Partially_Received', 'Fully_Received', 'Cancelled'];
     
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
@@ -366,11 +356,6 @@ export const updatePurchaseOrderStatus = async (req, res) => {
     }
     
     const updateData = { status };
-    
-    // Add timestamp for status changes
-    if (status === 'Sent') updateData.sentDate = new Date();
-    if (status === 'Acknowledged') updateData.acknowledgedDate = new Date();
-    if (notes) updateData.notes = notes;
     
     const updatedPO = await PurchaseOrder.findByIdAndUpdate(
       id,

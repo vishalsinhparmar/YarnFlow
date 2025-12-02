@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useDropdownOptions } from '../../hooks/useMasterData';
 import masterDataAPI from '../../services/masterDataAPI';
+import SearchableSelect from '../common/SearchableSelect';
 
 const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const { options, loading: optionsLoading } = useDropdownOptions();
@@ -9,6 +10,9 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   
   // Modal states for quick-add
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -32,25 +36,57 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }]
   });
 
-  // Fetch suppliers, products, and categories
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [suppliersRes, productsRes, categoriesRes] = await Promise.all([
-          masterDataAPI.suppliers.getAll({ limit: 100 }),
-          masterDataAPI.products.getAll({ limit: 100 }),
-          masterDataAPI.categories.getAll()
-        ]);
-        setSuppliers(suppliersRes.data || []);
-        setProducts(productsRes.data || []);
-        setCategories(categoriesRes.data || []);
-        console.log('Categories loaded:', categoriesRes.data);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      }
-    };
-    fetchData();
+  // Use useCallback to memoize fetch functions and prevent infinite loops
+  const fetchSuppliers = useCallback(async (search = '') => {
+    try {
+      setLoadingSuppliers(true);
+      const params = { limit: 100 };
+      if (search) params.search = search;
+      const response = await masterDataAPI.suppliers.getAll(params);
+      setSuppliers(response.data || []);
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+    } finally {
+      setLoadingSuppliers(false);
+    }
   }, []);
+
+  const fetchCategories = useCallback(async (search = '') => {
+    try {
+      setLoadingCategories(true);
+      const params = { limit: 100 };
+      if (search) params.search = search;
+      const response = await masterDataAPI.categories.getAll(params);
+      setCategories(response.data || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    } finally {
+      setLoadingCategories(false);
+    }
+  }, []);
+
+  const fetchProducts = useCallback(async (search = '') => {
+    try {
+      setLoadingProducts(true);
+      const params = { limit: 100 };
+      if (search) params.search = search;
+      if (formData.category) params.category = formData.category;
+      const response = await masterDataAPI.products.getAll(params);
+      setProducts(response.data || []);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, [formData.category]);
+
+  // Fetch suppliers, products, and categories with pagination support
+  // Only fetch on initial mount to populate dropdowns
+  useEffect(() => {
+    fetchSuppliers();
+    fetchCategories();
+    fetchProducts();
+  }, [fetchSuppliers, fetchCategories, fetchProducts]);
 
   // Populate form if editing, reset if null
   useEffect(() => {
@@ -330,56 +366,60 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
 
   return (
     <>
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-8 bg-white">
       {errors.submit && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <p className="text-red-600 text-sm">{errors.submit}</p>
+        <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center">
+            <svg className="h-5 w-5 text-red-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <p className="text-red-700 font-medium">{errors.submit}</p>
+          </div>
         </div>
       )}
 
       {/* Basic Information */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-100">
+        <div className="flex items-center mb-6">
+          <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 className="text-xl font-semibold text-gray-900">Basic Information</h3>
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-gray-700">
-                Supplier *
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowSupplierModal(true)}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center"
-              >
-                <svg className="h-3.5 w-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                </svg>
-                Add Supplier
-              </button>
-            </div>
-            <select
-              name="supplier"
+            <SearchableSelect
+              label="Supplier"
+              required
+              options={suppliers}
               value={formData.supplier}
-              onChange={handleChange}
-              className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.supplier ? 'border-red-500' : 'border-gray-300'
-              } ${formData.supplier ? 'font-medium text-gray-900' : 'text-gray-500'}`}
-            >
-              <option value="">Select Supplier</option>
-              {suppliers.map(supplier => (
-                <option key={supplier._id} value={supplier._id}>
-                  {supplier.companyName}
-                </option>
-              ))}
-            </select>
-            {errors.supplier && (
-              <p className="text-red-500 text-xs mt-1">{errors.supplier}</p>
-            )}
+              onChange={(value) => setFormData(prev => ({ ...prev, supplier: value }))}
+              placeholder="Select Supplier"
+              searchPlaceholder="Search suppliers..."
+              getOptionLabel={(supplier) => supplier.companyName}
+              getOptionValue={(supplier) => supplier._id}
+              onSearch={fetchSuppliers}
+              loading={loadingSuppliers}
+              error={errors.supplier}
+              onAddNew={() => setShowSupplierModal(true)}
+              addNewLabel="Add Supplier"
+              renderOption={(supplier, isSelected) => (
+                <div className="flex flex-col">
+                  <span className="font-medium">{supplier.companyName}</span>
+                  {supplier.city && (
+                    <span className="text-xs text-gray-500">{supplier.city}</span>
+                  )}
+                </div>
+              )}
+            />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+              <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
               Expected Delivery Date
             </label>
             <input
@@ -387,99 +427,111 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
               name="expectedDeliveryDate"
               value={formData.expectedDeliveryDate}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
+              className={`w-full px-4 py-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                errors.expectedDeliveryDate ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
               }`}
             />
             {errors.expectedDeliveryDate && (
-              <p className="text-red-500 text-xs mt-1">{errors.expectedDeliveryDate}</p>
+              <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {errors.expectedDeliveryDate}
+              </p>
             )}
           </div>
 
           <div className="md:col-span-2">
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-gray-700">
-                Category *
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowCategoryModal(true)}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center"
-              >
-                <svg className="h-3.5 w-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                </svg>
-                Add Category
-              </button>
-            </div>
-            <div className="relative">
-              <select
-                name="category"
-                value={formData.category}
-                onChange={handleCategoryChange}
-                className={`w-full px-3 py-2.5 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
-                  errors.category ? 'border-red-500' : 'border-gray-300'
-                } ${formData.category ? 'font-medium text-gray-900' : 'text-gray-500'}`}
-              >
-                <option value="">Select Category</option>
-                {categories.filter(cat => cat.status === 'Active').map(category => (
-                  <option key={category._id} value={category._id}>
-                    {category.categoryName}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                </svg>
-              </div>
-            </div>
-            {errors.category && (
-              <p className="text-red-500 text-xs mt-1">{errors.category}</p>
-            )}
+            <SearchableSelect
+              label="Category"
+              required
+              options={categories.filter(cat => cat.status === 'Active')}
+              value={formData.category}
+              onChange={(value) => {
+                setFormData(prev => ({ ...prev, category: value }));
+                handleCategoryChange({ target: { name: 'category', value } });
+              }}
+              placeholder="Select Category"
+              searchPlaceholder="Search categories..."
+              getOptionLabel={(category) => category.categoryName}
+              getOptionValue={(category) => category._id}
+              onSearch={fetchCategories}
+              loading={loadingCategories}
+              error={errors.category}
+              onAddNew={() => setShowCategoryModal(true)}
+              addNewLabel="Add Category"
+              renderOption={(category, isSelected) => (
+                <div className="flex flex-col">
+                  <span className="font-medium">{category.categoryName}</span>
+                  {category.description && (
+                    <span className="text-xs text-gray-500 truncate">{category.description}</span>
+                  )}
+                </div>
+              )}
+            />
             {!formData.category ? (
-              <p className="text-xs text-blue-600 mt-1.5 flex items-start">
-                <svg className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-                <span>Select a category to filter available products. All items in this PO must be from the same category.</span>
-              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+                <p className="text-xs text-blue-700 flex items-start">
+                  <svg className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <span className="font-medium">Select a category to filter available products. All items in this PO must be from the same category.</span>
+                </p>
+              </div>
             ) : (
-              <p className="text-xs text-green-600 mt-1.5 flex items-center">
-                <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <span className="font-medium">{getFilteredProducts().length} product(s) available in this category</span>
-              </p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-2">
+                <p className="text-xs text-green-700 flex items-center">
+                  <svg className="h-4 w-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="font-semibold">{getFilteredProducts().length} product(s) available in this category</span>
+                </p>
+              </div>
             )}
           </div>
         </div>
       </div>
 
       {/* Items */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium text-gray-900">Items</h3>
+      <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 shadow-sm border border-gray-200">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <svg className="h-6 w-6 text-gray-700 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <h3 className="text-xl font-semibold text-gray-900">Order Items</h3>
+          </div>
           <button
             type="button"
             onClick={addItem}
-            className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-lg transition-all flex items-center gap-2"
           >
-            + Add Item
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Item
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           {formData.items.map((item, index) => (
-            <div key={index} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="font-medium text-gray-900">Item {index + 1}</h4>
+            <div key={index} className="bg-white border-2 border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="bg-blue-100 text-blue-700 font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
+                    {index + 1}
+                  </div>
+                  <h4 className="font-semibold text-gray-900 text-lg">Item #{index + 1}</h4>
+                </div>
                 {formData.items.length > 1 && (
                   <button
                     type="button"
                     onClick={() => removeItem(index)}
-                    className="text-red-600 hover:text-red-800 text-sm"
+                    className="px-3 py-1.5 text-red-600 hover:bg-red-50 border border-red-300 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                   >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
                     Remove
                   </button>
                 )}
@@ -487,48 +539,32 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="lg:col-span-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Product *
-                    </label>
-                    {formData.category && (
-                      <button
-                        type="button"
-                        onClick={() => setShowProductModal(true)}
-                        className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center"
-                      >
-                        <svg className="h-3.5 w-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Add Product
-                      </button>
+                  <SearchableSelect
+                    label="Product"
+                    required
+                    options={getFilteredProducts()}
+                    value={item.product}
+                    onChange={(value) => handleItemChange(index, 'product', value)}
+                    placeholder={!formData.category ? '⚠️ Select Category First' : 'Select Product'}
+                    searchPlaceholder="Search products..."
+                    getOptionLabel={(product) => product.productName}
+                    getOptionValue={(product) => product._id}
+                    onSearch={fetchProducts}
+                    loading={loadingProducts}
+                    disabled={!formData.category}
+                    error={errors[`items.${index}.product`]}
+                    onAddNew={formData.category ? () => setShowProductModal(true) : undefined}
+                    addNewLabel="Add Product"
+                    emptyMessage={!formData.category ? 'Please select a category first' : 'No products found'}
+                    renderOption={(product, isSelected) => (
+                      <div className="flex flex-col">
+                        <span className="font-medium">{product.productName}</span>
+                        {product.description && (
+                          <span className="text-xs text-gray-500 truncate">{product.description}</span>
+                        )}
+                      </div>
                     )}
-                  </div>
-                  <div className="relative">
-                    <select
-                      value={item.product}
-                      onChange={(e) => handleItemChange(index, 'product', e.target.value)}
-                      disabled={!formData.category}
-                      className={`w-full px-3 py-2.5 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
-                      } ${!formData.category ? 'bg-gray-50 cursor-not-allowed text-gray-400' : 'bg-white'} ${item.product ? 'font-medium text-gray-900' : 'text-gray-500'}`}
-                    >
-                      <option value="">{!formData.category ? '⚠️ Select Category First' : 'Select Product'}</option>
-                      {getFilteredProducts().map(product => (
-                        <option key={product._id} value={product._id}>
-                          {product.productName}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                      <svg className={`h-5 w-5 ${!formData.category ? 'text-gray-300' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                      </svg>
-                    </div>
-                  </div>
-                  {errors[`items.${index}.product`] && (
-                    <p className="text-red-500 text-xs mt-1">{errors[`items.${index}.product`]}</p>
-                  )}
+                  />
                   {!formData.category && (
                     <p className="text-xs text-amber-600 mt-1 flex items-center">
                       <svg className="h-3.5 w-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -540,26 +576,38 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                    <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                    </svg>
                     Quantity *
                   </label>
                   <input
                     type="number"
                     value={item.quantity}
                     onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
+                    className={`w-full px-4 py-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                      errors[`items.${index}.quantity`] ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
                     }`}
                     min="1"
                     step="1"
+                    placeholder="Enter quantity"
                   />
                   {errors[`items.${index}.quantity`] && (
-                    <p className="text-red-500 text-xs mt-1">{errors[`items.${index}.quantity`]}</p>
+                    <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                      <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      {errors[`items.${index}.quantity`]}
+                    </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                    <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                    </svg>
                     Unit
                   </label>
                   <div className="relative">
@@ -579,7 +627,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                           handleItemChange(index, 'unit', e.target.value);
                         }
                       }}
-                      className="w-full px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none"
+                      className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 appearance-none transition-all"
                     >
                       {units.map(unit => (
                         <option key={unit} value={unit}>{unit}</option>
@@ -592,38 +640,55 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                       </svg>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Select or add custom unit</p>
+                  <p className="text-xs text-gray-500 mt-1.5 flex items-center">
+                    <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    Select or add custom unit
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                    <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                    </svg>
                     Weight (Kg) *
                   </label>
                   <input
                     type="number"
                     value={item.weight}
                     onChange={(e) => handleItemChange(index, 'weight', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors[`items.${index}.weight`] ? 'border-red-500' : 'border-gray-300'
+                    className={`w-full px-4 py-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                      errors[`items.${index}.weight`] ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
                     }`}
                     min="0"
                     step="0.01"
+                    placeholder="Enter weight in kg"
                   />
                   {errors[`items.${index}.weight`] && (
-                    <p className="text-red-500 text-xs mt-1">{errors[`items.${index}.weight`]}</p>
+                    <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                      <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      {errors[`items.${index}.weight`]}
+                    </p>
                   )}
                 </div>
 
                 <div className="lg:col-span-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                    <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                    </svg>
                     Item Notes
                   </label>
-                  <input
-                    type="text"
+                  <textarea
                     value={item.notes}
                     onChange={(e) => handleItemChange(index, 'notes', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Special instructions for this item..."
+                    rows="2"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all resize-none"
+                    placeholder="Add special instructions or notes for this item..."
                   />
                 </div>
               </div>
@@ -633,20 +698,38 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       </div>
 
       {/* Form Actions */}
-      <div className="flex justify-end space-x-4 pt-6 border-t">
+      <div className="flex justify-end gap-4 pt-8 border-t-2 border-gray-200">
         <button
           type="button"
           onClick={onCancel}
-          className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          className="px-6 py-3 border-2 border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center gap-2 shadow-sm"
         >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
           Cancel
         </button>
         <button
           type="submit"
           disabled={loading}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
         >
-          {loading ? 'Saving...' : (purchaseOrder ? 'Update PO' : 'Create PO')}
+          {loading ? (
+            <>
+              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Saving...
+            </>
+          ) : (
+            <>
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {purchaseOrder ? 'Update Purchase Order' : 'Create Purchase Order'}
+            </>
+          )}
         </button>
       </div>
     </form>

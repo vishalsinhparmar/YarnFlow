@@ -31,13 +31,22 @@ import {
   getMasterDataStats
 } from '../controller/masterDataController.js';
 
+// Import controller
+import { importMasterData } from '../controller/importController.js';
+
 // Import validation rules
 import { validateCategory, validateSupplier, validateProduct } from '../validators/masterDataValidator.js';
+
+// Import multer for file uploads
+import upload from '../middleware/upload.js';
 
 const router = express.Router();
 
 // ============ MASTER DATA STATS ROUTES ============
 router.get('/stats', getMasterDataStats);
+
+// ============ IMPORT ROUTES ============
+router.post('/import/:type', upload.single('file'), importMasterData);
 
 // ============ CUSTOMER ROUTES ============
 router.get('/customers', getAllCustomers);

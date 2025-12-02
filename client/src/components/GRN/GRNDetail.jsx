@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ClipboardList, Info, Package, MapPin, X } from 'lucide-react';
 import { grnUtils } from '../../services/grnAPI';
 import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
 import { getWarehouseName } from '../../constants/warehouseLocations';
@@ -30,14 +31,6 @@ const GRNDetail = ({ grn, onClose }) => {
     fetchPOData();
   }, [grn.purchaseOrder]);
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {
@@ -52,208 +45,113 @@ const GRNDetail = ({ grn, onClose }) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">{grn.grnNumber}</h2>
-          <p className="text-gray-600">Created on {formatDate(grn.createdAt)}</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${grnUtils.getStatusColor(grn.status)}`}>
-            {grnUtils.formatStatus(grn.status)}
-          </span>
+      <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-6 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="text-white">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
+                <ClipboardList className="w-6 h-6 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold">{grn.grnNumber}</h2>
+            </div>
+            <p className="text-green-100 ml-[52px]">Created on {formatDate(grn.createdAt)}</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className={`inline-flex px-4 py-2 text-sm font-bold rounded-xl shadow-md ${
+              grn.receiptStatus === 'Complete' ? 'bg-white text-green-700' : 
+              grn.receiptStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' : 
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {grn.receiptStatus || 'Pending'}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Approval Modal - Keeping for quality check approval */}
-      {false && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Approve GRN</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Approved By *
-                </label>
-                <input
-                  type="text"
-                  value={approvedBy}
-                  onChange={(e) => setApprovedBy(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Enter your name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Approval Notes (Optional)
-                </label>
-                <textarea
-                  value={approvalNotes}
-                  onChange={(e) => setApprovalNotes(e.target.value)}
-                  rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Add notes about this approval..."
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowApproval(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApproval}
-                disabled={!approvedBy || loading}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-              >
-                {loading ? 'Approving...' : 'Approve GRN'}
-              </button>
-            </div>
-          </div>
+      {/* GRN Information */}
+      <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="flex items-center mb-6">
+          <svg className="h-6 w-6 text-green-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 className="text-xl font-semibold text-gray-900">GRN Information</h3>
         </div>
-      )}
-
-      {/* Basic Information */}
-      <div className="bg-gray-50 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">GRN Information</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <span className="text-sm font-medium text-gray-500">GRN Number</span>
-            <p className="text-base font-semibold text-gray-900 mt-1">{grn.grnNumber}</p>
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+            <span className="text-sm font-medium text-gray-500 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+              </svg>
+              GRN Number
+            </span>
+            <p className="text-lg font-bold text-gray-900 mt-2">{grn.grnNumber}</p>
           </div>
-          <div>
-            <span className="text-sm font-medium text-gray-500">PO Reference</span>
-            <p className="text-base font-semibold text-gray-900 mt-1">{grn.poNumber}</p>
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+            <span className="text-sm font-medium text-gray-500 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              PO Reference
+            </span>
+            <p className="text-lg font-bold text-gray-900 mt-2">{grn.poNumber}</p>
           </div>
-          <div>
-            <span className="text-sm font-medium text-gray-500">Receipt Date</span>
-            <p className="text-base font-semibold text-gray-900 mt-1">{formatDate(grn.receiptDate)}</p>
-          </div>
-          {grn.deliveryDate && (
-            <div>
-              <span className="text-sm font-medium text-gray-500">Delivery Date</span>
-              <p className="text-base font-semibold text-gray-900 mt-1">{formatDate(grn.deliveryDate)}</p>
-            </div>
-          )}
-          <div>
-            <span className="text-sm font-medium text-gray-500">Status</span>
-            <div className="mt-1">
-              <span className={'inline-flex px-3 py-1.5 text-sm font-semibold rounded-full ' + (grn.receiptStatus === 'Complete' ? 'bg-green-100 text-green-800' : grn.receiptStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800')}>
-                {grn.receiptStatus || 'Pending'}
-              </span>
-            </div>
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+            <span className="text-sm font-medium text-gray-500 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Receipt Date
+            </span>
+            <p className="text-lg font-bold text-gray-900 mt-2">{formatDate(grn.receiptDate)}</p>
           </div>
         </div>
       </div>
 
       {/* Supplier Information */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Supplier Information</h3>
+      <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-purple-100">
+        <div className="flex items-center mb-4">
+          <svg className="h-6 w-6 text-purple-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          <h3 className="text-xl font-semibold text-gray-900">Supplier Information</h3>
+        </div>
         
-        <div>
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
           <span className="text-sm font-medium text-gray-500">Company Name</span>
-          <p className="text-base font-semibold text-gray-900 mt-1">{grn.supplierDetails?.companyName}</p>
+          <p className="text-lg font-bold text-gray-900 mt-1">{grn.supplierDetails?.companyName}</p>
         </div>
       </div>
 
-      {/* Invoice Information */}
-      {(grn.invoiceNumber || grn.invoiceAmount > 0) && (
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Information</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {grn.invoiceNumber && (
-              <div>
-                <span className="text-sm font-medium text-gray-500">Invoice Number:</span>
-                <p className="text-gray-900">{grn.invoiceNumber}</p>
-              </div>
-            )}
-            {grn.invoiceDate && (
-              <div>
-                <span className="text-sm font-medium text-gray-500">Invoice Date:</span>
-                <p className="text-gray-900">{formatDate(grn.invoiceDate)}</p>
-              </div>
-            )}
-            {grn.invoiceAmount > 0 && (
-              <div>
-                <span className="text-sm font-medium text-gray-500">Invoice Amount:</span>
-                <p className="text-gray-900">{formatCurrency(grn.invoiceAmount)}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Transport Information */}
-      {(grn.vehicleNumber || grn.driverName || grn.transportCompany) && (
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Transport Information</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              {grn.vehicleNumber && (
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Vehicle Number:</span>
-                  <p className="text-gray-900">{grn.vehicleNumber}</p>
-                </div>
-              )}
-              {grn.transportCompany && (
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Transport Company:</span>
-                  <p className="text-gray-900">{grn.transportCompany}</p>
-                </div>
-              )}
-            </div>
-            
-            <div className="space-y-3">
-              {grn.driverName && (
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Driver Name:</span>
-                  <p className="text-gray-900">{grn.driverName}</p>
-                </div>
-              )}
-              {grn.driverPhone && (
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Driver Phone:</span>
-                  <p className="text-gray-900">{grn.driverPhone}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Items */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Items Received</h3>
+      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl shadow-sm border border-orange-100 overflow-hidden">
+        <div className="px-6 py-4 flex items-center">
+          <svg className="h-6 w-6 text-orange-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          <h3 className="text-xl font-semibold text-gray-900">Items Received</h3>
         </div>
         
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto bg-white">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Product
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Ordered
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-blue-50">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-blue-700 uppercase tracking-wider bg-blue-50">
                   Previously Received
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-green-50">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-green-700 uppercase tracking-wider bg-green-50">
                   This GRN
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-orange-50">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-orange-700 uppercase tracking-wider bg-orange-50">
                   Pending
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Status
                 </th>
               </tr>
@@ -391,13 +289,21 @@ const GRNDetail = ({ grn, onClose }) => {
 
       {/* Warehouse Information */}
       {grn.warehouseLocation && (
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Warehouse Information</h3>
+        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 shadow-sm border border-indigo-100">
+          <div className="flex items-center mb-4">
+            <svg className="h-6 w-6 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <h3 className="text-xl font-semibold text-gray-900">Warehouse Information</h3>
+          </div>
           
-          <div>
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
             <span className="text-sm font-medium text-gray-500">Warehouse Location</span>
-            <p className="text-base font-medium text-purple-600 mt-1 flex items-center">
-              <span className="mr-2">📍</span>
+            <p className="text-lg font-bold text-indigo-600 mt-1 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              </svg>
               {getWarehouseName(grn.warehouseLocation)}
             </p>
           </div>
@@ -406,23 +312,31 @@ const GRNDetail = ({ grn, onClose }) => {
 
       {/* Additional Information */}
       {grn.generalNotes && (
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-100">
+          <div className="flex items-center mb-4">
+            <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <h3 className="text-xl font-semibold text-gray-900">Additional Information</h3>
+          </div>
           
-          <div>
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
             <span className="text-sm font-medium text-gray-500">General Notes</span>
-            <p className="text-base text-gray-900 mt-1 whitespace-pre-wrap">{grn.generalNotes}</p>
+            <p className="text-base text-gray-900 mt-2 whitespace-pre-wrap">{grn.generalNotes}</p>
           </div>
         </div>
       )}
 
 
       {/* Actions */}
-      <div className="flex justify-end pt-6 border-t">
+      <div className="flex justify-end pt-6 border-t border-gray-200">
         <button
           onClick={onClose}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-medium shadow-md hover:shadow-lg transition-all flex items-center gap-2"
         >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
           Close
         </button>
       </div>

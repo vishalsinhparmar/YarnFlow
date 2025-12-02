@@ -1,4 +1,5 @@
 import React from 'react';
+import { ClipboardList, Building2, Calendar, Clock, Tag, CheckCircle, Package, X } from 'lucide-react';
 import { poUtils } from '../../services/purchaseOrderAPI';
 
 const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
@@ -16,64 +17,66 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">{purchaseOrder.poNumber}</h2>
-          <p className="text-sm text-gray-500 mt-1">Created on {formatDate(purchaseOrder.createdAt)}</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <span className={`inline-flex px-3 py-1.5 text-sm font-semibold rounded-lg ${poUtils.getStatusColor(purchaseOrder.status)}`}>
-            {poUtils.formatStatus(purchaseOrder.status)}
-          </span>
+      <div className="bg-gradient-to-r from-orange-600 to-amber-600 rounded-xl p-6 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="text-white">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
+                <ClipboardList className="w-6 h-6 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold">{purchaseOrder.poNumber}</h2>
+            </div>
+            <p className="text-orange-100 ml-[52px]">Created on {formatDate(purchaseOrder.createdAt)}</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className={`inline-flex px-4 py-2 text-sm font-bold rounded-xl shadow-md ${
+              purchaseOrder.status === 'Fully_Received' ? 'bg-white text-green-700' : 
+              purchaseOrder.status === 'Partially_Received' ? 'bg-yellow-100 text-yellow-800' : 
+              purchaseOrder.status === 'Cancelled' ? 'bg-red-100 text-red-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {poUtils.formatStatus(purchaseOrder.status)}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Basic Information */}
       <div className="bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl shadow-sm">
-        <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 rounded-t-xl">
+        <div className="px-6 py-4 bg-gradient-to-r from-orange-50 to-amber-50 border-b border-gray-200 rounded-t-xl">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <ClipboardList className="w-5 h-5 mr-2 text-orange-600" />
             Basic Information
           </h3>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-white p-4 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
+            <div className="bg-white p-4 rounded-lg border border-gray-100 hover:border-orange-200 transition-colors hover:shadow-md">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center">
-                <svg className="w-4 h-4 mr-1.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
+                <Building2 className="w-4 h-4 mr-1.5 text-blue-500" />
                 Supplier
               </label>
               <p className="text-lg font-bold text-gray-900">{purchaseOrder.supplierDetails?.companyName}</p>
             </div>
-            <div className="bg-white p-4 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
+            <div className="bg-white p-4 rounded-lg border border-gray-100 hover:border-orange-200 transition-colors hover:shadow-md">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center">
-                <svg className="w-4 h-4 mr-1.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+                <Calendar className="w-4 h-4 mr-1.5 text-green-500" />
                 Order Date
               </label>
               <p className="text-lg font-bold text-gray-900">{formatDate(purchaseOrder.orderDate)}</p>
             </div>
-            <div className="bg-white p-4 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
+            <div className="bg-white p-4 rounded-lg border border-gray-100 hover:border-orange-200 transition-colors hover:shadow-md">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center">
-                <svg className="w-4 h-4 mr-1.5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <Clock className="w-4 h-4 mr-1.5 text-orange-500" />
                 Expected Delivery
               </label>
               <p className="text-lg font-bold text-gray-900">
                 {purchaseOrder.expectedDeliveryDate ? formatDate(purchaseOrder.expectedDeliveryDate) : <span className="text-gray-400">Not specified</span>}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
+            <div className="bg-white p-4 rounded-lg border border-gray-100 hover:border-orange-200 transition-colors hover:shadow-md">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center">
-                <svg className="w-4 h-4 mr-1.5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                </svg>
+                <Tag className="w-4 h-4 mr-1.5 text-purple-500" />
                 Category
               </label>
               <p className="text-lg font-bold text-gray-900">{purchaseOrder.category?.categoryName || 'N/A'}</p>
@@ -82,9 +85,7 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
           {completionPercentage > 0 && (
             <div className="mt-6 bg-white p-4 rounded-lg border border-gray-100">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center">
-                <svg className="w-4 h-4 mr-1.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <CheckCircle className="w-4 h-4 mr-1.5 text-green-500" />
                 Order Completion
               </label>
               <div className="flex items-center space-x-4">
@@ -103,44 +104,50 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
 
 
       {/* Items */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Items ({purchaseOrder.items?.length || 0})</h3>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+            <Package className="w-5 h-5 mr-2 text-orange-600" />
+            Items ({purchaseOrder.items?.length || 0})
+          </h3>
         </div>
         
         <div className="divide-y divide-gray-200">
           {purchaseOrder.items?.map((item, index) => (
-            <div key={index} className="p-6 hover:bg-gray-50 transition-colors">
+            <div key={index} className="p-6 hover:bg-orange-50 transition-colors">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Product</label>
-                  <p className="text-base font-medium text-gray-900">{item.productName}</p>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Product</label>
+                  <p className="text-base font-semibold text-gray-900">{item.productName}</p>
                   <p className="text-sm text-gray-500">{item.productCode}</p>
                   {item.notes && (
-                    <p className="text-xs text-gray-400 mt-1 italic">{item.notes}</p>
+                    <p className="text-xs text-blue-600 mt-1 italic bg-blue-50 px-2 py-1 rounded inline-block">📝 {item.notes}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Quantity</label>
-                  <p className="text-base text-gray-900">{item.quantity} {item.unit}</p>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Quantity</label>
+                  <p className="text-base font-medium text-gray-900">{item.quantity} {item.unit}</p>
                   {item.receivedQuantity > 0 && (
-                    <p className="text-sm text-green-600">Received: {item.receivedQuantity} {item.unit}</p>
+                    <p className="text-sm text-green-600 font-medium">✓ Received: {item.receivedQuantity} {item.unit}</p>
                   )}
                   {item.receivedQuantity > 0 && !item.manuallyCompleted && item.receivedQuantity < item.quantity && (
-                    <p className="text-sm text-orange-600">Pending: {item.quantity - item.receivedQuantity} {item.unit}</p>
+                    <p className="text-sm text-orange-600 font-medium">⏳ Pending: {item.quantity - item.receivedQuantity} {item.unit}</p>
                   )}
                   {item.manuallyCompleted && (
-                    <p className="text-sm text-green-600 font-medium">✓ Manually Completed</p>
+                    <p className="text-sm text-green-600 font-semibold flex items-center gap-1">
+                      <CheckCircle className="w-4 h-4" />
+                      Manually Completed
+                    </p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Weight</label>
-                  <p className="text-base text-gray-900">{(item.weight || item.specifications?.weight || 0)} Kg</p>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weight</label>
+                  <p className="text-base font-medium text-gray-900">{(item.weight || item.specifications?.weight || 0)} Kg</p>
                   {item.receivedWeight > 0 && (
-                    <p className="text-sm text-green-600">Received: {item.receivedWeight.toFixed(2)} Kg</p>
+                    <p className="text-sm text-green-600 font-medium">✓ Received: {item.receivedWeight.toFixed(2)} Kg</p>
                   )}
                   {item.receivedWeight > 0 && !item.manuallyCompleted && item.receivedWeight < (item.weight || 0) && (
-                    <p className="text-sm text-orange-600">Pending: {((item.weight || 0) - item.receivedWeight).toFixed(2)} Kg</p>
+                    <p className="text-sm text-orange-600 font-medium">⏳ Pending: {((item.weight || 0) - item.receivedWeight).toFixed(2)} Kg</p>
                   )}
                 </div>
               </div>
@@ -149,39 +156,14 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
         </div>
       </div>
 
-      {/* Timeline & Notes */}
-      {(purchaseOrder.sentDate || purchaseOrder.acknowledgedDate || purchaseOrder.notes) && (
-        <div className="bg-gray-50 rounded-lg p-6">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">Timeline & Notes</h4>
-          <div className="space-y-2 text-sm">
-            {purchaseOrder.sentDate && (
-              <div className="flex items-center text-gray-600">
-                <span className="w-32 font-medium">Sent:</span>
-                <span>{formatDate(purchaseOrder.sentDate)}</span>
-              </div>
-            )}
-            {purchaseOrder.acknowledgedDate && (
-              <div className="flex items-center text-gray-600">
-                <span className="w-32 font-medium">Acknowledged:</span>
-                <span>{formatDate(purchaseOrder.acknowledgedDate)}</span>
-              </div>
-            )}
-            {purchaseOrder.notes && (
-              <div className="mt-3 pt-3 border-t border-gray-200">
-                <span className="font-medium text-gray-700">Notes:</span>
-                <p className="text-gray-600 mt-1">{purchaseOrder.notes}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Actions */}
-      <div className="flex justify-end pt-6 border-t">
+      <div className="flex justify-end pt-6 border-t border-gray-200">
         <button
           onClick={onClose}
-          className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors flex items-center gap-2"
         >
+          <X className="w-4 h-4" />
           Close
         </button>
       </div>

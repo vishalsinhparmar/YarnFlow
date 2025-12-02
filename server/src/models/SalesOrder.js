@@ -38,9 +38,6 @@ const salesOrderSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
-  actualDeliveryDate: {
-    type: Date
-  },
 
   // Order Items
   items: [{
@@ -51,39 +48,15 @@ const salesOrderSchema = new mongoose.Schema({
     },
     productName: { type: String, required: true },
     
-    // Quantities (simplified for inventory-based sales)
+    // Quantities
     quantity: { type: Number, required: true, min: 0 },
-    reservedQuantity: { type: Number, default: 0, min: 0 },
     shippedQuantity: { type: Number, default: 0, min: 0 },
     deliveredQuantity: { type: Number, default: 0, min: 0 },
     
     unit: { type: String, required: true },
-    weight: { type: Number, default: 0 }, // Total weight from inventory
-    dispatchedWeight: { type: Number, default: 0 }, // Weight dispatched via challans
-    manuallyCompleted: { type: Boolean, default: false }, // Manually marked as complete
-    
-    // Inventory Allocation
-    inventoryAllocations: [{
-      inventoryLot: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'InventoryLot'
-      },
-      lotNumber: String,
-      allocatedQuantity: { type: Number, min: 0 },
-      reservedDate: { type: Date, default: Date.now },
-      status: {
-        type: String,
-        enum: ['Reserved', 'Allocated', 'Shipped', 'Delivered'],
-        default: 'Reserved'
-      }
-    }],
-    
-    // Item Status
-    itemStatus: {
-      type: String,
-      enum: ['Pending', 'Reserved', 'Processing', 'Shipped', 'Delivered', 'Cancelled'],
-      default: 'Pending'
-    },
+    weight: { type: Number, default: 0 },
+    dispatchedWeight: { type: Number, default: 0 },
+    manuallyCompleted: { type: Boolean, default: false },
     
     // Item-specific notes
     notes: {
@@ -93,67 +66,16 @@ const salesOrderSchema = new mongoose.Schema({
     }
   }],
 
-  // Financial Information
-  totalAmount: { type: Number, default: 0, min: 0 },
-
-  // Order Status and Workflow
+  // Order Status
   status: {
     type: String,
-    enum: ['Draft', 'Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Returned'],
+    enum: ['Draft', 'Pending', 'Processing', 'Delivered', 'Cancelled'],
     default: 'Draft',
     index: true
   },
   
-  // Payment Information
-  paymentStatus: {
-    type: String,
-    enum: ['Pending', 'Partial', 'Paid', 'Overdue', 'Cancelled'],
-    default: 'Pending'
-  },
-  
-  // Shipping Information
-  shippingAddress: {
-    street: String,
-    city: String,
-    state: String,
-    pincode: String,
-    country: { type: String, default: 'India' }
-  },
-  trackingNumber: String,
-  courierCompany: String,
-  
-
-  // Workflow Tracking
-  workflowHistory: [{
-    status: String,
-    changedBy: String,
-    changedDate: { type: Date, default: Date.now },
-    notes: String,
-    systemGenerated: { type: Boolean, default: false }
-  }],
-
-  // Communication
-  customerNotes: String,
-  internalNotes: String,
-  
-  // References
-  customerPONumber: String, // Customer's Purchase Order reference
-  salesPerson: String,
-  
-  // Audit Information
-  createdBy: { type: String, required: true },
-  updatedBy: String,
-  
-  // Cancellation Information
-  cancellationReason: String,
-  cancelledBy: String,
-  cancelledDate: Date,
-  
-  // Return Information
-  returnReason: String,
-  returnedBy: String,
-  returnedDate: Date,
-  returnedQuantity: Number
+  // Audit
+  createdBy: { type: String, required: true }
 
 }, {
   timestamps: true,
@@ -180,63 +102,10 @@ salesOrderSchema.virtual('customerDetails').get(function() {
 salesOrderSchema.virtual('completionPercentage').get(function() {
   if (!this.items || this.items.length === 0) return 0;
   
-  const totalItems = this.items.length;
-  const completedItems = this.items.filter(item => 
-    item.itemStatus === 'Delivered'
-  ).length;
+  const totalQuantity = this.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  const deliveredQuantity = this.items.reduce((sum, item) => sum + (item.deliveredQuantity || 0), 0);
   
-  return Math.round((completedItems / totalItems) * 100);
-});
-
-// Virtual for pending amount
-salesOrderSchema.virtual('pendingAmount').get(function() {
-  if (this.paymentStatus === 'Paid') return 0;
-  return this.totalAmount;
-});
-
-// Virtual for days since order
-salesOrderSchema.virtual('daysSinceOrder').get(function() {
-  const now = new Date();
-  const orderDate = new Date(this.orderDate);
-  const diffTime = Math.abs(now - orderDate);
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-});
-
-// Virtual for days until delivery
-salesOrderSchema.virtual('daysUntilDelivery').get(function() {
-  if (this.status === 'Delivered') return 0;
-  
-  const now = new Date();
-  const deliveryDate = new Date(this.expectedDeliveryDate);
-  const diffTime = deliveryDate - now;
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-});
-
-// Pre-save middleware to calculate totals
-salesOrderSchema.pre('save', function(next) {
-  // Calculate item totals
-  this.items.forEach(item => {
-    item.totalPrice = item.orderedQuantity * item.unitPrice;
-    item.taxAmount = (item.totalPrice * item.taxRate) / 100;
-  });
-  
-  // Calculate simple total amount
-  this.totalAmount = this.items.reduce((sum, item) => sum + item.totalPrice + item.taxAmount, 0);
-  
-  next();
-});
-
-// Pre-save middleware to update workflow history
-salesOrderSchema.pre('save', function(next) {
-  if (this.isModified('status') && !this.isNew) {
-    this.workflowHistory.push({
-      status: this.status,
-      changedBy: this.updatedBy || 'System',
-      changedDate: new Date(),
-      systemGenerated: !this.updatedBy
-    });
-  }
-  next();
+  return totalQuantity > 0 ? Math.round((deliveredQuantity / totalQuantity) * 100) : 0;
 });
 
 // Method to update dispatch status based on challan data
@@ -404,9 +273,7 @@ salesOrderSchema.statics.getOrderStats = async function() {
     {
       $group: {
         _id: null,
-        totalOrders: { $sum: 1 },
-        totalRevenue: { $sum: '$totalAmount' },
-        avgOrderValue: { $avg: '$totalAmount' }
+        totalOrders: { $sum: 1 }
       }
     }
   ]);
@@ -415,8 +282,7 @@ salesOrderSchema.statics.getOrderStats = async function() {
     {
       $group: {
         _id: '$status',
-        count: { $sum: 1 },
-        totalValue: { $sum: '$totalAmount' }
+        count: { $sum: 1 }
       }
     }
   ]);
@@ -435,15 +301,14 @@ salesOrderSchema.statics.getOrderStats = async function() {
           month: { $month: '$orderDate' },
           year: { $year: '$orderDate' }
         },
-        orders: { $sum: 1 },
-        revenue: { $sum: '$totalAmount' }
+        orders: { $sum: 1 }
       }
     },
     { $sort: { '_id.year': 1, '_id.month': 1 } }
   ]);
   
   return {
-    overview: stats[0] || { totalOrders: 0, totalRevenue: 0, avgOrderValue: 0 },
+    overview: stats[0] || { totalOrders: 0 },
     statusBreakdown: statusStats,
     monthlyTrends: monthlyStats
   };

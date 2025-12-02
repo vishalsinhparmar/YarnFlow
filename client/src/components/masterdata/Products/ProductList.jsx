@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { productAPI, categoryAPI, supplierAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
+import Pagination from '../../common/Pagination';
 
 const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
   const [products, setProducts] = useState([]);
@@ -8,6 +9,8 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50);
   const [pagination, setPagination] = useState({
     current: 1,
     pages: 1,
@@ -15,15 +18,14 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
   });
 
   // Fetch products
-  const fetchProducts = async (params = {}) => {
+  const fetchProducts = async (page = currentPage) => {
     try {
       setLoading(true);
       setError(null);
       
       const queryParams = {
-        page: 1,
-        limit: 10,
-        ...params
+        page,
+        limit: itemsPerPage
       };
       
       if (searchTerm) queryParams.search = searchTerm;
@@ -42,12 +44,27 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
     }
   };
 
-  // Load data when component mounts or refresh is triggered
+  // Fetch categories for filter
   useEffect(() => {
-    fetchProducts();
-    // Fetch categories for filter
-    categoryAPI.getAll().then(res => res.success && setCategories(res.data));
-  }, [searchTerm, categoryFilter, refreshTrigger]);
+    categoryAPI.getAll({ limit: 100 }).then(res => res.success && setCategories(res.data));
+  }, []);
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchProducts(newPage);
+  };
+
+  // Reset to page 1 when search/filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+    fetchProducts(1);
+  }, [searchTerm, categoryFilter]);
+
+  // Refresh when trigger changes
+  useEffect(() => {
+    fetchProducts(currentPage);
+  }, [refreshTrigger]);
 
   // Handle delete product
   const handleDeleteProduct = async (productId, productName) => {
@@ -116,6 +133,9 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Sr. No.
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Product
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -134,9 +154,14 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {products.length > 0 ? (
-                products.map((product) => {
+                products.map((product, index) => {
                   return (
                     <tr key={product._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {(pagination.current - 1) * itemsPerPage + index + 1}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
                           {product.productName}
@@ -180,7 +205,7 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
                     No products found
                   </td>
                 </tr>
@@ -190,28 +215,15 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
         </div>
       )}
 
-      {/* Summary */}
+      {/* Pagination */}
       {!loading && products.length > 0 && (
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500">Total Products:</span>
-              <span className="font-medium ml-2">{pagination.total}</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Active:</span>
-              <span className="font-medium text-green-600 ml-2">
-                {products.filter(p => p.status === 'Active').length}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500">Inactive:</span>
-              <span className="font-medium text-gray-600 ml-2">
-                {products.filter(p => p.status === 'Inactive').length}
-              </span>
-            </div>
-          </div>
-        </div>
+        <Pagination
+          currentPage={pagination.current}
+          totalPages={pagination.pages}
+          totalItems={pagination.total}
+          onPageChange={handlePageChange}
+          itemsPerPage={itemsPerPage}
+        />
       )}
     </div>
   );
