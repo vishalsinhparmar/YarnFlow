@@ -102,13 +102,9 @@ export const poUtils = {
   formatStatus: (status) => {
     const statusMap = {
       'Draft': 'Draft',
-      'Sent': 'Sent',
-      'Acknowledged': 'Acknowledged', 
-      'Approved': 'Approved',
       'Partially_Received': 'Partially Received',
       'Fully_Received': 'Fully Received',
-      'Cancelled': 'Cancelled',
-      'Closed': 'Closed'
+      'Cancelled': 'Cancelled'
     };
     return statusMap[status] || status;
   },
@@ -117,13 +113,9 @@ export const poUtils = {
   getStatusColor: (status) => {
     const colorMap = {
       'Draft': 'bg-gray-100 text-gray-800',
-      'Sent': 'bg-blue-100 text-blue-800',
-      'Acknowledged': 'bg-yellow-100 text-yellow-800',
-      'Approved': 'bg-green-100 text-green-800',
       'Partially_Received': 'bg-orange-100 text-orange-800',
       'Fully_Received': 'bg-green-100 text-green-800',
-      'Cancelled': 'bg-red-100 text-red-800',
-      'Closed': 'bg-gray-100 text-gray-800'
+      'Cancelled': 'bg-red-100 text-red-800'
     };
     return colorMap[status] || 'bg-gray-100 text-gray-800';
   },
@@ -151,7 +143,7 @@ export const poUtils = {
   isOverdue: (expectedDeliveryDate, status) => {
     const today = new Date();
     const deliveryDate = new Date(expectedDeliveryDate);
-    const completedStatuses = ['Fully_Received', 'Cancelled', 'Closed'];
+    const completedStatuses = ['Fully_Received', 'Cancelled'];
     
     return deliveryDate < today && !completedStatuses.includes(status);
   },
@@ -169,14 +161,10 @@ export const poUtils = {
   // Get next valid statuses for workflow
   getNextStatuses: (currentStatus) => {
     const statusFlow = {
-      'Draft': ['Sent', 'Cancelled'],
-      'Sent': ['Acknowledged', 'Cancelled'],
-      'Acknowledged': ['Approved', 'Cancelled'],
-      'Approved': ['Partially_Received', 'Fully_Received', 'Cancelled'],
+      'Draft': ['Cancelled'],
       'Partially_Received': ['Fully_Received', 'Cancelled'],
-      'Fully_Received': ['Closed'],
-      'Cancelled': [],
-      'Closed': []
+      'Fully_Received': [],
+      'Cancelled': []
     };
     return statusFlow[currentStatus] || [];
   }

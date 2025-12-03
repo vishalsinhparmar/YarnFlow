@@ -9,7 +9,9 @@ import logger from '../utils/logger.js';
 // Get all customers
 export const getAllCustomers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Default 50, max 100
+    const { search, status } = req.query;
     
     let query = {};
     
@@ -175,7 +177,9 @@ export const deleteCustomer = async (req, res) => {
 // Get all suppliers
 export const getAllSuppliers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Default 50, max 100
+    const { search } = req.query;
     
     let query = {};
     
@@ -333,18 +337,36 @@ export const deleteSupplier = async (req, res) => {
 // Get all categories
 export const getAllCategories = async (req, res) => {
   try {
-    const { includeSubcategories = false } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Default 50, max 100
+    const { includeSubcategories = false, search } = req.query;
     
-    let categories;
-    if (includeSubcategories === 'true') {
-      categories = await Category.find().populate('subcategories');
-    } else {
-      categories = await Category.find().sort({ sortOrder: 1, categoryName: 1 });
+    let query = {};
+    
+    // Add search functionality
+    if (search) {
+      query.$or = [
+        { categoryName: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
     }
+    
+    // Fetch categories with pagination
+    const categories = await Category.find(query)
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .sort({ categoryName: 1, createdAt: -1 });
+    
+    const total = await Category.countDocuments(query);
     
     res.status(200).json({
       success: true,
-      data: categories
+      data: categories,
+      pagination: {
+        current: page,
+        pages: Math.ceil(total / limit),
+        total
+      }
     });
     
     logger.info(`Retrieved ${categories.length} categories`);
@@ -448,7 +470,9 @@ export const deleteCategory = async (req, res) => {
 // Get all products
 export const getAllProducts = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, category, status } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Default 50, max 100
+    const { search, category, status } = req.query;
     
     let query = {};
     

@@ -43,11 +43,6 @@ export const getAllGRNs = async (req, res) => {
       query.receiptStatus = status;
     }
     
-    // Filter by quality status
-    if (qualityStatus) {
-      query.qualityCheckStatus = qualityStatus;
-    }
-    
     // Filter by PO number
     if (poNumber) {
       query.poNumber = { $regex: poNumber, $options: 'i' };
@@ -235,21 +230,10 @@ export const createGRN = async (req, res) => {
         receivedWeight: receivedWeight,
         pendingQuantity: pendingQuantity,
         pendingWeight: pendingWeight,
-        acceptedQuantity: item.acceptedQuantity || item.receivedQuantity,
-        rejectedQuantity: item.rejectedQuantity || 0,
         unit: poItem.unit || product.inventory?.unit || 'Bags',
-        unitPrice: poItem.unitPrice,
-        qualityStatus: item.qualityStatus || 'Pending',
-        qualityNotes: item.qualityNotes || '',
-        warehouseLocation: item.warehouseLocation || warehouseLocation,
-        batchNumber: item.batchNumber || '',
-        damageQuantity: item.damageQuantity || 0,
-        damageNotes: item.damageNotes || '',
-        notes: item.notes || '',
         // Manual completion support
         manuallyCompleted: item.markAsComplete || false,
-        completionReason: item.markAsComplete ? 'Marked as complete by user (losses/damages accepted)' : '',
-        completedAt: item.markAsComplete ? new Date() : null
+        completionReason: item.markAsComplete ? 'Marked as complete by user (losses/damages accepted)' : ''
       });
       
       // Log what we're storing
@@ -293,40 +277,24 @@ export const createGRN = async (req, res) => {
     
     // Create GRN
     // Set status based on receipt completion
-    // Note: GRN status enum values are: Draft, Received, Under_Review, Approved, Rejected, Completed
-    const grnStatus = receiptStatus === 'Complete' ? 'Completed' : (anyItemReceived ? 'Received' : 'Draft');
-    // Only approve if receiptStatus is Complete (all items complete)
-    const approvalStatus = receiptStatus === 'Complete' ? 'Approved' : 'Pending';
+    // Note: GRN status enum values are: Draft, Received, Partial, Complete
+    const grnStatus = receiptStatus === 'Complete' ? 'Complete' : (anyItemReceived ? 'Received' : 'Draft');
     
     const grn = new GoodsReceiptNote({
       purchaseOrder: poId,
       poNumber: purchaseOrder.poNumber,
       supplier: purchaseOrder.supplier._id,
       supplierDetails: {
-        companyName: purchaseOrder.supplier.companyName,
-        contactPerson: purchaseOrder.supplier.contactPerson,
-        phone: purchaseOrder.supplier.phone
+        companyName: purchaseOrder.supplier.companyName
       },
       receiptDate,
-      deliveryDate,
-      invoiceNumber,
-      invoiceDate,
-      invoiceAmount,
-      vehicleNumber,
-      driverName,
-      driverPhone,
-      transportCompany,
       items: validatedItems,
-      receivedBy,
       warehouseLocation,
+      storageInstructions: req.body.storageInstructions || '',
       generalNotes,
       createdBy,
       receiptStatus,
-      isPartialReceipt,
-      status: grnStatus,
-      approvalStatus: approvalStatus,
-      approvedBy: receiptStatus === 'Complete' ? createdBy : undefined,
-      approvedDate: receiptStatus === 'Complete' ? new Date() : undefined
+      status: grnStatus
     });
     
     await grn.save();
@@ -466,14 +434,12 @@ export const createGRN = async (req, res) => {
                 { $inc: { 'inventory.currentStock': prevItem.receivedQuantity } }
               );
               
-              // Update previous GRN status to Completed
+              // Update previous GRN status to Complete
               await GoodsReceiptNote.findByIdAndUpdate(prevGRN._id, {
-                status: 'Completed',
-                approvalStatus: 'Approved',
-                approvedBy: createdBy,
-                approvedDate: new Date()
+                status: 'Complete',
+                receiptStatus: 'Complete'
               });
-              console.log(`✅ Updated GRN ${prevGRN.grnNumber} status to Completed`);
+              console.log(`✅ Updated GRN ${prevGRN.grnNumber} status to Complete`);
             }
           }
         }
@@ -719,27 +685,20 @@ export const approveGRN = async (req, res) => {
       });
     }
     
-    // Update GRN approval status
-    grn.approvalStatus = 'Approved';
-    grn.approvedBy = approvedBy;
-    grn.approvedDate = new Date();
-    grn.status = 'Completed';
+    // Update GRN status to Complete
+    grn.status = 'Complete';
+    grn.receiptStatus = 'Complete';
     if (notes) grn.generalNotes = notes;
     
     await grn.save();
     
-    // Create inventory lots for approved items OR manually completed items
+    // Create inventory lots for all received items
     const inventoryLots = [];
     for (const item of grn.items) {
-      // Create inventory lot if:
-      // 1. Quality is approved AND has accepted quantity, OR
-      // 2. Item is manually completed (auto-approve)
-      const shouldCreateLot = (item.qualityStatus === 'Approved' && item.acceptedQuantity > 0) ||
-                              (item.manuallyCompleted && item.receivedQuantity > 0);
-      
-      if (shouldCreateLot) {
-        const lotQuantity = item.manuallyCompleted ? item.receivedQuantity : item.acceptedQuantity;
-        const lotWeight = item.manuallyCompleted ? item.receivedWeight : item.acceptedWeight;
+      // Create inventory lot if item has received quantity
+      if (item.receivedQuantity > 0) {
+        const lotQuantity = item.receivedQuantity;
+        const lotWeight = item.receivedWeight;
         const lot = new InventoryLot({
           grn: grn._id,
           grnNumber: grn.grnNumber,
@@ -839,7 +798,7 @@ export const getGRNStats = async (req, res) => {
         }
       }),
       
-      // Total received value (current month)
+      // Count of items received (current month)
       GoodsReceiptNote.aggregate([
         {
           $match: {
@@ -849,15 +808,18 @@ export const getGRNStats = async (req, res) => {
           }
         },
         {
+          $unwind: '$items'
+        },
+        {
           $group: {
             _id: null,
-            totalValue: { $sum: '$totalReceivedValue' }
+            totalQuantity: { $sum: '$items.receivedQuantity' }
           }
         }
       ])
     ]);
     
-    const [totalGRNs, statusCounts, pendingCount, completedCount, thisMonth, monthlyValue] = stats;
+    const [totalGRNs, statusCounts, pendingCount, completedCount, thisMonth, monthlyQuantity] = stats;
     
     res.status(200).json({
       success: true,
@@ -867,7 +829,7 @@ export const getGRNStats = async (req, res) => {
         pending: pendingCount,
         completed: completedCount,
         thisMonth,
-        monthlyValue: monthlyValue[0]?.totalValue || 0
+        monthlyQuantity: monthlyQuantity[0]?.totalQuantity || 0
       }
     });
   } catch (error) {

@@ -9,6 +9,30 @@ export const getMasterDataStats = async () => {
   return apiRequest('/stats');
 };
 
+// ============ IMPORT API ============
+export const importMasterData = async (type, file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  // Use fetch directly for file upload (FormData requires different handling)
+  const { API_BASE_URL } = await import('./common.js');
+  
+  const response = await fetch(`${API_BASE_URL}/master-data/import/${type}`, {
+    method: 'POST',
+    body: formData
+    // Note: Don't set Content-Type header - browser will set it automatically with boundary for multipart/form-data
+  });
+  
+  const data = await response.json().catch(() => ({}));
+  
+  if (!response.ok) {
+    const message = data?.message || `HTTP error! status: ${response.status}`;
+    throw new Error(message);
+  }
+  
+  return data;
+};
+
 // ============ CUSTOMER API ============
 export const customerAPI = {
   // Get all customers with pagination and filters

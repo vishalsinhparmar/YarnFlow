@@ -169,25 +169,9 @@ export const salesOrderUtils = {
     const statusColors = {
       'Draft': 'bg-gray-100 text-gray-800',
       'Pending': 'bg-yellow-100 text-yellow-800',
-      'Confirmed': 'bg-blue-100 text-blue-800',
       'Processing': 'bg-purple-100 text-purple-800',
-      'Shipped': 'bg-orange-100 text-orange-800',
       'Delivered': 'bg-green-100 text-green-800',
-      'Cancelled': 'bg-red-100 text-red-800',
-      'Returned': 'bg-pink-100 text-pink-800'
-    };
-    return statusColors[status] || 'bg-gray-100 text-gray-800';
-  },
-
-
-  // Get payment status color
-  getPaymentStatusColor: (status) => {
-    const statusColors = {
-      'Pending': 'bg-yellow-100 text-yellow-800',
-      'Partial': 'bg-orange-100 text-orange-800',
-      'Paid': 'bg-green-100 text-green-800',
-      'Overdue': 'bg-red-100 text-red-800',
-      'Cancelled': 'bg-gray-100 text-gray-800'
+      'Cancelled': 'bg-red-100 text-red-800'
     };
     return statusColors[status] || 'bg-gray-100 text-gray-800';
   },
@@ -197,12 +181,9 @@ export const salesOrderUtils = {
     const statusIcons = {
       'Draft': '📝',
       'Pending': '⏳',
-      'Confirmed': '✅',
       'Processing': '⚙️',
-      'Shipped': '🚚',
       'Delivered': '📦',
-      'Cancelled': '❌',
-      'Returned': '↩️'
+      'Cancelled': '❌'
     };
     return statusIcons[status] || '📋';
   },
@@ -212,12 +193,10 @@ export const salesOrderUtils = {
   getCompletionPercentage: (salesOrder) => {
     if (!salesOrder.items || salesOrder.items.length === 0) return 0;
     
-    const totalItems = salesOrder.items.length;
-    const completedItems = salesOrder.items.filter(item => 
-      item.itemStatus === 'Delivered'
-    ).length;
+    const totalQuantity = salesOrder.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const deliveredQuantity = salesOrder.items.reduce((sum, item) => sum + (item.deliveredQuantity || 0), 0);
     
-    return Math.round((completedItems / totalItems) * 100);
+    return totalQuantity > 0 ? Math.round((deliveredQuantity / totalQuantity) * 100) : 0;
   },
 
   // Calculate days until delivery
@@ -244,13 +223,10 @@ export const salesOrderUtils = {
   getNextStatuses: (currentStatus) => {
     const statusFlow = {
       'Draft': ['Pending', 'Cancelled'],
-      'Pending': ['Confirmed', 'Cancelled'],
-      'Confirmed': ['Processing', 'Cancelled'],
-      'Processing': ['Shipped', 'Cancelled'],
-      'Shipped': ['Delivered', 'Returned'],
-      'Delivered': ['Returned'],
-      'Cancelled': [],
-      'Returned': []
+      'Pending': ['Processing', 'Cancelled'],
+      'Processing': ['Delivered', 'Cancelled'],
+      'Delivered': [],
+      'Cancelled': []
     };
     return statusFlow[currentStatus] || [];
   },
@@ -262,17 +238,7 @@ export const salesOrderUtils = {
 
   // Check if order can be cancelled
   canCancel: (status) => {
-    return ['Draft', 'Pending', 'Confirmed', 'Processing'].includes(status);
-  },
-
-  // Check if order can be shipped
-  canShip: (status) => {
-    return status === 'Processing';
-  },
-
-  // Check if order can be delivered
-  canDeliver: (status) => {
-    return status === 'Shipped';
+    return ['Draft', 'Pending', 'Processing'].includes(status);
   },
 
   // Get available actions for order
@@ -282,8 +248,8 @@ export const salesOrderUtils = {
     // Always show view
     actions.push({ type: 'view', label: 'View', color: 'blue' });
     
-    // Update Status for draft, pending, confirmed orders
-    if (['Draft', 'Pending', 'Confirmed'].includes(salesOrder.status)) {
+    // Update Status for draft, pending orders
+    if (['Draft', 'Pending'].includes(salesOrder.status)) {
       actions.push({ type: 'updateStatus', label: 'Update Status', color: 'green' });
     }
     
@@ -295,26 +261,6 @@ export const salesOrderUtils = {
     // Create Challan for processing orders
     if (salesOrder.status === 'Processing') {
       actions.push({ type: 'createChallan', label: 'Create Challan', color: 'teal' });
-    }
-    
-    // Reserve inventory for confirmed orders
-    if (salesOrder.status === 'Confirmed') {
-      actions.push({ type: 'reserve', label: 'Reserve', color: 'purple' });
-    }
-    
-    // Ship for processing orders
-    if (salesOrderUtils.canShip(salesOrder.status)) {
-      actions.push({ type: 'ship', label: 'Ship', color: 'orange' });
-    }
-    
-    // Deliver for shipped orders
-    if (salesOrderUtils.canDeliver(salesOrder.status)) {
-      actions.push({ type: 'deliver', label: 'Deliver', color: 'green' });
-    }
-    
-    // Track for shipped orders
-    if (salesOrder.status === 'Shipped' && salesOrder.trackingNumber) {
-      actions.push({ type: 'track', label: 'Track', color: 'blue' });
     }
     
     // Cancel for applicable orders
@@ -330,7 +276,7 @@ export const salesOrderUtils = {
     if (!items || items.length === 0) return 'No items';
     
     if (items.length === 1) {
-      return `${items[0].productName} (${items[0].orderedQuantity} ${items[0].unit})`;
+      return `${items[0].productName} (${items[0].quantity} ${items[0].unit})`;
     } else {
       return `${items.length} items`;
     }

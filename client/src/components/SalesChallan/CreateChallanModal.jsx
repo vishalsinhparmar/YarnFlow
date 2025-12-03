@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { FileText, X, FileCheck, Calendar, MapPin, Package } from 'lucide-react';
 import { salesOrderAPI } from '../../services/salesOrderAPI';
 import { salesChallanAPI } from '../../services/salesChallanAPI';
 import { inventoryAPI } from '../../services/inventoryAPI';
 import { apiRequest } from '../../services/common';
 import NewSalesOrderModal from '../SalesOrders/NewSalesOrderModal';
+import SearchableSelect from '../common/SearchableSelect';
 import { WAREHOUSE_LOCATIONS, getWarehouseName } from '../../constants/warehouseLocations';
 
 const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = null }) => {
@@ -43,28 +45,17 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
     }
   }, [isOpen]);
 
-  // Load sales orders when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadSalesOrders();
-    }
-  }, [isOpen]);
-
-  // Handle pre-selected SO (separate effect to avoid race conditions)
-  useEffect(() => {
-    if (isOpen && preSelectedOrderId && salesOrders.length > 0) {
-      console.log('Pre-selecting SO:', preSelectedOrderId);
-      handleSOSelection(preSelectedOrderId);
-    }
-  }, [isOpen, preSelectedOrderId, salesOrders]);
-
-  const loadSalesOrders = async () => {
+  // Define loadSalesOrders BEFORE useEffect that uses it
+  const loadSalesOrders = useCallback(async (search = '') => {
     try {
       setLoadingSOs(true);
       setError('');
       
-      console.log('Loading sales orders...');
-      const response = await salesOrderAPI.getAll({ limit: 100 });
+      console.log('Loading sales orders...', search ? `with search: ${search}` : '');
+      const params = { limit: 100 };
+      if (search) params.search = search;
+      
+      const response = await salesOrderAPI.getAll(params);
       console.log('Sales Orders API Response:', response);
       
       if (response.success && response.data) {
@@ -78,22 +69,37 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
         
         setSalesOrders(availableOrders);
         
-        if (availableOrders.length === 0) {
+        if (availableOrders.length === 0 && !search) {
           setError('No sales orders available. Please create a sales order first.');
         }
       } else {
         console.error('API returned unsuccessful response:', response);
         setSalesOrders([]);
-        setError('Failed to load sales orders');
+        if (!search) setError('Failed to load sales orders');
       }
     } catch (err) {
       console.error('Error loading sales orders:', err);
-      setError('Failed to load sales orders: ' + err.message);
+      if (!search) setError('Failed to load sales orders: ' + err.message);
       setSalesOrders([]);
     } finally {
       setLoadingSOs(false);
     }
-  };
+  }, []);
+
+  // Load sales orders when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadSalesOrders();
+    }
+  }, [isOpen, loadSalesOrders]);
+
+  // Handle pre-selected SO (separate effect to avoid race conditions)
+  useEffect(() => {
+    if (isOpen && preSelectedOrderId && salesOrders.length > 0) {
+      console.log('Pre-selecting SO:', preSelectedOrderId);
+      handleSOSelection(preSelectedOrderId);
+    }
+  }, [isOpen, preSelectedOrderId, salesOrders]);
 
   // Handle sales order selection
   const handleSOSelection = async (soId) => {
@@ -445,93 +451,125 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">Create Sales Challan</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto relative">
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50 rounded-2xl">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-teal-600 mb-4"></div>
+              <p className="text-lg font-semibold text-gray-700">Creating Sales Challan...</p>
+              <p className="text-sm text-gray-500 mt-2">Please wait</p>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="px-8 py-6 bg-gradient-to-r from-teal-600 to-emerald-600 rounded-t-2xl flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
+              <FileText className="w-6 h-6 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold text-white">Create Sales Challan</h2>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            disabled={loading}
+            className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-all disabled:opacity-50"
           >
             <span className="sr-only">Close</span>
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="w-6 h-6" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-8 space-y-8">
           {successMessage && (
-            <div className="bg-green-50 border border-green-200 rounded-md p-4">
-              <p className="text-green-800 text-sm">{successMessage}</p>
+            <div className="bg-green-50 border-l-4 border-green-500 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center">
+                <svg className="h-6 w-6 text-green-500 mr-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <p className="text-green-800 font-medium">{successMessage}</p>
+              </div>
             </div>
           )}
           
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-md p-4">
-              <p className="text-red-800 text-sm">{error}</p>
+            <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center">
+                <svg className="h-6 w-6 text-red-500 mr-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <h3 className="text-sm font-semibold text-red-800">Error</h3>
+                  <p className="text-red-700 text-sm mt-1">{error}</p>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Basic Information */}
-          <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Sales Order Selection with Add Button */}
+          {/* Sales Order Selection */}
+          <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-xl p-6 shadow-sm border border-teal-100">
+            <div className="flex items-center mb-6">
+              <svg className="h-6 w-6 text-teal-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <h3 className="text-xl font-semibold text-gray-900">Sales Order Selection</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Sales Order Selection with SearchableSelect */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Sales Order *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleAddSO}
-                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                  >
-                    + Add SO
-                  </button>
-                </div>
-                <div className="relative">
-                  <select
-                    value={formData.salesOrder}
-                    onChange={(e) => handleSOSelection(e.target.value)}
-                    required
-                    disabled={loadingSOs || loadingSODetails}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">
-                      {loadingSOs ? 'Loading sales orders...' : 
-                       salesOrders.length === 0 ? 'No sales orders available - Click + Add SO' :
-                       'Select Sales Order'}
-                    </option>
-                    {salesOrders.map(so => (
-                      <option key={so._id} value={so._id}>
-                        {so.soNumber} - {so.customer?.companyName || 'Unknown Customer'}
-                      </option>
-                    ))}
-                  </select>
-                  {loadingSODetails && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal-600"></div>
+                <SearchableSelect
+                  label="Sales Order"
+                  required
+                  options={salesOrders}
+                  value={formData.salesOrder}
+                  onChange={(value) => handleSOSelection(value)}
+                  placeholder={loadingSOs ? 'Loading sales orders...' : 'Select Sales Order'}
+                  searchPlaceholder="Search by SO number or customer..."
+                  getOptionLabel={(so) => `${so.soNumber} - ${so.customer?.companyName || 'Unknown Customer'}`}
+                  getOptionValue={(so) => so._id}
+                  onSearch={loadSalesOrders}
+                  loading={loadingSOs || loadingSODetails}
+                  disabled={loadingSODetails}
+                  onAddNew={handleAddSO}
+                  addNewLabel="Add SO"
+                  renderOption={(so, isSelected) => (
+                    <div className="flex flex-col">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{so.soNumber}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          so.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                          so.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+                          so.status === 'Partial' ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {so.status}
+                        </span>
+                      </div>
+                      <span className="text-sm text-gray-500">{so.customer?.companyName || 'Unknown Customer'}</span>
+                      {so.category?.categoryName && (
+                        <span className="text-xs text-teal-600">{so.category.categoryName}</span>
+                      )}
                     </div>
                   )}
-                </div>
-                {/* Debug Info */}
-                {!loadingSOs && salesOrders.length === 0 && (
-                  <p className="text-xs text-orange-600 mt-1">
-                    ⚠️ No sales orders found. Click "+ Add SO" to create one.
-                  </p>
-                )}
-                {!loadingSOs && salesOrders.length > 0 && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ✓ {salesOrders.length} sales order(s) available
+                />
+                {!loadingSOs && salesOrders.length > 0 && !formData.salesOrder && (
+                  <p className="text-xs text-green-600 mt-2 flex items-center">
+                    <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    {salesOrders.length} sales order(s) available - Search to find specific SO
                   </p>
                 )}
               </div>
 
               {/* Expected Delivery Date */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
                   Expected Delivery Date
                 </label>
                 <input
@@ -539,7 +577,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                   value={formData.expectedDeliveryDate}
                   onChange={(e) => handleInputChange('expectedDeliveryDate', e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white hover:border-teal-400 transition-all"
                 />
               </div>
             </div>
@@ -547,60 +585,86 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
           {/* Loading SO Details */}
           {loadingSODetails && (
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center justify-center space-x-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                <span className="text-sm text-blue-800">Loading sales order details...</span>
+            <div className="bg-teal-50 rounded-xl p-6 border border-teal-200">
+              <div className="flex items-center justify-center space-x-3">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
+                <span className="text-sm font-medium text-teal-800">Loading sales order details...</span>
               </div>
             </div>
           )}
 
           {/* Selected SO Details */}
           {!loadingSODetails && selectedSO && (
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <h3 className="text-sm font-medium text-blue-900 mb-2">Selected Order Details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-blue-800">
-                <div>
-                  <span className="font-medium">Customer:</span> {selectedSO.customer?.companyName || 'N/A'}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 shadow-sm">
+              <div className="flex items-center mb-4">
+                <svg className="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="text-base font-semibold text-blue-900">Selected Order Details</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</span>
+                  <p className="text-sm font-semibold text-gray-900 mt-1">{selectedSO.customer?.companyName || 'N/A'}</p>
                 </div>
-                <div>
-                  <span className="font-medium">Order Date:</span> {new Date(selectedSO.createdAt).toLocaleDateString('en-IN')}
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Order Date</span>
+                  <p className="text-sm font-semibold text-gray-900 mt-1">{new Date(selectedSO.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                 </div>
-                <div>
-                  <span className="font-medium">Category:</span> {selectedSO.category?.categoryName || 'N/A'}
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Category</span>
+                  <p className="text-sm font-semibold text-gray-900 mt-1">{selectedSO.category?.categoryName || 'N/A'}</p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Warehouse Information */}
-          <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Dispatch Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Dispatch Information */}
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 shadow-sm border border-purple-100">
+            <div className="flex items-center mb-6">
+              <svg className="h-6 w-6 text-purple-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+              <h3 className="text-xl font-semibold text-gray-900">Dispatch Information</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Warehouse Location *
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  Warehouse Location <span className="text-red-500 ml-1">*</span>
                 </label>
-                <select
-                  value={formData.warehouseLocation}
-                  onChange={(e) => handleInputChange('warehouseLocation', e.target.value)}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
-                >
-                  <option value="">Select Warehouse Location</option>
-                  {WAREHOUSE_LOCATIONS.map(warehouse => (
-                    <option key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <div className="relative">
+                  <select
+                    value={formData.warehouseLocation}
+                    onChange={(e) => handleInputChange('warehouseLocation', e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white hover:border-purple-400 transition-all appearance-none"
+                  >
+                    <option value="">Select Warehouse Location</option>
+                    {WAREHOUSE_LOCATIONS.map(warehouse => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
                   Select the warehouse location where goods will be dispatched from
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
                   Dispatch Notes
                 </label>
                 <input
@@ -608,13 +672,13 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                   value={formData.notes}
                   onChange={(e) => handleInputChange('notes', e.target.value)}
                   placeholder="Special dispatch instructions (optional)"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white hover:border-purple-400 transition-all"
                 />
               </div>
             </div>
           </div>
 
-          {/* Items to Dispatch - GRN Style */}
+          {/* Items to Dispatch */}
           {!loadingSODetails && formData.items && formData.items.length > 0 && (() => {
             // Filter out fully dispatched items
             const itemsToDispatch = formData.items.filter(item => {
@@ -624,10 +688,16 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             });
 
             return itemsToDispatch.length > 0 ? (
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3">
-                  Items to Dispatch
-                </h3>
+              <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 shadow-sm border border-orange-100">
+                <div className="flex items-center mb-6">
+                  <svg className="h-6 w-6 text-orange-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                  <h3 className="text-xl font-semibold text-gray-900">Items to Dispatch</h3>
+                  <span className="ml-3 bg-orange-100 text-orange-800 text-sm font-medium px-3 py-1 rounded-full">
+                    {itemsToDispatch.length} item(s)
+                  </span>
+                </div>
                 
                 {/* Table Header */}
                 <div className="bg-gray-50 border border-gray-200 rounded-t-lg px-4 py-2">
@@ -788,20 +858,33 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
 
           {/* Form Actions */}
-          <div className="flex items-center justify-end space-x-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              disabled={loading}
+              className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading || !formData.salesOrder || formData.items.length === 0}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {loading ? 'Creating...' : 'Create Challan'}
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Create Challan
+                </>
+              )}
             </button>
           </div>
         </form>

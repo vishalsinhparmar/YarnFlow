@@ -1,6 +1,12 @@
 import mongoose from 'mongoose';
 
-// Individual lot/batch tracking schema
+// ============ INVENTORY LOT SCHEMA ============
+// Tracks inventory from GRN (Stock In) and Sales Challan (Stock Out)
+// 
+// FLOW: PurchaseOrder → GRN → InventoryLot → SalesChallan
+// - When GRN is created: InventoryLot is created with receivedQuantity
+// - When Challan is created: currentQuantity is reduced, movement is added
+//
 const inventoryLotSchema = new mongoose.Schema({
   lotNumber: {
     type: String,
@@ -8,7 +14,8 @@ const inventoryLotSchema = new mongoose.Schema({
     uppercase: true
   },
   
-  // Reference Information
+  // ===== REFERENCE INFORMATION =====
+  // Links to GRN (source of stock)
   grn: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'GoodsReceiptNote',
@@ -18,6 +25,7 @@ const inventoryLotSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Links to Purchase Order
   purchaseOrder: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'PurchaseOrder'
@@ -26,7 +34,7 @@ const inventoryLotSchema = new mongoose.Schema({
     type: String
   },
   
-  // Product Information
+  // ===== PRODUCT INFORMATION =====
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Product',
@@ -41,7 +49,7 @@ const inventoryLotSchema = new mongoose.Schema({
     ref: 'Category'
   },
   
-  // Supplier Information
+  // ===== SUPPLIER INFORMATION =====
   supplier: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Supplier',
@@ -51,22 +59,8 @@ const inventoryLotSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  supplierBatchNumber: {
-    type: String,
-    trim: true
-  },
   
-  // Product Specifications
-  specifications: {
-    yarnCount: String,
-    color: String,
-    quality: String,
-    weight: Number,
-    composition: String,
-    grade: String
-  },
-  
-  // Quantity Information
+  // ===== QUANTITY INFORMATION =====
   receivedQuantity: {
     type: Number,
     required: true,
@@ -98,75 +92,31 @@ const inventoryLotSchema = new mongoose.Schema({
     min: 0
   },
   
-  // Quality Information
-  qualityStatus: {
-    type: String,
-    enum: ['Approved', 'Rejected', 'Under_Review', 'Quarantine'],
-    default: 'Approved'
-  },
-  qualityGrade: {
-    type: String,
-    enum: ['A', 'B', 'C', 'Reject'],
-    default: 'A'
-  },
-  qualityNotes: {
-    type: String,
-    trim: true
-  },
-  
-  // Storage Information
+  // ===== STORAGE INFORMATION =====
   warehouse: {
     type: String,
     trim: true
   },
-  location: {
-    zone: String,
-    rack: String,
-    shelf: String,
-    bin: String
-  },
-  storageConditions: {
-    temperature: Number,
-    humidity: Number,
-    specialRequirements: String
-  },
   
-  // Date Information
+  // ===== DATE INFORMATION =====
   receivedDate: {
     type: Date,
     required: true
   },
-  manufactureDate: {
-    type: Date
-  },
-  expiryDate: {
-    type: Date
-  },
   
-  // Cost Information
-  unitCost: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  totalCost: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  
-  // Status and Lifecycle
+  // ===== STATUS =====
   status: {
     type: String,
-    enum: ['Active', 'Reserved', 'Consumed', 'Expired', 'Damaged', 'Returned'],
+    enum: ['Active', 'Reserved', 'Consumed'],
     default: 'Active'
   },
   
-  // Movement History
+  // ===== MOVEMENT HISTORY =====
+  // Tracks Stock In (from GRN) and Stock Out (via Challan)
   movements: [{
     type: {
       type: String,
-      enum: ['Received', 'Reserved', 'Issued', 'Returned', 'Adjusted', 'Transferred', 'Damaged']
+      enum: ['Received', 'Issued', 'Returned', 'Adjusted']
     },
     quantity: Number,
     weight: {
@@ -177,36 +127,18 @@ const inventoryLotSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     },
-    reference: String, // SO number, transfer note, etc.
+    reference: String, // GRN number or Challan number
     notes: String,
     performedBy: String
   }],
   
-  // Alerts and Notifications
-  alerts: [{
-    type: {
-      type: String,
-      enum: ['Low_Stock', 'Expiry_Warning', 'Quality_Issue', 'Storage_Issue']
-    },
-    message: String,
-    date: {
-      type: Date,
-      default: Date.now
-    },
-    acknowledged: {
-      type: Boolean,
-      default: false
-    }
-  }],
-  
-  // Additional Information
+  // ===== ADDITIONAL INFORMATION =====
   notes: {
     type: String,
     trim: true
   },
-  tags: [String], // For custom categorization
   
-  // Audit Trail
+  // ===== AUDIT TRAIL =====
   createdBy: {
     type: String,
     required: true,
@@ -218,6 +150,8 @@ const inventoryLotSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// ===== PRE-SAVE HOOKS =====
 
 // Auto-generate lot number before saving
 inventoryLotSchema.pre('save', async function(next) {
@@ -243,12 +177,10 @@ inventoryLotSchema.pre('save', async function(next) {
   next();
 });
 
-// Calculate available quantity before saving
+// Calculate available quantity and update status before saving
 inventoryLotSchema.pre('save', function(next) {
+  // Calculate available quantity
   this.availableQuantity = Math.max(0, this.currentQuantity - this.reservedQuantity);
-  
-  // Calculate total cost
-  this.totalCost = this.currentQuantity * this.unitCost;
   
   // Update status based on quantity
   if (this.currentQuantity <= 0) {
@@ -262,77 +194,17 @@ inventoryLotSchema.pre('save', function(next) {
   next();
 });
 
-// Check for expiry and generate alerts
-inventoryLotSchema.pre('save', function(next) {
-  if (this.expiryDate) {
-    const today = new Date();
-    const daysToExpiry = Math.ceil((this.expiryDate - today) / (1000 * 60 * 60 * 24));
-    
-    // Generate expiry warning if within 30 days
-    if (daysToExpiry <= 30 && daysToExpiry > 0) {
-      const existingAlert = this.alerts.find(alert => 
-        alert.type === 'Expiry_Warning' && !alert.acknowledged
-      );
-      
-      if (!existingAlert) {
-        this.alerts.push({
-          type: 'Expiry_Warning',
-          message: `Item expires in ${daysToExpiry} days`,
-          date: new Date()
-        });
-      }
-    }
-    
-    // Mark as expired if past expiry date
-    if (daysToExpiry <= 0 && this.status !== 'Expired') {
-      this.status = 'Expired';
-      this.alerts.push({
-        type: 'Expiry_Warning',
-        message: 'Item has expired',
-        date: new Date()
-      });
-    }
-  }
-  
-  next();
-});
-
-// Indexes for better query performance
+// ===== INDEXES =====
 inventoryLotSchema.index({ lotNumber: 1 });
 inventoryLotSchema.index({ product: 1 });
 inventoryLotSchema.index({ supplier: 1 });
 inventoryLotSchema.index({ grn: 1 });
 inventoryLotSchema.index({ status: 1 });
-inventoryLotSchema.index({ qualityStatus: 1 });
 inventoryLotSchema.index({ receivedDate: -1 });
-inventoryLotSchema.index({ expiryDate: 1 });
-inventoryLotSchema.index({ 'location.zone': 1 });
 
-// Virtual for days until expiry
-inventoryLotSchema.virtual('daysToExpiry').get(function() {
-  if (!this.expiryDate) return null;
-  const today = new Date();
-  return Math.ceil((this.expiryDate - today) / (1000 * 60 * 60 * 24));
-});
+// ===== STATIC METHODS =====
 
-// Virtual for stock value
-inventoryLotSchema.virtual('stockValue').get(function() {
-  const currentQuantity = this.currentQuantity || 0;
-  const unitCost = this.unitCost || 0;
-  return currentQuantity * unitCost;
-});
-
-// Virtual for utilization percentage
-inventoryLotSchema.virtual('utilizationPercentage').get(function() {
-  const receivedQuantity = this.receivedQuantity || 0;
-  const currentQuantity = this.currentQuantity || 0;
-  
-  if (receivedQuantity === 0) return 0;
-  const consumed = receivedQuantity - currentQuantity;
-  return Math.round((consumed / receivedQuantity) * 100);
-});
-
-// Static method to find lots by product
+// Find lots by product
 inventoryLotSchema.statics.findByProduct = function(productId, options = {}) {
   const query = { product: productId };
   
@@ -340,38 +212,10 @@ inventoryLotSchema.statics.findByProduct = function(productId, options = {}) {
     query.status = options.status;
   }
   
-  if (options.qualityStatus) {
-    query.qualityStatus = options.qualityStatus;
-  }
-  
   return this.find(query)
     .populate('product', 'productName')
     .populate('supplier', 'companyName')
     .sort({ receivedDate: -1 });
-};
-
-// Static method to find expiring lots
-inventoryLotSchema.statics.findExpiring = function(days = 30) {
-  const futureDate = new Date();
-  futureDate.setDate(futureDate.getDate() + days);
-  
-  return this.find({
-    expiryDate: { $lte: futureDate, $gte: new Date() },
-    status: { $in: ['Active', 'Reserved'] },
-    currentQuantity: { $gt: 0 }
-  })
-  .populate('product', 'productName productCode')
-  .sort({ expiryDate: 1 });
-};
-
-// Static method to find low stock lots
-inventoryLotSchema.statics.findLowStock = function(threshold = 10) {
-  return this.find({
-    currentQuantity: { $lte: threshold },
-    status: 'Active'
-  })
-  .populate('product', 'productName productCode')
-  .sort({ currentQuantity: 1 });
 };
 
 // Ensure virtuals are included in JSON output
