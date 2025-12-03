@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMasterData } from '../hooks/useMasterData';
 import { Link } from 'react-router-dom';
+import { Users, Factory, Boxes, FolderOpen, Upload, AlertTriangle, Loader2 } from 'lucide-react';
 import ImportModal from '../components/ImportModal';
 
 const MasterDataDashboard = () => {
@@ -45,7 +46,7 @@ const MasterDataDashboard = () => {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-6">
         <div className="flex items-center">
-          <span className="text-red-500 text-xl mr-3">⚠️</span>
+          <AlertTriangle className="text-red-500 w-6 h-6 mr-3" />
           <div>
             <h3 className="text-red-800 font-semibold">Error Loading Data</h3>
             <p className="text-red-600">{error}</p>
@@ -68,9 +69,7 @@ const MasterDataDashboard = () => {
             onClick={() => setShowImportModal(true)}
             className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
+            <Upload className="w-5 h-5" />
             Import Excel
           </button>
         </div>
@@ -81,7 +80,7 @@ const MasterDataDashboard = () => {
         <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-blue-600 text-xl">👥</span>
+              <Users className="text-blue-600 w-6 h-6" />
             </div>
             <span className="text-2xl font-bold text-gray-900">
               {stats?.customers?.total || 0}
@@ -96,9 +95,7 @@ const MasterDataDashboard = () => {
               onClick={() => openImportModal('customers')}
               className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-blue-200 flex items-center justify-center gap-2"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              <Upload className="w-4 h-4" />
               Import Excel
             </button>
           </div>
@@ -107,7 +104,7 @@ const MasterDataDashboard = () => {
         <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-purple-600 text-xl">🏭</span>
+              <Factory className="text-purple-600 w-6 h-6" />
             </div>
             <span className="text-2xl font-bold text-gray-900">
               {stats?.suppliers?.total || 0}
@@ -122,9 +119,7 @@ const MasterDataDashboard = () => {
               onClick={() => openImportModal('suppliers')}
               className="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-purple-200 flex items-center justify-center gap-2"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              <Upload className="w-4 h-4" />
               Import Excel
             </button>
           </div>
@@ -133,7 +128,7 @@ const MasterDataDashboard = () => {
         <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-xl">🧶</span>
+              <Boxes className="text-green-600 w-6 h-6" />
             </div>
             <span className="text-2xl font-bold text-gray-900">
               {stats?.products?.total || 0}
@@ -148,9 +143,7 @@ const MasterDataDashboard = () => {
               onClick={() => openImportModal('products')}
               className="w-full bg-green-50 hover:bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-green-200 flex items-center justify-center gap-2"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              <Upload className="w-4 h-4" />
               Import Excel
             </button>
           </div>
@@ -159,7 +152,7 @@ const MasterDataDashboard = () => {
         <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <span className="text-orange-600 text-xl">📂</span>
+              <FolderOpen className="text-orange-600 w-6 h-6" />
             </div>
             <span className="text-2xl font-bold text-gray-900">
               {stats?.categories?.total || 0}
@@ -174,9 +167,7 @@ const MasterDataDashboard = () => {
               onClick={() => openImportModal('categories')}
               className="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-orange-200 flex items-center justify-center gap-2"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              <Upload className="w-4 h-4" />
               Import Excel
             </button>
           </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useDashboard } from '../hooks/useDashboard';
 import { dashboardUtils } from '../services/dashboardAPI';
+import { FolderOpen, Package, Factory, Users, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 
 const Dashboard = () => {
   const {
@@ -17,8 +18,8 @@ const Dashboard = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading Dashboard...</p>
+          <Loader2 className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium">Loading Dashboard...</p>
         </div>
       </div>
     );
@@ -29,7 +30,7 @@ const Dashboard = () => {
       <div className="bg-red-50 border border-red-200 rounded-lg p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
-            <span className="text-red-500 text-xl mr-3">⚠️</span>
+            <AlertTriangle className="text-red-500 w-6 h-6 mr-3" />
             <div>
               <h3 className="text-red-800 font-semibold">Error Loading Dashboard</h3>
               <p className="text-red-600">{error}</p>
@@ -66,7 +67,7 @@ const Dashboard = () => {
           <h2 className="text-lg font-semibold text-gray-900">Master Data Overview</h2>
           {lastUpdated && (
             <div className="flex items-center text-xs text-gray-500">
-              <span className="mr-1">🕒</span>
+              <Clock className="w-3 h-3 mr-1" />
               Last updated: {dashboardUtils.getRelativeTime(lastUpdated)}
             </div>
           )}
@@ -82,7 +83,7 @@ const Dashboard = () => {
                 </p>
               </div>
               <div className="w-14 h-14 bg-purple-200 rounded-full flex items-center justify-center">
-                <span className="text-purple-700 text-2xl">📁</span>
+                <FolderOpen className="text-purple-700 w-7 h-7" />
               </div>
             </div>
           </div>
@@ -97,7 +98,7 @@ const Dashboard = () => {
                 </p>
               </div>
               <div className="w-14 h-14 bg-blue-200 rounded-full flex items-center justify-center">
-                <span className="text-blue-700 text-2xl">📦</span>
+                <Package className="text-blue-700 w-7 h-7" />
               </div>
             </div>
           </div>
@@ -112,7 +113,7 @@ const Dashboard = () => {
                 </p>
               </div>
               <div className="w-14 h-14 bg-green-200 rounded-full flex items-center justify-center">
-                <span className="text-green-700 text-2xl">🏭</span>
+                <Factory className="text-green-700 w-7 h-7" />
               </div>
             </div>
           </div>
@@ -127,7 +128,7 @@ const Dashboard = () => {
                 </p>
               </div>
               <div className="w-14 h-14 bg-orange-200 rounded-full flex items-center justify-center">
-                <span className="text-orange-700 text-2xl">👥</span>
+                <Users className="text-orange-700 w-7 h-7" />
               </div>
             </div>
           </div>

@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { supplierAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
 import Pagination from '../../common/Pagination';
+import SimpleDeleteModal from '../../common/SimpleDeleteModal';
+import useToast from '../../../hooks/useToast';
 
 const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
+  const { supplierToasts } = useToast();
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -15,6 +19,8 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
     pages: 1,
     total: 0
   });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, supplier: null });
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Fetch suppliers
   const fetchSuppliers = async (page = currentPage) => {
@@ -61,18 +67,32 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
   }, [refreshTrigger]);
 
   // Handle delete supplier
-  const handleDeleteSupplier = async (supplierId, supplierName) => {
-    if (window.confirm(`Are you sure you want to delete supplier "${supplierName}"?`)) {
-      try {
-        const response = await supplierAPI.delete(supplierId);
-        if (response.success) {
-          fetchSuppliers(); // Refresh list
-          onRefresh?.(); // Notify parent
-        }
-      } catch (err) {
-        setError(handleAPIError(err, 'Failed to delete supplier'));
+  const handleDeleteClick = (supplier) => {
+    setDeleteModal({ isOpen: true, supplier });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.supplier) return;
+    
+    try {
+      setDeleteLoading(true);
+      const response = await supplierAPI.delete(deleteModal.supplier._id);
+      if (response.success) {
+        supplierToasts.deleteSuccess(deleteModal.supplier.companyName);
+        setDeleteModal({ isOpen: false, supplier: null });
+        fetchSuppliers();
+        onRefresh?.();
       }
+    } catch (err) {
+      supplierToasts.deleteError();
+      setError(handleAPIError(err, 'Failed to delete supplier'));
+    } finally {
+      setDeleteLoading(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModal({ isOpen: false, supplier: null });
   };
 
 
@@ -179,18 +199,24 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => onEdit(supplier)}
-                        className="text-purple-600 hover:text-purple-900 mr-3"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSupplier(supplier._id, supplier.companyName)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center space-x-3">
+                        <button
+                          onClick={() => onEdit(supplier)}
+                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
+                          title="Edit supplier"
+                        >
+                          <Edit2 className="w-4 h-4 mr-1.5" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(supplier)}
+                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
+                          title="Delete supplier"
+                        >
+                          <Trash2 className="w-4 h-4 mr-1.5" />
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -216,6 +242,15 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
           itemsPerPage={itemsPerPage}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <SimpleDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        itemName={deleteModal.supplier?.companyName}
+        loading={deleteLoading}
+      />
     </div>
   );
 };

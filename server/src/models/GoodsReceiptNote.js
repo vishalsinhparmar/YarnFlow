@@ -52,8 +52,8 @@ const grnItemSchema = new mongoose.Schema({
   },
   unit: {
     type: String,
-    enum: ['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'],
-    default: 'Bags'
+    default: 'Bags',
+    trim: true
   },
   
   // Manual Completion (for partial qty acceptance)

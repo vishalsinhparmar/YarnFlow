@@ -1,5 +1,18 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { 
+  LayoutDashboard, 
+  ShoppingCart, 
+  ClipboardCheck, 
+  Package, 
+  FileText, 
+  Truck, 
+  Database,
+  Users,
+  Factory,
+  Boxes,
+  FolderOpen
+} from "lucide-react";
 
 const SideBarApp = () => {
   const location = useLocation();
@@ -9,32 +22,32 @@ const SideBarApp = () => {
     {
       name: "Dashboard",
       path: "/dashboard",
-      icon: "🏠"
+      icon: LayoutDashboard
     },
     {
       name: "Purchase Order (PO)",
       path: "/purchase-order",
-      icon: "🛒"
+      icon: ShoppingCart
     },
     {
       name: "Goods Receipt Note (GRN)",
       path: "/goods-receipt",
-      icon: "📋"
+      icon: ClipboardCheck
     },
     {
       name: "Inventory Lots",
       path: "/inventory",
-      icon: "📦"
+      icon: Package
     },
     {
       name: "Sales Order (SO)",
       path: "/sales-order",
-      icon: "📄"
+      icon: FileText
     },
     {
       name: "Sales Challan",
       path: "/sales-challan",
-      icon: "🚚"
+      icon: Truck
     }
   ];
 
@@ -42,27 +55,27 @@ const SideBarApp = () => {
     {
       name: "Dashboard",
       path: "/master-data",
-      icon: "🏠"
+      icon: LayoutDashboard
     },
     {
       name: "Customers",
       path: "/master-data/customers",
-      icon: "👥"
+      icon: Users
     },
     {
       name: "Suppliers",
       path: "/master-data/suppliers",
-      icon: "🏭"
+      icon: Factory
     },
     {
       name: "Products",
       path: "/master-data/products",
-      icon: "🧶"
+      icon: Boxes
     },
     {
       name: "Categories",
       path: "/master-data/categories",
-      icon: "📂"
+      icon: FolderOpen
     }
   ];
 
@@ -101,7 +114,7 @@ const SideBarApp = () => {
                         : "text-gray-300 hover:bg-gray-800 hover:text-white hover:transform hover:scale-102"
                     }`}
                   >
-                    <span className="text-lg mr-3 group-hover:scale-110 transition-transform duration-200">{item.icon}</span>
+                    <item.icon className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform duration-200" />
                     <span className="text-sm font-medium">{item.name}</span>
                     {isActive && (
                       <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
@@ -131,7 +144,7 @@ const SideBarApp = () => {
                   }`}
                 >
                   <div className="flex items-center">
-                    <span className="text-lg mr-3">🗂️</span>
+                    <Database className="w-5 h-5 mr-3" />
                     <span className="text-sm font-semibold">Master Data</span>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -177,7 +190,7 @@ const SideBarApp = () => {
                               {/* Connection Line */}
                               <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-600 group-hover:bg-orange-400 transition-colors duration-200"></div>
                               
-                              <span className="text-base mr-3 group-hover:scale-110 transition-transform duration-200">{item.icon}</span>
+                              <item.icon className="w-4 h-4 mr-3 group-hover:scale-110 transition-transform duration-200" />
                               <span className="font-medium">{item.name}</span>
                               
                               {/* Active Indicator */}

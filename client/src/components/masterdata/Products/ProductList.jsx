@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { productAPI, categoryAPI, supplierAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
 import Pagination from '../../common/Pagination';
+import SimpleDeleteModal from '../../common/SimpleDeleteModal';
+import useToast from '../../../hooks/useToast';
 
 const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
+  const { productToasts } = useToast();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -16,6 +20,8 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
     pages: 1,
     total: 0
   });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, product: null });
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Fetch products
   const fetchProducts = async (page = currentPage) => {
@@ -67,18 +73,32 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
   }, [refreshTrigger]);
 
   // Handle delete product
-  const handleDeleteProduct = async (productId, productName) => {
-    if (window.confirm(`Are you sure you want to delete product "${productName}"?`)) {
-      try {
-        const response = await productAPI.delete(productId);
-        if (response.success) {
-          fetchProducts(); // Refresh list
-          onRefresh?.(); // Notify parent
-        }
-      } catch (err) {
-        setError(handleAPIError(err, 'Failed to delete product'));
+  const handleDeleteClick = (product) => {
+    setDeleteModal({ isOpen: true, product });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.product) return;
+    
+    try {
+      setDeleteLoading(true);
+      const response = await productAPI.delete(deleteModal.product._id);
+      if (response.success) {
+        productToasts.deleteSuccess(deleteModal.product.productName);
+        setDeleteModal({ isOpen: false, product: null });
+        fetchProducts();
+        onRefresh?.();
       }
+    } catch (err) {
+      productToasts.deleteError();
+      setError(handleAPIError(err, 'Failed to delete product'));
+    } finally {
+      setDeleteLoading(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModal({ isOpen: false, product: null });
   };
 
 
@@ -187,18 +207,24 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => onEdit(product)}
-                          className="text-green-600 hover:text-green-900 mr-3"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteProduct(product._id, product.productName)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
+                        <div className="flex items-center space-x-3">
+                          <button
+                            onClick={() => onEdit(product)}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
+                            title="Edit product"
+                          >
+                            <Edit2 className="w-4 h-4 mr-1.5" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(product)}
+                            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
+                            title="Delete product"
+                          >
+                            <Trash2 className="w-4 h-4 mr-1.5" />
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -225,6 +251,15 @@ const ProductList = ({ onEdit, onRefresh, refreshTrigger }) => {
           itemsPerPage={itemsPerPage}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <SimpleDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        itemName={deleteModal.product?.productName}
+        loading={deleteLoading}
+      />
     </div>
   );
 };

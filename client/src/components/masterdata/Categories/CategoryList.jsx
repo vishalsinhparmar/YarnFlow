@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { categoryAPI, handleAPIError } from '../../../services/masterDataAPI';
 import Pagination from '../../common/Pagination';
+import SimpleDeleteModal from '../../common/SimpleDeleteModal';
+import useToast from '../../../hooks/useToast';
 
 const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
+  const { categoryToasts } = useToast();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -14,6 +18,8 @@ const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
     pages: 1,
     total: 0
   });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, category: null });
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Fetch categories
   const fetchCategories = async (page = currentPage) => {
@@ -59,18 +65,32 @@ const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
   }, [refreshTrigger]);
 
   // Handle delete category
-  const handleDeleteCategory = async (categoryId, categoryName) => {
-    if (window.confirm(`Are you sure you want to delete category "${categoryName}"?`)) {
-      try {
-        const response = await categoryAPI.delete(categoryId);
-        if (response.success) {
-          fetchCategories(); // Refresh list
-          onRefresh?.(); // Notify parent
-        }
-      } catch (err) {
-        setError(handleAPIError(err, 'Failed to delete category'));
+  const handleDeleteClick = (category) => {
+    setDeleteModal({ isOpen: true, category });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.category) return;
+    
+    try {
+      setDeleteLoading(true);
+      const response = await categoryAPI.delete(deleteModal.category._id);
+      if (response.success) {
+        categoryToasts.deleteSuccess(deleteModal.category.categoryName);
+        setDeleteModal({ isOpen: false, category: null });
+        fetchCategories();
+        onRefresh?.();
       }
+    } catch (err) {
+      categoryToasts.deleteError();
+      setError(handleAPIError(err, 'Failed to delete category'));
+    } finally {
+      setDeleteLoading(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModal({ isOpen: false, category: null });
   };
 
 
@@ -140,14 +160,18 @@ const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 <div className="flex justify-end space-x-2 pt-3 border-t">
                   <button
                     onClick={() => onEdit(category)}
-                    className="text-orange-600 hover:text-orange-800 text-sm font-medium"
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-50 rounded-lg hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors"
+                    title="Edit category"
                   >
+                    <Edit2 className="w-4 h-4 mr-1.5" />
                     Edit
                   </button>
                   <button
-                    onClick={() => handleDeleteCategory(category._id, category.categoryName)}
-                    className="text-red-600 hover:text-red-800 text-sm font-medium"
+                    onClick={() => handleDeleteClick(category)}
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
+                    title="Delete category"
                   >
+                    <Trash2 className="w-4 h-4 mr-1.5" />
                     Delete
                   </button>
                 </div>
@@ -174,6 +198,15 @@ const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
           itemsPerPage={itemsPerPage}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <SimpleDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        itemName={deleteModal.category?.categoryName}
+        loading={deleteLoading}
+      />
     </div>
   );
 };

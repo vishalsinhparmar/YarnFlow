@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, X, Loader2 } from 'lucide-react';
 import { useDropdownOptions } from '../../hooks/useMasterData';
-import masterDataAPI from '../../services/masterDataAPI';
+import masterDataAPI, { unitAPI } from '../../services/masterDataAPI';
 import SearchableSelect from '../common/SearchableSelect';
 
 const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
@@ -18,10 +19,22 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showUnitModal, setShowUnitModal] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   
-  // Dynamic units
-  const [units, setUnits] = useState(['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces', 'Tons', 'Liters', 'Units']);
+  // Dynamic units from backend - start with defaults so UI is never empty
+  const defaultUnits = [
+    { _id: 'bags', name: 'Bags' },
+    { _id: 'rolls', name: 'Rolls' },
+    { _id: 'kg', name: 'Kg' },
+    { _id: 'meters', name: 'Meters' },
+    { _id: 'pieces', name: 'Pieces' },
+    { _id: 'tons', name: 'Tons' },
+    { _id: 'liters', name: 'Liters' },
+    { _id: 'units', name: 'Units' }
+  ];
+  const [units, setUnits] = useState(defaultUnits);
+  const [loadingUnits, setLoadingUnits] = useState(false);
 
   const [formData, setFormData] = useState({
     supplier: '',
@@ -80,13 +93,31 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }
   }, [formData.category]);
 
-  // Fetch suppliers, products, and categories with pagination support
+  // Fetch units from backend (optional - we already have defaults)
+  const fetchUnits = useCallback(async () => {
+    try {
+      setLoadingUnits(true);
+      const response = await unitAPI.getAll();
+      if (response.success && response.data && response.data.length > 0) {
+        setUnits(response.data);
+      }
+      // If API fails or returns empty, we keep the default units
+    } catch (error) {
+      console.error('Error fetching units:', error);
+      // Keep default units - no action needed
+    } finally {
+      setLoadingUnits(false);
+    }
+  }, []);
+
+  // Fetch suppliers, products, categories, and units with pagination support
   // Only fetch on initial mount to populate dropdowns
   useEffect(() => {
     fetchSuppliers();
     fetchCategories();
     fetchProducts();
-  }, [fetchSuppliers, fetchCategories, fetchProducts]);
+    fetchUnits();
+  }, [fetchSuppliers, fetchCategories, fetchProducts, fetchUnits]);
 
   // Populate form if editing, reset if null
   useEffect(() => {
@@ -315,6 +346,23 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       }
     } catch (error) {
       console.error('Error creating product:', error);
+      throw error;
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleQuickAddUnit = async (unitData) => {
+    try {
+      setModalLoading(true);
+      const response = await unitAPI.create(unitData);
+      if (response.success) {
+        setUnits(prev => [...prev, response.data]);
+        setShowUnitModal(false);
+        return response.data;
+      }
+    } catch (error) {
+      console.error('Error creating unit:', error);
       throw error;
     } finally {
       setModalLoading(false);
@@ -609,36 +657,36 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
                     </svg>
                     Unit
+                    {loadingUnits && <Loader2 className="w-3 h-3 ml-2 animate-spin text-blue-500" />}
                   </label>
-                  <div className="relative">
-                    <select
-                      value={item.unit}
-                      onChange={(e) => {
-                        if (e.target.value === '__add_custom__') {
-                          const newUnit = prompt('Enter custom unit name:');
-                          if (newUnit && newUnit.trim()) {
-                            const trimmedUnit = newUnit.trim();
-                            if (!units.includes(trimmedUnit)) {
-                              setUnits(prev => [...prev, trimmedUnit]);
-                            }
-                            handleItemChange(index, 'unit', trimmedUnit);
-                          }
-                        } else {
-                          handleItemChange(index, 'unit', e.target.value);
-                        }
-                      }}
-                      className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 appearance-none transition-all"
-                    >
-                      {units.map(unit => (
-                        <option key={unit} value={unit}>{unit}</option>
-                      ))}
-                      <option value="__add_custom__" className="text-blue-600 font-medium">➕ Add Custom Unit</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                      </svg>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <select
+                        value={item.unit}
+                        onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
+                        className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 appearance-none transition-all"
+                      >
+                        {units.map(unit => (
+                          <option key={unit._id || unit.name} value={unit.name}>
+                            {unit.name}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                        <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowUnitModal(true)}
+                      className="px-3 py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all flex items-center gap-1 font-medium text-sm whitespace-nowrap"
+                      title="Add Custom Unit"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span className="hidden sm:inline">Add</span>
+                    </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1.5 flex items-center">
                     <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -738,6 +786,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       {showSupplierModal && <QuickAddSupplierModal onClose={() => setShowSupplierModal(false)} onSubmit={handleQuickAddSupplier} loading={modalLoading} />}
       {showCategoryModal && <QuickAddCategoryModal onClose={() => setShowCategoryModal(false)} onSubmit={handleQuickAddCategory} loading={modalLoading} />}
       {showProductModal && <QuickAddProductModal onClose={() => setShowProductModal(false)} onSubmit={handleQuickAddProduct} loading={modalLoading} categoryId={formData.category} />}
+      {showUnitModal && <QuickAddUnitModal onClose={() => setShowUnitModal(false)} onSubmit={handleQuickAddUnit} loading={modalLoading} />}
     </>
   );
 };
@@ -865,6 +914,73 @@ const QuickAddProductModal = ({ onClose, onSubmit, loading, categoryId }) => {
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{loading ? 'Adding...' : 'Add Product'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Quick Add Unit Modal - Simple name only
+const QuickAddUnitModal = ({ onClose, onSubmit, loading }) => {
+  const [unitName, setUnitName] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!unitName.trim()) {
+      setError('Unit name is required');
+      return;
+    }
+    try {
+      await onSubmit({ name: unitName.trim() });
+    } catch (err) {
+      setError(err.message || 'Failed to create unit');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-gray-900">Add Custom Unit</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Unit Name *</label>
+            <input 
+              type="text" 
+              value={unitName} 
+              onChange={(e) => setUnitName(e.target.value)} 
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+              placeholder="e.g., Cartons, Boxes, Bundles" 
+              autoFocus
+            />
+          </div>
+          
+          {error && (
+            <p className="text-red-500 text-sm">{error}</p>
+          )}
+          
+          <div className="flex justify-end gap-2 pt-2">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              disabled={loading} 
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium flex items-center gap-2"
+            >
+              {loading ? 'Adding...' : 'Add Unit'}
+            </button>
           </div>
         </form>
       </div>

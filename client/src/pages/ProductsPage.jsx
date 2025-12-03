@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Boxes } from 'lucide-react';
 import { productAPI, categoryAPI, supplierAPI, handleAPIError } from '../services/masterDataAPI';
 import ProductForm from '../components/masterdata/Products/ProductForm';
 import ProductList from '../components/masterdata/Products/ProductList';
@@ -124,7 +125,7 @@ const ProductsPage = () => {
             <p className="text-gray-600">Manage product catalog, specifications, and inventory tracking</p>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="text-green-600 text-2xl">🧶</span>
+            <Boxes className="text-green-600 w-8 h-8" />
           </div>
         </div>
       </div>

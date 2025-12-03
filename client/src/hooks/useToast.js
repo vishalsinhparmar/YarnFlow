@@ -75,9 +75,9 @@ const useToast = () => {
  
     // Customer specific toast messages
     const customerToasts = {
-        created: () => toastSuccess('✅ Customer created successfully!'),
-        updated: () => toastSuccess('✅ Customer updated successfully!'),
-        deleted: (name) => toastSuccess(`🗑️ Customer "${name}" deleted successfully!`),
+        createSuccess: (name) => toastSuccess(`✅ Customer "${name}" created successfully!`),
+        updateSuccess: (name) => toastSuccess(`✅ Customer "${name}" updated successfully!`),
+        deleteSuccess: (name) => toastSuccess(`🗑️ Customer "${name}" deleted successfully!`),
         createError: () => toastError('❌ Failed to create customer. Please try again.'),
         updateError: () => toastError('❌ Failed to update customer. Please try again.'),
         deleteError: () => toastError('❌ Failed to delete customer. Please try again.'),
@@ -86,9 +86,9 @@ const useToast = () => {
 
     // Supplier specific toast messages
     const supplierToasts = {
-        created: () => toastSuccess('✅ Supplier created successfully!'),
-        updated: () => toastSuccess('✅ Supplier updated successfully!'),
-        deleted: (name) => toastSuccess(`🗑️ Supplier "${name}" deleted successfully!`),
+        createSuccess: (name) => toastSuccess(`✅ Supplier "${name}" created successfully!`),
+        updateSuccess: (name) => toastSuccess(`✅ Supplier "${name}" updated successfully!`),
+        deleteSuccess: (name) => toastSuccess(`🗑️ Supplier "${name}" deleted successfully!`),
         createError: (error) => {
             const errorMessage = error?.message || 'Failed to create supplier';
             return toastError(`❌ ${errorMessage}`);
@@ -124,6 +124,52 @@ const useToast = () => {
         loadError: () => toastError('❌ Failed to load products. Please refresh the page.')
     };
 
+    // Purchase Order specific toast messages
+    const purchaseOrderToasts = {
+        createSuccess: (poNumber) => toastSuccess(`✅ Purchase Order "${poNumber}" created successfully!`),
+        updateSuccess: (poNumber) => toastSuccess(`✅ Purchase Order "${poNumber}" updated successfully!`),
+        deleteSuccess: (poNumber) => toastSuccess(`🗑️ Purchase Order "${poNumber}" deleted successfully!`),
+        approveSuccess: (poNumber) => toastSuccess(`✅ Purchase Order "${poNumber}" approved successfully!`),
+        createError: () => toastError('❌ Failed to create purchase order. Please try again.'),
+        updateError: () => toastError('❌ Failed to update purchase order. Please try again.'),
+        deleteError: () => toastError('❌ Failed to delete purchase order. Please try again.'),
+        loadError: () => toastError('❌ Failed to load purchase orders. Please refresh the page.')
+    };
+
+    // Goods Receipt Note specific toast messages
+    const grnToasts = {
+        createSuccess: (grnNumber) => toastSuccess(`✅ GRN "${grnNumber}" created successfully!`),
+        approveSuccess: (grnNumber) => toastSuccess(`✅ GRN "${grnNumber}" approved successfully!`),
+        updateSuccess: (grnNumber) => toastSuccess(`✅ GRN "${grnNumber}" updated successfully!`),
+        createError: () => toastError('❌ Failed to create GRN. Please try again.'),
+        approveError: () => toastError('❌ Failed to approve GRN. Please try again.'),
+        loadError: () => toastError('❌ Failed to load GRNs. Please refresh the page.')
+    };
+
+    // Sales Order specific toast messages
+    const salesOrderToasts = {
+        createSuccess: (soNumber) => toastSuccess(`✅ Sales Order "${soNumber}" created successfully!`),
+        updateSuccess: (soNumber) => toastSuccess(`✅ Sales Order "${soNumber}" updated successfully!`),
+        deleteSuccess: (soNumber) => toastSuccess(`🗑️ Sales Order "${soNumber}" deleted successfully!`),
+        approveSuccess: (soNumber) => toastSuccess(`✅ Sales Order "${soNumber}" approved successfully!`),
+        createError: () => toastError('❌ Failed to create sales order. Please try again.'),
+        updateError: () => toastError('❌ Failed to update sales order. Please try again.'),
+        deleteError: () => toastError('❌ Failed to delete sales order. Please try again.'),
+        loadError: () => toastError('❌ Failed to load sales orders. Please refresh the page.')
+    };
+
+    // Sales Challan specific toast messages
+    const salesChallanToasts = {
+        createSuccess: (challanNumber) => toastSuccess(`✅ Sales Challan "${challanNumber}" created successfully!`),
+        updateSuccess: (challanNumber) => toastSuccess(`✅ Sales Challan "${challanNumber}" updated successfully!`),
+        deleteSuccess: (challanNumber) => toastSuccess(`🗑️ Sales Challan "${challanNumber}" deleted successfully!`),
+        dispatchSuccess: (challanNumber) => toastSuccess(`✅ Sales Challan "${challanNumber}" dispatched successfully!`),
+        createError: () => toastError('❌ Failed to create sales challan. Please try again.'),
+        updateError: () => toastError('❌ Failed to update sales challan. Please try again.'),
+        deleteError: () => toastError('❌ Failed to delete sales challan. Please try again.'),
+        loadError: () => toastError('❌ Failed to load sales challans. Please refresh the page.')
+    };
+
     return { 
         toastSuccess, 
         toastError, 
@@ -132,7 +178,11 @@ const useToast = () => {
         customerToasts,
         supplierToasts,
         categoryToasts,
-        productToasts
+        productToasts,
+        purchaseOrderToasts,
+        grnToasts,
+        salesOrderToasts,
+        salesChallanToasts
     };
 }
 
