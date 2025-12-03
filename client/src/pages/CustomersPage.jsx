@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Users } from 'lucide-react';
 import { customerAPI, handleAPIError } from '../services/masterDataAPI';
 import CustomerForm from '../components/masterdata/Customers/CustomerForm';
 import CustomerList from '../components/masterdata/Customers/CustomerList';
@@ -78,7 +79,7 @@ const CustomersPage = () => {
             <p className="text-gray-600">Manage customer information, contacts, and relationships</p>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="text-blue-600 text-2xl">👥</span>
+            <Users className="text-blue-600 w-8 h-8" />
           </div>
         </div>
       </div>

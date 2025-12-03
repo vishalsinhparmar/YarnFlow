@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Factory } from 'lucide-react';
 import { supplierAPI, handleAPIError } from '../services/masterDataAPI';
 import SupplierForm from '../components/masterdata/Suppliers/SupplierForm';
 import SupplierList from '../components/masterdata/Suppliers/SupplierList';
@@ -78,7 +79,7 @@ const SuppliersPage = () => {
             <p className="text-gray-600">Manage supplier information, contracts, and vendor relationships</p>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="text-purple-600 text-2xl">🏭</span>
+            <Factory className="text-purple-600 w-8 h-8" />
           </div>
         </div>
       </div>

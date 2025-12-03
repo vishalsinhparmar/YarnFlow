@@ -83,8 +83,8 @@ const inventoryLotSchema = new mongoose.Schema({
   },
   unit: {
     type: String,
-    enum: ['Bags', 'Rolls', 'Kg', 'Meters', 'Pieces'],
-    default: 'Bags'
+    default: 'Bags',
+    trim: true
   },
   totalWeight: {
     type: Number,

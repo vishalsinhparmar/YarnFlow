@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { customerAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
 import Pagination from '../../common/Pagination';
+import SimpleDeleteModal from '../../common/SimpleDeleteModal';
+import useToast from '../../../hooks/useToast';
 
 const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
+  const { customerToasts } = useToast();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -14,6 +18,8 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
     pages: 1,
     total: 0
   });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, customer: null });
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Fetch customers
   const fetchCustomers = async (page = currentPage) => {
@@ -59,18 +65,32 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
   }, [refreshTrigger]);
 
   // Handle delete customer
-  const handleDeleteCustomer = async (customerId, customerName) => {
-    if (window.confirm(`Are you sure you want to delete customer "${customerName}"?`)) {
-      try {
-        const response = await customerAPI.delete(customerId);
-        if (response.success) {
-          fetchCustomers(); // Refresh list
-          onRefresh?.(); // Notify parent
-        }
-      } catch (err) {
-        setError(handleAPIError(err, 'Failed to delete customer'));
+  const handleDeleteClick = (customer) => {
+    setDeleteModal({ isOpen: true, customer });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.customer) return;
+    
+    try {
+      setDeleteLoading(true);
+      const response = await customerAPI.delete(deleteModal.customer._id);
+      if (response.success) {
+        customerToasts.deleteSuccess(deleteModal.customer.companyName);
+        setDeleteModal({ isOpen: false, customer: null });
+        fetchCustomers(); // Refresh list
+        onRefresh?.(); // Notify parent
       }
+    } catch (err) {
+      customerToasts.deleteError();
+      setError(handleAPIError(err, 'Failed to delete customer'));
+    } finally {
+      setDeleteLoading(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModal({ isOpen: false, customer: null });
   };
 
   return (
@@ -159,18 +179,24 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => onEdit(customer)}
-                        className="text-blue-600 hover:text-blue-900 mr-3"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCustomer(customer._id, customer.companyName)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center space-x-3">
+                        <button
+                          onClick={() => onEdit(customer)}
+                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                          title="Edit customer"
+                        >
+                          <Edit2 className="w-4 h-4 mr-1.5" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(customer)}
+                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
+                          title="Delete customer"
+                        >
+                          <Trash2 className="w-4 h-4 mr-1.5" />
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -196,6 +222,15 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
           itemsPerPage={itemsPerPage}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <SimpleDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        itemName={deleteModal.customer?.companyName}
+        loading={deleteLoading}
+      />
     </div>
   );
 };

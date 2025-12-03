@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FolderOpen } from 'lucide-react';
 import { categoryAPI, handleAPIError } from '../services/masterDataAPI';
 import CategoryForm from '../components/masterdata/Categories/CategoryForm';
 import CategoryList from '../components/masterdata/Categories/CategoryList';
@@ -78,7 +79,7 @@ const CategoriesPage = () => {
             <p className="text-gray-600">Manage product categories, classifications, and specifications</p>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="text-orange-600 text-2xl">📂</span>
+            <FolderOpen className="text-orange-600 w-8 h-8" />
           </div>
         </div>
       </div>

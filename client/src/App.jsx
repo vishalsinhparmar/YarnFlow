@@ -1,4 +1,5 @@
 import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
+import { Toaster } from 'react-hot-toast';
 import TestComponent from "./components/TestComponents";
 import Layout from "./layout/Layout";
 import Dashboard from "./pages/Dashboard";
@@ -16,6 +17,7 @@ import CategoriesPage from "./pages/CategoriesPage";
 const App = () => {
   return (
     <Router>
+      <Toaster />
       <Routes>
         {/* Main Layout with nested routes */}
         <Route path="/" element={<Layout />}>

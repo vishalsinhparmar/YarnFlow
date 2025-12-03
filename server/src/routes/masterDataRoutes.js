@@ -34,6 +34,13 @@ import {
 // Import controller
 import { importMasterData } from '../controller/importController.js';
 
+// Unit controller
+import {
+  getAllUnits,
+  createUnit,
+  deleteUnit
+} from '../controller/unitController.js';
+
 // Import validation rules
 import { validateCategory, validateSupplier, validateProduct } from '../validators/masterDataValidator.js';
 
@@ -74,5 +81,10 @@ router.get('/products/:id', getProductById);
 router.post('/products', validateProduct, createProduct);
 router.put('/products/:id', validateProduct, updateProduct);
 router.delete('/products/:id', deleteProduct);
+
+// ============ UNIT ROUTES ============
+router.get('/units', getAllUnits);
+router.post('/units', createUnit);
+router.delete('/units/:id', deleteUnit);
 
 export default router;

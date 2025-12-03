@@ -216,6 +216,29 @@ export const productAPI = {
   },
 };
 
+// ============ UNIT API ============
+export const unitAPI = {
+  // Get all units
+  getAll: async () => {
+    return apiRequest('/units');
+  },
+
+  // Create new unit
+  create: async (unitData) => {
+    return apiRequest('/units', {
+      method: 'POST',
+      body: JSON.stringify(unitData),
+    });
+  },
+
+  // Delete unit
+  delete: async (id) => {
+    return apiRequest(`/units/${id}`, {
+      method: 'DELETE',
+    });
+  }
+};
+
 // ============ UTILITY FUNCTIONS ============
 
 // Get dropdown options for forms
@@ -366,6 +389,7 @@ const masterDataAPI = {
   suppliers: supplierAPI,
   categories: categoryAPI,
   products: productAPI,
+  units: unitAPI,
   utils: {
     getDropdownOptions,
     formatters,
