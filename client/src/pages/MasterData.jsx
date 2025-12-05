@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMasterData } from '../hooks/useMasterData';
-import { formatters } from '../services/masterDataAPI';
 import ImportModal from '../components/ImportModal';
 
 const MasterData = () => {

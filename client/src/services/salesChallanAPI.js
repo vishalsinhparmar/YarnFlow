@@ -30,21 +30,6 @@ export const salesChallanAPI = {
     });
   },
 
-  // Update sales challan
-  update: async (id, challanData) => {
-    return apiRequest(`/sales-challans/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(challanData),
-    });
-  },
-
-  // Delete sales challan
-  delete: async (id) => {
-    return apiRequest(`/sales-challans/${id}`, {
-      method: 'DELETE',
-    });
-  },
-
   // Update challan status
   updateStatus: async (id, statusData) => {
     return apiRequest(`/sales-challans/${id}/status`, {
@@ -53,22 +38,12 @@ export const salesChallanAPI = {
     });
   },
 
-  // Get sales challan statistics
+  // Get challan statistics for dashboard
   getStats: async () => {
     return apiRequest('/sales-challans/stats');
   },
 
-  // Get challans by sales order
-  getBySalesOrder: async (soId) => {
-    return apiRequest(`/sales-challans/by-sales-order/${soId}`);
-  },
-
-  // Track challan by number
-  track: async (challanNumber) => {
-    return apiRequest(`/sales-challans/track/${challanNumber}`);
-  },
-
-  // Generate PDF (download)
+  // Generate PDF for single challan
   generatePDF: async (id) => {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3050/api';
     const url = `${API_BASE_URL}/sales-challans/${id}/pdf/download`;
@@ -261,27 +236,6 @@ export const salesChallanUtils = {
     return colorMap[status] || 'bg-gray-100 text-gray-800';
   },
 
-  // Check if challan can be updated
-  canUpdate: (status) => {
-    return !['Delivered', 'Cancelled'].includes(status);
-  },
-
-  // Check if challan can be deleted
-  canDelete: (status) => {
-    return status === 'Prepared';
-  },
-
-  // Get next possible statuses
-  getNextStatuses: (currentStatus) => {
-    const statusFlow = {
-      'Prepared': ['Dispatched', 'Cancelled'],
-      'Dispatched': ['Delivered', 'Cancelled'],
-      'Delivered': [],
-      'Cancelled': []
-    };
-    return statusFlow[currentStatus] || [];
-  },
-
   // Format date for display
   formatDate: (dateString) => {
     if (!dateString) return 'N/A';
@@ -301,41 +255,5 @@ export const salesChallanUtils = {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount);
-  },
-
-  // Generate challan actions based on status
-  getAvailableActions: (challan) => {
-    const actions = [];
-    
-    // View action (always available)
-    actions.push({ type: 'view', label: 'View', color: 'blue' });
-    
-    // Update status action
-    if (salesChallanUtils.canUpdate(challan.status)) {
-      const nextStatuses = salesChallanUtils.getNextStatuses(challan.status);
-      if (nextStatuses.length > 0) {
-        actions.push({ type: 'updateStatus', label: 'Update Status', color: 'green' });
-      }
-    }
-    
-    // Edit action (only for prepared)
-    if (challan.status === 'Prepared') {
-      actions.push({ type: 'edit', label: 'Edit', color: 'yellow' });
-    }
-    
-    // Track action (for dispatched and delivered)
-    if (['Dispatched', 'Delivered'].includes(challan.status)) {
-      actions.push({ type: 'track', label: 'Track', color: 'purple' });
-    }
-    
-    // Print action
-    actions.push({ type: 'print', label: 'Print', color: 'gray' });
-    
-    // Delete action (only for prepared/packed)
-    if (salesChallanUtils.canDelete(challan.status)) {
-      actions.push({ type: 'delete', label: 'Delete', color: 'red' });
-    }
-    
-    return actions;
   }
 };

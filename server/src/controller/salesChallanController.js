@@ -252,6 +252,7 @@ export const createSalesChallan = async (req, res) => {
           manuallyCompleted: item.markAsComplete || false
         };
       }),
+      notes: notes || '',  // Add dispatch notes from form
       createdBy: createdBy || 'Admin',
       status: 'Prepared'
     };

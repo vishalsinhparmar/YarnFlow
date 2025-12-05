@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, X, Info, Package, Download, Printer } from 'lucide-react';
+import { FileText, X, Info, Package, Download, Printer, FileEdit } from 'lucide-react';
 import { salesChallanUtils, salesChallanAPI } from '../../services/salesChallanAPI';
 import { salesOrderAPI } from '../../services/salesOrderAPI';
 
@@ -184,6 +184,17 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                 <p className="text-base font-bold text-gray-900 mt-1">{formatDate(challan.expectedDeliveryDate)}</p>
               </div>
             </div>
+            
+            {/* Dispatch Notes Section - Always show */}
+            <div className="mt-6 bg-white rounded-lg p-4 shadow-sm border border-blue-200">
+              <div className="flex items-center mb-2">
+                <FileEdit className="h-4 w-4 text-gray-500 mr-2" />
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Dispatch Notes</span>
+              </div>
+              <p className="text-sm text-gray-700 bg-blue-50 rounded-lg p-3 border border-blue-100">
+                {challan.notes || 'No dispatch notes provided'}
+              </p>
+            </div>
           </div>
 
           {/* Items */}
@@ -348,19 +359,6 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Notes */}
-          {challan.notes && (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-100">
-              <div className="flex items-center mb-3">
-                <svg className="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <h3 className="text-lg font-semibold text-gray-900">Dispatch Notes</h3>
-              </div>
-              <p className="text-sm text-gray-700 bg-white rounded-lg p-3 border border-blue-100">{challan.notes}</p>
             </div>
           )}
         </div>

@@ -56,17 +56,6 @@ const dashboardAPI = {
 
 // Utility functions for dashboard data
 export const dashboardUtils = {
-  // Format currency values
-  formatCurrency: (amount) => {
-    if (amount >= 100000) {
-      return `₹${(amount / 100000).toFixed(1)}L`;
-    } else if (amount >= 1000) {
-      return `₹${(amount / 1000).toFixed(1)}K`;
-    } else {
-      return `₹${amount}`;
-    }
-  },
-
   // Format numbers with commas
   formatNumber: (num) => {
     return new Intl.NumberFormat('en-IN').format(num);
@@ -100,16 +89,6 @@ export const dashboardUtils = {
       error: 'bg-red-500'
     };
     return colors[status] || 'bg-gray-500';
-  },
-
-  // Get trend icon
-  getTrendIcon: (trend) => {
-    return trend === 'up' ? '📈' : trend === 'down' ? '📉' : '➡️';
-  },
-
-  // Get trend color
-  getTrendColor: (trend) => {
-    return trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-red-600' : 'text-gray-600';
   }
 };
 
