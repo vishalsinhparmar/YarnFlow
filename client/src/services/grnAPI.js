@@ -3,14 +3,6 @@ import { apiRequest } from './common.js';
 
 // Generic API request handler moved to ./common.js
 
-// Handle API errors consistently
-export const handleAPIError = (error, defaultMessage = 'An error occurred') => {
-  if (error.message) {
-    return error.message;
-  }
-  return defaultMessage;
-};
-
 // ============ GRN API ============
 export const grnAPI = {
   // Get all GRNs with pagination and filters
@@ -41,9 +33,8 @@ export const grnAPI = {
     });
   },
 
-  // Delete GRN (draft only)
-  delete: async (id) => {
-  },
+  // Delete GRN (draft only) - Not implemented
+  // delete: async (id) => { },
 
   // Update GRN status
   updateStatus: async (id, statusData) => {
@@ -64,32 +55,6 @@ export const grnAPI = {
   // Get GRN statistics
   getStats: async () => {
     return apiRequest('/grn/stats');
-  },
-
-  // Get GRNs by Purchase Order
-  getByPO: async (poId) => {
-    return apiRequest(`/grn/by-po/${poId}`);
-  },
-
-  // Search GRNs
-  search: async (searchTerm, filters = {}) => {
-    const params = { search: searchTerm, ...filters };
-    return grnAPI.getAll(params);
-  },
-
-  // Get GRNs by status
-  getByStatus: async (status, params = {}) => {
-    return grnAPI.getAll({ status, ...params });
-  },
-
-  // Get GRNs by supplier
-  getBySupplier: async (supplierId, params = {}) => {
-    return grnAPI.getAll({ supplier: supplierId, ...params });
-  },
-
-  // Get GRNs by date range
-  getByDateRange: async (dateFrom, dateTo, params = {}) => {
-    return grnAPI.getAll({ dateFrom, dateTo, ...params });
   }
 };
 
@@ -179,62 +144,14 @@ export const grnUtils = {
     return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
   },
 
-  // Get next valid statuses for workflow
-  getNextStatuses: (currentStatus) => {
-    const statusFlow = {
-      'Draft': ['Received', 'Rejected'],
-      'Received': ['Under_Review', 'Approved', 'Rejected'],
-      'Under_Review': ['Approved', 'Rejected'],
-      'Approved': ['Completed'],
-      'Rejected': [],
-      'Completed': []
-    };
-    return statusFlow[currentStatus] || [];
-  },
-
   // Check if GRN can be edited
   canEdit: (status) => {
     return ['Draft', 'Received'].includes(status);
   },
 
-  // Check if GRN can be approved
-  canApprove: (status, qualityStatus) => {
-    return (status === 'Under_Review' || status === 'Received') && qualityStatus === 'Completed';
-  },
-
   // Check if GRN can be deleted
   canDelete: (status) => {
     return status === 'Draft';
-  },
-
-  // Get action buttons for GRN
-  getAvailableActions: (grn) => {
-    const actions = [];
-    
-    // Always show view
-    actions.push({ type: 'view', label: 'View', color: 'blue' });
-    
-    // Edit for draft and received
-    if (grnUtils.canEdit(grn.status)) {
-      actions.push({ type: 'edit', label: 'Edit', color: 'gray' });
-    }
-    
-    // Review for received status
-    if (grn.status === 'Received') {
-      actions.push({ type: 'review', label: 'Review', color: 'yellow' });
-    }
-    
-    // Approve for under review with completed quality check
-    if (grnUtils.canApprove(grn.status, grn.qualityCheckStatus)) {
-      actions.push({ type: 'approve', label: 'Approve', color: 'green' });
-    }
-    
-    // Delete for draft only
-    if (grnUtils.canDelete(grn.status)) {
-      actions.push({ type: 'delete', label: 'Delete', color: 'red' });
-    }
-    
-    return actions;
   }
 };
 

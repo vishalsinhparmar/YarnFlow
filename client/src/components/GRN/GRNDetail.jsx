@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ClipboardList, Info, Package, MapPin, X } from 'lucide-react';
 import { grnUtils } from '../../services/grnAPI';
 import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
@@ -106,6 +106,19 @@ const GRNDetail = ({ grn, onClose }) => {
             <p className="text-lg font-bold text-gray-900 mt-2">{formatDate(grn.receiptDate)}</p>
           </div>
         </div>
+        
+        {/* Storage Instructions */}
+        {grn.storageInstructions && (
+          <div className="mt-6">
+            <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-200">
+              <div className="flex items-center mb-2">
+                <MapPin className="h-4 w-4 text-blue-600 mr-2" />
+                <span className="text-sm font-medium text-gray-500 uppercase tracking-wide">Storage Instructions</span>
+              </div>
+              <p className="text-sm text-gray-700 bg-blue-50 rounded-lg p-3 border border-blue-100">{grn.storageInstructions}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Supplier Information */}

@@ -59,27 +59,9 @@ export const salesOrderAPI = {
     });
   },
 
-  // Reserve inventory for sales order
-  reserveInventory: async (id, reservedBy) => {
-    return await apiRequest(`/sales-orders/${id}/reserve`, {
-      method: 'PATCH',
-    });
-  },
-
-  // Ship sales order
-  ship: async (id, shipmentData) => {
-    return await apiRequest(`/sales-orders/${id}/ship`, {
-      method: 'POST',
-      body: JSON.stringify(shipmentData)
-    });
-  },
-
-  // Mark as delivered
-  markDelivered: async (id, deliveryData) => {
-    return await apiRequest(`/sales-orders/${id}/deliver`, {
-      method: 'PATCH',
-      body: JSON.stringify(deliveryData)
-    });
+  // Get sales order statistics
+  getStats: async () => {
+    return await apiRequest('/sales-orders/stats');
   },
 
   // Cancel sales order
@@ -88,28 +70,6 @@ export const salesOrderAPI = {
       method: 'PATCH',
       body: JSON.stringify(cancellationData)
     });
-  },
-
-  // Get sales order statistics
-  getStats: async () => {
-    return await apiRequest('/sales-orders/stats');
-  },
-
-  // Recalculate all SO statuses based on challans
-  recalculateStatuses: async () => {
-    return await apiRequest('/sales-orders/recalculate-statuses', {
-      method: 'POST'
-    });
-  },
-
-  // Get sales orders by customer
-  getByCustomer: async (customerId, params = {}) => {
-    const queryParams = new URLSearchParams(params);
-    const endpoint = queryParams.toString() 
-      ? `/sales-orders/customer/${customerId}?${queryParams.toString()}`
-      : `/sales-orders/customer/${customerId}`;
-    
-    return await apiRequest(endpoint);
   }
 };
 
@@ -176,19 +136,6 @@ export const salesOrderUtils = {
     return statusColors[status] || 'bg-gray-100 text-gray-800';
   },
 
-  // Get status icon
-  getStatusIcon: (status) => {
-    const statusIcons = {
-      'Draft': '📝',
-      'Pending': '⏳',
-      'Processing': '⚙️',
-      'Delivered': '📦',
-      'Cancelled': '❌'
-    };
-    return statusIcons[status] || '📋';
-  },
-
-
   // Calculate completion percentage
   getCompletionPercentage: (salesOrder) => {
     if (!salesOrder.items || salesOrder.items.length === 0) return 0;
@@ -219,18 +166,6 @@ export const salesOrderUtils = {
     return daysUntilDelivery !== null && daysUntilDelivery < 0;
   },
 
-  // Get next valid statuses for workflow
-  getNextStatuses: (currentStatus) => {
-    const statusFlow = {
-      'Draft': ['Pending', 'Cancelled'],
-      'Pending': ['Processing', 'Cancelled'],
-      'Processing': ['Delivered', 'Cancelled'],
-      'Delivered': [],
-      'Cancelled': []
-    };
-    return statusFlow[currentStatus] || [];
-  },
-
   // Check if order can be edited
   canEdit: (status) => {
     return ['Draft', 'Pending'].includes(status);
@@ -239,47 +174,6 @@ export const salesOrderUtils = {
   // Check if order can be cancelled
   canCancel: (status) => {
     return ['Draft', 'Pending', 'Processing'].includes(status);
-  },
-
-  // Get available actions for order
-  getAvailableActions: (salesOrder) => {
-    const actions = [];
-    
-    // Always show view
-    actions.push({ type: 'view', label: 'View', color: 'blue' });
-    
-    // Update Status for draft, pending orders
-    if (['Draft', 'Pending'].includes(salesOrder.status)) {
-      actions.push({ type: 'updateStatus', label: 'Update Status', color: 'green' });
-    }
-    
-    // Edit for draft and pending
-    if (salesOrderUtils.canEdit(salesOrder.status)) {
-      actions.push({ type: 'edit', label: 'Edit', color: 'gray' });
-    }
-    
-    // Create Challan for processing orders
-    if (salesOrder.status === 'Processing') {
-      actions.push({ type: 'createChallan', label: 'Create Challan', color: 'teal' });
-    }
-    
-    // Cancel for applicable orders
-    if (salesOrderUtils.canCancel(salesOrder.status)) {
-      actions.push({ type: 'cancel', label: 'Cancel', color: 'red' });
-    }
-    
-    return actions;
-  },
-
-  // Format order items summary
-  getItemsSummary: (items) => {
-    if (!items || items.length === 0) return 'No items';
-    
-    if (items.length === 1) {
-      return `${items[0].productName} (${items[0].quantity} ${items[0].unit})`;
-    } else {
-      return `${items.length} items`;
-    }
   },
 
 };

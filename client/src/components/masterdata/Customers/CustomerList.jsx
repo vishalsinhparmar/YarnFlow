@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Edit2, Trash2 } from 'lucide-react';
-import { customerAPI, formatters, handleAPIError } from '../../../services/masterDataAPI';
+import { customerAPI, handleAPIError } from '../../../services/masterDataAPI';
 import Pagination from '../../common/Pagination';
 import SimpleDeleteModal from '../../common/SimpleDeleteModal';
 import useToast from '../../../hooks/useToast';

@@ -3,14 +3,6 @@ import { apiRequest } from './common.js';
 
 // Generic API request handler moved to ./common.js
 
-// Handle API errors consistently
-export const handleAPIError = (error, defaultMessage = 'An error occurred') => {
-  if (error.message) {
-    return error.message;
-  }
-  return defaultMessage;
-};
-
 // ============ PURCHASE ORDER API ============
 export const purchaseOrderAPI = {
   // Get all purchase orders with pagination and filters
@@ -68,32 +60,6 @@ export const purchaseOrderAPI = {
   getStats: async () => {
     return apiRequest('/purchase-orders/stats');
   },
-
-  // Search POs
-  search: async (searchTerm, filters = {}) => {
-    const params = { search: searchTerm, ...filters };
-    return purchaseOrderAPI.getAll(params);
-  },
-
-  // Get overdue POs
-  getOverdue: async () => {
-    return purchaseOrderAPI.getAll({ overdue: 'true' });
-  },
-
-  // Get POs by status
-  getByStatus: async (status, params = {}) => {
-    return purchaseOrderAPI.getAll({ status, ...params });
-  },
-
-  // Get POs by supplier
-  getBySupplier: async (supplierId, params = {}) => {
-    return purchaseOrderAPI.getAll({ supplier: supplierId, ...params });
-  },
-
-  // Get POs by date range
-  getByDateRange: async (dateFrom, dateTo, params = {}) => {
-    return purchaseOrderAPI.getAll({ dateFrom, dateTo, ...params });
-  }
 };
 
 // ============ PO UTILITIES ============
@@ -156,17 +122,6 @@ export const poUtils = {
     const receivedQuantity = items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0);
     
     return totalQuantity > 0 ? Math.round((receivedQuantity / totalQuantity) * 100) : 0;
-  },
-
-  // Get next valid statuses for workflow
-  getNextStatuses: (currentStatus) => {
-    const statusFlow = {
-      'Draft': ['Cancelled'],
-      'Partially_Received': ['Fully_Received', 'Cancelled'],
-      'Fully_Received': [],
-      'Cancelled': []
-    };
-    return statusFlow[currentStatus] || [];
   }
 };
 

@@ -18,6 +18,7 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
     purchaseOrder: '',
     receiptDate: new Date().toISOString().split('T')[0],
     warehouseLocation: '',
+    storageInstructions: '',
     generalNotes: '',
     items: []
   });
@@ -446,8 +447,8 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
             </label>
             <input
               type="text"
-              name="storageNotes"
-              value={formData.storageNotes || ''}
+              name="storageInstructions"
+              value={formData.storageInstructions || ''}
               onChange={handleChange}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white hover:border-purple-400 transition-all"
               placeholder="Additional storage instructions (optional)"
@@ -535,21 +536,25 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
                                   const qty = Number(e.target.value) || 0;
                                   const maxAllowed = item.orderedQuantity - item.previouslyReceived;
                                   
+                                  // Enforce max validation
+                                  const validQty = Math.min(qty, maxAllowed);
+                                  
                                   const updatedItems = [...formData.items];
-                                  updatedItems[index].receivedQuantity = qty;
+                                  updatedItems[index].receivedQuantity = validQty;
                                   
                                   if (item.orderedQuantity > 0 && item.orderedWeight > 0) {
                                     const weightPerUnit = item.orderedWeight / item.orderedQuantity;
-                                    updatedItems[index].receivedWeight = qty * weightPerUnit;
-                                    updatedItems[index].pendingQuantity = item.orderedQuantity - item.previouslyReceived - qty;
-                                    updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - (qty * weightPerUnit);
+                                    updatedItems[index].receivedWeight = validQty * weightPerUnit;
+                                    updatedItems[index].pendingQuantity = item.orderedQuantity - item.previouslyReceived - validQty;
+                                    updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - (validQty * weightPerUnit);
                                   }
                                   
                                   setFormData(prev => ({ ...prev, items: updatedItems }));
                                 }}
                                 className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
                                 min="0"
-                                step="1"
+                                max={item.orderedQuantity - item.previouslyReceived}
+                                step="0.1"
                                 placeholder="0"
                               />
                               <span className="text-sm text-gray-600">{item.unit}</span>
@@ -557,6 +562,11 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
                             <div className="text-xs text-gray-500 mt-0.5">
                               Max: {item.orderedQuantity - item.previouslyReceived} {item.unit}
                             </div>
+                            {item.receivedQuantity > (item.orderedQuantity - item.previouslyReceived) && (
+                              <div className="text-xs text-red-600 mt-1">
+                                Cannot receive more than pending ({item.orderedQuantity - item.previouslyReceived} {item.unit})
+                              </div>
+                            )}
                           </div>
                           
                           <div className="flex items-center gap-2">
