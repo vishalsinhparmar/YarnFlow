@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Loader2, Box, FolderOpen, FileText, Plus } from 'lucide-react';
 import CategoryForm from '../Categories/CategoryForm';
 
 const ProductForm = ({ product, categories, suppliers, onSubmit, onCancel, loading, onCategoryCreate }) => {
@@ -88,7 +89,8 @@ const ProductForm = ({ product, categories, suppliers, onSubmit, onCancel, loadi
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Product Name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <Box className="w-4 h-4 text-green-600" />
             Product Name *
           </label>
           <input
@@ -96,19 +98,25 @@ const ProductForm = ({ product, categories, suppliers, onSubmit, onCancel, loadi
             name="productName"
             value={formData.productName}
             onChange={handleChange}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
-              errors.productName ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-4 py-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
+              errors.productName ? 'border-red-500 bg-red-50' : 'border-gray-300'
             }`}
             placeholder="Enter product name"
           />
           {errors.productName && (
-            <p className="text-red-500 text-xs mt-1">{errors.productName}</p>
+            <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              {errors.productName}
+            </p>
           )}
         </div>
 
         {/* Category with Add+ Button */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <FolderOpen className="w-4 h-4 text-green-600" />
             Category *
           </label>
           <div className="flex gap-2">
@@ -116,8 +124,8 @@ const ProductForm = ({ product, categories, suppliers, onSubmit, onCancel, loadi
               name="category"
               value={formData.category}
               onChange={handleChange}
-              className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                errors.category ? 'border-red-500' : 'border-gray-300'
+              className={`flex-1 px-4 py-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
+                errors.category ? 'border-red-500 bg-red-50' : 'border-gray-300'
               }`}
             >
               <option value="">Select Category</option>
@@ -134,21 +142,27 @@ const ProductForm = ({ product, categories, suppliers, onSubmit, onCancel, loadi
             <button
               type="button"
               onClick={() => setShowCategoryForm(true)}
-              className="px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center gap-1"
+              className="px-4 py-2.5 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center gap-2 font-medium transition-all"
               title="Add new category"
             >
-              <span className="text-lg">+</span>
-              Add
+              <Plus className="w-4 h-4" />
+              <span>Add</span>
             </button>
           </div>
           {errors.category && (
-            <p className="text-red-500 text-xs mt-1">{errors.category}</p>
+            <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              {errors.category}
+            </p>
           )}
         </div>
 
         {/* Description */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-green-600" />
             Description
           </label>
           <textarea
@@ -156,27 +170,39 @@ const ProductForm = ({ product, categories, suppliers, onSubmit, onCancel, loadi
             value={formData.description}
             onChange={handleChange}
             rows="4"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all resize-none"
             placeholder="Enter product description"
           />
         </div>
 
         {/* Form Actions */}
-        <div className="flex justify-end space-x-3 pt-4 border-t">
+        <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
             disabled={loading}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+            className="px-8 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 min-w-[160px] justify-center"
             disabled={loading}
           >
-            {loading ? 'Saving...' : product ? 'Update Product' : 'Create Product'}
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>{product ? 'Update Product' : 'Create Product'}</span>
+              </>
+            )}
           </button>
         </div>
       </form>

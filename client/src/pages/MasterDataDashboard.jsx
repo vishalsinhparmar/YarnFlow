@@ -35,8 +35,9 @@ const MasterDataDashboard = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading Master Data...</p>
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-700 font-medium text-lg">Loading Master Data...</p>
+          <p className="text-gray-500 text-sm mt-2">Please wait while we fetch your data</p>
         </div>
       </div>
     );

@@ -38,6 +38,7 @@ import { importMasterData } from '../controller/importController.js';
 import {
   getAllUnits,
   createUnit,
+  updateUnit,
   deleteUnit
 } from '../controller/unitController.js';
 
@@ -85,6 +86,7 @@ router.delete('/products/:id', deleteProduct);
 // ============ UNIT ROUTES ============
 router.get('/units', getAllUnits);
 router.post('/units', createUnit);
+router.put('/units/:id', updateUnit);
 router.delete('/units/:id', deleteUnit);
 
 export default router;

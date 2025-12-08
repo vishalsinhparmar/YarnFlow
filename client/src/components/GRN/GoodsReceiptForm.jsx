@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Plus, Minus } from 'lucide-react';
 
 const GoodsReceiptForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const [loading, setLoading] = useState(false);
@@ -204,18 +205,36 @@ const GoodsReceiptForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                   <td className="px-4 py-4">
                     {item.pendingQuantity > 0 ? (
                       <div>
-                        <input
-                          type="number"
-                          value={item.newReceiptQuantity}
-                          onChange={(e) => handleQuantityChange(index, e.target.value)}
-                          className={`w-24 px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                            errors[`item_${index}`] ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                          min="0"
-                          max={item.pendingQuantity}
-                          step="1"
-                        />
-                        <span className="ml-1 text-sm text-gray-500">{item.unit}</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleQuantityChange(index, Math.max(0, item.newReceiptQuantity - 1))}
+                            className="p-1 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
+                            disabled={item.newReceiptQuantity <= 0}
+                          >
+                            <Minus className="w-3.5 h-3.5 text-gray-600" />
+                          </button>
+                          <input
+                            type="number"
+                            value={item.newReceiptQuantity}
+                            onChange={(e) => handleQuantityChange(index, e.target.value)}
+                            className={`w-20 px-2 py-1.5 text-sm text-center border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                              errors[`item_${index}`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                            min="0"
+                            max={item.pendingQuantity}
+                            step="1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleQuantityChange(index, Math.min(item.pendingQuantity, item.newReceiptQuantity + 1))}
+                            className="p-1 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
+                            disabled={item.newReceiptQuantity >= item.pendingQuantity}
+                          >
+                            <Plus className="w-3.5 h-3.5 text-gray-600" />
+                          </button>
+                          <span className="text-sm text-gray-500">{item.unit}</span>
+                        </div>
                         {errors[`item_${index}`] && (
                           <p className="text-red-500 text-xs mt-1">{errors[`item_${index}`]}</p>
                         )}

@@ -229,6 +229,14 @@ export const unitAPI = {
     });
   },
 
+  // Update unit
+  update: async (id, unitData) => {
+    return apiRequest(`/units/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(unitData),
+    });
+  },
+
   // Delete unit
   delete: async (id) => {
     return apiRequest(`/units/${id}`, {
