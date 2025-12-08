@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardList, CheckCircle, Clock, AlertCircle, Plus, Search, Eye, Edit, XCircle, Trash2 } from 'lucide-react';
+import { ClipboardList, CheckCircle, Clock, AlertCircle, Plus, Search, Eye, Edit, XCircle, Trash2, Loader2 } from 'lucide-react';
 import { purchaseOrderAPI, poUtils } from '../services/purchaseOrderAPI';
 import Modal from '../components/model/Modal';
 import PurchaseOrderForm from '../components/PurchaseOrders/PurchaseOrderForm';
@@ -293,9 +293,9 @@ const PurchaseOrder = () => {
         </div>
         
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
-            <span className="ml-3 text-gray-600">Loading purchase orders...</span>
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="w-10 h-10 text-orange-600 animate-spin mb-3" />
+            <span className="text-gray-600 font-medium">Loading purchase orders...</span>
           </div>
         ) : error ? (
           <div className="text-center py-12">

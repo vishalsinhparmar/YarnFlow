@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Edit2, Trash2 } from 'lucide-react';
+import { Edit2, Trash2, Loader2, Search, Users } from 'lucide-react';
 import { customerAPI, handleAPIError } from '../../../services/masterDataAPI';
 import Pagination from '../../common/Pagination';
 import SimpleDeleteModal from '../../common/SimpleDeleteModal';
@@ -97,13 +97,16 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
     <div className="space-y-4">
       {/* Search */}
       <div className="flex justify-between items-center">
-        <div className="flex-1 max-w-md">
+        <div className="flex-1 max-w-md relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
           <input
             type="text"
-            placeholder="Search customers..."
+            placeholder="Search customers by name, GST, PAN..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
           />
         </div>
       </div>
@@ -117,9 +120,10 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
 
       {/* Loading State */}
       {loading && (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="text-gray-600 mt-2">Loading customers...</p>
+        <div className="text-center py-12">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-3" />
+          <p className="text-gray-700 font-medium text-lg">Loading customers...</p>
+          <p className="text-gray-500 text-sm mt-1">Please wait while we fetch the data</p>
         </div>
       )}
 
@@ -152,7 +156,7 @@ const CustomerList = ({ onEdit, onRefresh, refreshTrigger }) => {
             <tbody className="bg-white divide-y divide-gray-200">
               {customers.length > 0 ? (
                 customers.map((customer, index) => (
-                  <tr key={customer._id} className="hover:bg-gray-50">
+                  <tr key={customer._id} className="hover:bg-blue-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {(pagination.current - 1) * itemsPerPage + index + 1}

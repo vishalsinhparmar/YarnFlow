@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Factory } from 'lucide-react';
+import { Factory, Plus } from 'lucide-react';
 import { supplierAPI, handleAPIError } from '../services/masterDataAPI';
 import SupplierForm from '../components/masterdata/Suppliers/SupplierForm';
 import SupplierList from '../components/masterdata/Suppliers/SupplierList';
@@ -95,9 +95,10 @@ const SuppliersPage = () => {
           {/* Add Supplier Button */}
           <button
             onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-lg shadow-md hover:shadow-lg font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all flex items-center gap-2"
           >
-            + Add Supplier
+            <Plus className="w-5 h-5" />
+            Add Supplier
           </button>
         </div>
 
@@ -115,7 +116,7 @@ const SuppliersPage = () => {
           isOpen={showForm}
           onClose={handleFormCancel}
           title={editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
-          size="4xl"
+          size="3xl"
         >
           <SupplierForm
             supplier={editingSupplier}

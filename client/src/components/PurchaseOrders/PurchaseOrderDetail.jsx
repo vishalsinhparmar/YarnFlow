@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClipboardList, Building2, Calendar, Clock, Tag, CheckCircle, Package, X } from 'lucide-react';
+import { ClipboardList, Building2, Calendar, Clock, Tag, CheckCircle, Package, X, FileText, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { poUtils } from '../../services/purchaseOrderAPI';
 
 const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
@@ -121,17 +121,26 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
                   <p className="text-base font-semibold text-gray-900">{item.productName}</p>
                   <p className="text-sm text-gray-500">{item.productCode}</p>
                   {item.notes && (
-                    <p className="text-xs text-blue-600 mt-1 italic bg-blue-50 px-2 py-1 rounded inline-block">📝 {item.notes}</p>
+                    <div className="text-xs text-blue-600 mt-1 italic bg-blue-50 px-2 py-1 rounded inline-flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      {item.notes}
+                    </div>
                   )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Quantity</label>
                   <p className="text-base font-medium text-gray-900">{item.quantity} {item.unit}</p>
                   {item.receivedQuantity > 0 && (
-                    <p className="text-sm text-green-600 font-medium">✓ Received: {item.receivedQuantity} {item.unit}</p>
+                    <p className="text-sm text-green-600 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Received: {item.receivedQuantity} {item.unit}
+                    </p>
                   )}
                   {item.receivedQuantity > 0 && !item.manuallyCompleted && item.receivedQuantity < item.quantity && (
-                    <p className="text-sm text-orange-600 font-medium">⏳ Pending: {item.quantity - item.receivedQuantity} {item.unit}</p>
+                    <p className="text-sm text-orange-600 font-medium flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Pending: {item.quantity - item.receivedQuantity} {item.unit}
+                    </p>
                   )}
                   {item.manuallyCompleted && (
                     <p className="text-sm text-green-600 font-semibold flex items-center gap-1">
@@ -144,10 +153,16 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weight</label>
                   <p className="text-base font-medium text-gray-900">{(item.weight || item.specifications?.weight || 0)} Kg</p>
                   {item.receivedWeight > 0 && (
-                    <p className="text-sm text-green-600 font-medium">✓ Received: {item.receivedWeight.toFixed(2)} Kg</p>
+                    <p className="text-sm text-green-600 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Received: {item.receivedWeight.toFixed(2)} Kg
+                    </p>
                   )}
                   {item.receivedWeight > 0 && !item.manuallyCompleted && item.receivedWeight < (item.weight || 0) && (
-                    <p className="text-sm text-orange-600 font-medium">⏳ Pending: {((item.weight || 0) - item.receivedWeight).toFixed(2)} Kg</p>
+                    <p className="text-sm text-orange-600 font-medium flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Pending: {((item.weight || 0) - item.receivedWeight).toFixed(2)} Kg
+                    </p>
                   )}
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users } from 'lucide-react';
+import { Users, Plus } from 'lucide-react';
 import { customerAPI, handleAPIError } from '../services/masterDataAPI';
 import CustomerForm from '../components/masterdata/Customers/CustomerForm';
 import CustomerList from '../components/masterdata/Customers/CustomerList';
@@ -95,9 +95,10 @@ const CustomersPage = () => {
           {/* Add Customer Button */}
           <button
             onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg shadow-md hover:shadow-lg font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all flex items-center gap-2"
           >
-            + Add Customer
+            <Plus className="w-5 h-5" />
+            Add Customer
           </button>
         </div>
 
@@ -115,7 +116,7 @@ const CustomersPage = () => {
           isOpen={showForm}
           onClose={handleFormCancel}
           title={editingCustomer ? 'Edit Customer' : 'Add New Customer'}
-          size="4xl"
+          size="3xl"
         >
           <CustomerForm
             customer={editingCustomer}

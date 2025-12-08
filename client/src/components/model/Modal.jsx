@@ -27,6 +27,8 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
+    '3xl': 'max-w-3xl',  // 75% width for forms
+    '4xl': 'max-w-5xl',
     full: 'max-w-7xl'
   };
 
