@@ -60,7 +60,7 @@ app.get('/', (req, res) => {
 });
 
 // API Routes
-app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);  // ✅ Fixed: Added /api prefix for consistency
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/master-data', masterDataRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
