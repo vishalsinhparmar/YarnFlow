@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
+import { generateDocumentNumber } from '../utils/generateDocumentNumber.js';
 
 const salesOrderSchema = new mongoose.Schema({
   // Order Identification
   soNumber: {
     type: String,
-    required: true,
     unique: true,
     index: true
   },
@@ -216,58 +216,74 @@ salesOrderSchema.methods.updateDispatchStatus = function(challans) {
  * ✅ Thread-safe (uses database as source of truth)
  * ✅ Scalable for production
  */
-salesOrderSchema.statics.generateSONumber = async function() {
-  try {
-    // Fetch all SO numbers from database (only soNumber field for performance)
-    const allSOs = await this.find({}, { soNumber: 1 })
-      .lean()
-      .exec();
+// salesOrderSchema.statics.generateSONumber = async function() {
+//   try {
+//     // Fetch all SO numbers from database (only soNumber field for performance)
+//     const allSOs = await this.find({}, { soNumber: 1 })
+//       .lean()
+//       .exec();
     
-    let maxNumber = 0;
+//     let maxNumber = 0;
     
-    // Extract numeric part from each SO number and find maximum
-    // Example: "PKRK/SO/15" → extract 15 → compare with max
-    allSOs.forEach(so => {
-      if (so.soNumber) {
-        // Match pattern: PKRK/SO/[digits]
-        const match = so.soNumber.match(/PKRK\/SO\/(\d+)/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNumber) {
-            maxNumber = num;
-          }
-        }
-      }
-    });
+//     // Extract numeric part from each SO number and find maximum
+//     // Example: "PKRK/SO/15" → extract 15 → compare with max
+//     allSOs.forEach(so => {
+//       if (so.soNumber) {
+//         // Match pattern: PKRK/SO/[digits]
+//         const match = so.soNumber.match(/PKRK\/SO\/(\d+)/);
+//         if (match) {
+//           const num = parseInt(match[1], 10);
+//           if (num > maxNumber) {
+//             maxNumber = num;
+//           }
+//         }
+//       }
+//     });
     
-    // Next number is always max + 1
-    // This ensures we NEVER reuse deleted numbers
-    const nextNumber = maxNumber + 1;
+//     // Next number is always max + 1
+//     // This ensures we NEVER reuse deleted numbers
+//     const nextNumber = maxNumber + 1;
     
-    // Format: PKRK/SO/1, PKRK/SO/2, ..., PKRK/SO/100000, etc.
-    // No padding limit - supports unlimited SO numbers
-    const newSONumber = `PKRK/SO/${nextNumber}`;
+//     // Format: PKRK/SO/1, PKRK/SO/2, ..., PKRK/SO/100000, etc.
+//     // No padding limit - supports unlimited SO numbers
+//     const newSONumber = `PKRK/SO/${nextNumber}`;
     
-    // Log for debugging and audit trail
-    console.log(`🔢 Generated SO Number: ${newSONumber} (previous max: ${maxNumber}, total SOs: ${allSOs.length})`);
+//     // Log for debugging and audit trail
+//     console.log(`🔢 Generated SO Number: ${newSONumber} (previous max: ${maxNumber}, total SOs: ${allSOs.length})`);
     
-    return newSONumber;
-  } catch (error) {
-    // Fallback mechanism in case of database errors
-    console.error('❌ Error generating SO number:', error);
+//     return newSONumber;
+//   } catch (error) {
+//     // Fallback mechanism in case of database errors
+//     console.error('❌ Error generating SO number:', error);
     
-    // Use timestamp-based unique number as fallback
-    // This ensures SO creation never fails completely
-    const timestamp = Date.now().toString().slice(-6);
-    const fallbackNumber = `PKRK/SO/${timestamp}`;
+//     // Use timestamp-based unique number as fallback
+//     // This ensures SO creation never fails completely
+//     const timestamp = Date.now().toString().slice(-6);
+//     const fallbackNumber = `PKRK/SO/${timestamp}`;
     
-    console.warn(`⚠️  Using fallback SO number: ${fallbackNumber}`);
+//     console.warn(`⚠️  Using fallback SO number: ${fallbackNumber}`);
     
-    return fallbackNumber;
-  }
-};
+//     return fallbackNumber;
+//   }
+// };
 
 // Static method to get order statistics
+
+salesOrderSchema.pre('save',async function (next) {
+        try {
+          // Generate PO number ONLY on first save
+          if (!this.soNumber) {
+            this.soNumber = await generateDocumentNumber({
+              type: 'SO',
+              prefix: 'PKRK',
+              pad: 3
+            });
+          }
+          next();
+        } catch (error) {
+          next(error);
+        }
+})
 salesOrderSchema.statics.getOrderStats = async function() {
   const stats = await this.aggregate([
     {

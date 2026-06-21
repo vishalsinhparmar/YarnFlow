@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { generateDocumentNumber } from '../utils/generateDocumentNumber.js';
 
 const purchaseOrderItemSchema = new mongoose.Schema({
   product: {
@@ -134,56 +135,71 @@ const purchaseOrderSchema = new mongoose.Schema({
  * This method ensures NO duplicate PO numbers even when documents are deleted.
  * Same approach as SalesOrder to prevent E11000 duplicate key errors.
  */
-purchaseOrderSchema.statics.generatePONumber = async function() {
-  try {
-    // Fetch all PO numbers from database (only poNumber field for performance)
-    const allPOs = await this.find({}, { poNumber: 1 })
-      .lean()
-      .exec();
+// purchaseOrderSchema.statics.generatePONumber = async function() {
+//   try {
+//     // Fetch all PO numbers from database (only poNumber field for performance)
+//     const allPOs = await this.find({}, { poNumber: 1 })
+//       .lean()
+//       .exec();
     
-    let maxNumber = 0;
+//     let maxNumber = 0;
     
     // Extract numeric part from each PO number and find maximum
     // Example: "PKRK/PO/15" → extract 15 → compare with max
-    allPOs.forEach(po => {
-      if (po.poNumber) {
-        // Match pattern: PKRK/PO/[digits]
-        const match = po.poNumber.match(/PKRK\/PO\/(\d+)/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNumber) {
-            maxNumber = num;
-          }
-        }
-      }
-    });
+    // allPOs.forEach(po => {
+    //   if (po.poNumber) {
+    //     // Match pattern: PKRK/PO/[digits]
+    //     const match = po.poNumber.match(/PKRK\/PO\/(\d+)/);
+    //     if (match) {
+    //       const num = parseInt(match[1], 10);
+    //       if (num > maxNumber) {
+    //         maxNumber = num;
+    //       }
+    //     }
+    //   }
+    // });
     
     // Next number is always max + 1
     // This ensures we NEVER reuse deleted numbers
-    const nextNumber = maxNumber + 1;
+    // const nextNumber = maxNumber + 1;
     
     // Format: PKRK/PO/1, PKRK/PO/2, ..., PKRK/PO/100000, etc.
     // No padding limit - supports unlimited PO numbers
-    const newPONumber = `PKRK/PO/${nextNumber}`;
+    // const newPONumber = `PKRK/PO/${nextNumber}`;
     
     // Log for debugging and audit trail
-    console.log(`🔢 Generated PO Number: ${newPONumber} (previous max: ${maxNumber}, total POs: ${allPOs.length})`);
+    // console.log(`🔢 Generated PO Number: ${newPONumber} (previous max: ${maxNumber}, total POs: ${allPOs.length})`);
     
-    return newPONumber;
-  } catch (error) {
+    // return newPONumber;
+  // } catch (error) {
     // Fallback mechanism in case of database errors
-    console.error('❌ Error generating PO number:', error);
+    // console.error('❌ Error generating PO number:', error);
     
     // Use timestamp-based unique number as fallback
-    const timestamp = Date.now().toString().slice(-6);
-    const fallbackNumber = `PKRK/PO/${timestamp}`;
+//     const timestamp = Date.now().toString().slice(-6);
+//     const fallbackNumber = `PKRK/PO/${timestamp}`;
     
-    console.warn(`⚠️  Using fallback PO number: ${fallbackNumber}`);
+//     console.warn(`⚠️  Using fallback PO number: ${fallbackNumber}`);
     
-    return fallbackNumber;
-  }
-};
+//     return fallbackNumber;
+//   }
+// };
 
+purchaseOrderSchema.pre('save', async function (next) {
+  try {
+    // Generate PO number ONLY on first save
+    if (!this.poNumber) {
+      this.poNumber = await generateDocumentNumber({
+        type: 'PO',
+        prefix: 'PKRK',
+        pad: 3
+      });
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 // Pre-save hook for calculating quantities and status
 purchaseOrderSchema.pre('save', async function(next) {
   // Calculate pending quantities for items

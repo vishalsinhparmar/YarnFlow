@@ -24,7 +24,7 @@ router.post('/recalculate-statuses', recalculateAllSOStatuses);
 // CRUD Operations
 router.get('/', getAllSalesOrders);
 router.get('/:id', getSalesOrderById);
-router.post('/', validateSalesOrder, createSalesOrder);
+router.post('/', createSalesOrder);
 router.put('/:id', validateSalesOrderUpdate, updateSalesOrder);
 router.delete('/:id', deleteSalesOrder);
 

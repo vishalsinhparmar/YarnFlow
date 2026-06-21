@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import GoodsReceiptNote from '../models/GoodsReceiptNote.js';
 import InventoryLot from '../models/InventoryLot.js';
 import PurchaseOrder from '../models/PurchaseOrder.js';
@@ -141,34 +142,31 @@ export const getGRNById = async (req, res) => {
 };
 
 // Create new GRN from Purchase Order
+// Uses MongoDB transactions for atomic operations ensuring data consistency
 export const createGRN = async (req, res) => {
+  const session = await mongoose.startSession();
+  
   try {
+    session.startTransaction();
     console.log('Creating GRN with data:', req.body);
     
     const {
       purchaseOrder: poId,
       receiptDate = new Date(),
-      deliveryDate,
-      invoiceNumber,
-      invoiceDate,
-      invoiceAmount,
-      vehicleNumber,
-      driverName,
-      driverPhone,
-      transportCompany,
       items,
-      receivedBy,
       warehouseLocation,
       generalNotes,
       createdBy = 'System'
     } = req.body;
     
-    // Validate and fetch Purchase Order
+    // Validate and fetch Purchase Order (within transaction)
     const purchaseOrder = await PurchaseOrder.findById(poId)
       .populate('supplier')
-      .populate('items.product');
-    
+      .populate('items.product')
+      .session(session);
+    console.log('purchaseOrder',purchaseOrder);
     if (!purchaseOrder) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Purchase Order not found'
@@ -178,16 +176,21 @@ export const createGRN = async (req, res) => {
     // Validate items against PO
     const validatedItems = [];
     for (const item of items) {
+      console.log('item',item);
       const poItem = purchaseOrder.items.find(pi => pi._id.toString() === item.purchaseOrderItem);
+      console.log('poItem',poItem);
       if (!poItem) {
+        await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message: `Invalid PO item reference: ${item.purchaseOrderItem}`
         });
       }
       
-      const product = await Product.findById(poItem.product);
+      const product = await Product.findById(poItem.product).session(session);
+      console.log('proudct detail description from a pO',product);
       if (!product) {
+        await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message: `Product not found: ${poItem.product}`
@@ -196,28 +199,35 @@ export const createGRN = async (req, res) => {
       
       // Get ordered weight from PO item specifications
       const orderedWeight = poItem.specifications?.weight || 0;
-      
-      // Calculate previously received (from PO's receivedQuantity, excluding this GRN)
+      console.log('orderWeight',orderedWeight);      // Calculate previously received (from PO's receivedQuantity, excluding this GRN)
       const previouslyReceived = poItem.receivedQuantity || 0;
-      
+      console.log("previouslyReceived",previouslyReceived)
       // Calculate previous weight
       let previousWeight = poItem.receivedWeight || 0;
+      console.log('previousWeight',previousWeight);
       if (previousWeight === 0 && previouslyReceived > 0 && poItem.quantity > 0 && orderedWeight > 0) {
         const weightPerUnit = orderedWeight / poItem.quantity;
+        console.log('weightPerUnit',weightPerUnit);
         previousWeight = previouslyReceived * weightPerUnit;
       }
+      console.log('previousWeight',previousWeight);
+
       
       // Calculate received weight for this GRN
       let receivedWeight = item.receivedWeight || 0;
+      console.log('before receivedWeight',receivedWeight);
       if (receivedWeight === 0 && item.receivedQuantity > 0 && poItem.quantity > 0 && orderedWeight > 0) {
         const weightPerUnit = orderedWeight / poItem.quantity;
         receivedWeight = item.receivedQuantity * weightPerUnit;
       }
       
+      console.log('after receivedWeight',receivedWeight);
+
       // Calculate pending
       const pendingQuantity = Math.max(0, poItem.quantity - (previouslyReceived + item.receivedQuantity));
       const pendingWeight = Math.max(0, orderedWeight - (previousWeight + receivedWeight));
-      
+      console.log('pendingQuantity',pendingQuantity);
+      console.log('pendingWeight',pendingWeight);
       validatedItems.push({
         purchaseOrderItem: item.purchaseOrderItem,
         product: product._id,
@@ -244,7 +254,7 @@ export const createGRN = async (req, res) => {
         orderedQuantity: item.orderedQuantity
       });
     }
-    
+    console.log('validateItem list',validatedItems);``
     // Calculate receipt status (consider manual completion)
     const allItemsComplete = validatedItems.every(item => 
       item.pendingQuantity === 0 || item.manuallyCompleted
@@ -271,9 +281,7 @@ export const createGRN = async (req, res) => {
       console.log(`ℹ️  GRN Status: Pending`);
     }
     
-    const isPartialReceipt = validatedItems.some(item => 
-      !item.manuallyCompleted && (item.previouslyReceived > 0 || item.pendingQuantity > 0)
-    );
+    
     
     // Create GRN
     // Set status based on receipt completion
@@ -297,7 +305,7 @@ export const createGRN = async (req, res) => {
       status: grnStatus
     });
     
-    await grn.save();
+    await grn.save({ session });
     
     // Update PO with received quantities and manual completion flags FIRST
     for (const grnItem of grn.items) {
@@ -331,7 +339,7 @@ export const createGRN = async (req, res) => {
       pending: i.pendingQuantity
     })));
     
-    // Direct database update to force changes (bypass Mongoose save issues)
+    // Direct database update to force changes (bypass Mongoose save issues) - within transaction
     await PurchaseOrder.updateOne(
       { _id: purchaseOrder._id },
       {
@@ -345,12 +353,13 @@ export const createGRN = async (req, res) => {
             pendingWeight: item.manuallyCompleted ? 0 : item.pendingWeight
           }))
         }
-      }
+      },
+      { session }
     );
     console.log(`💾 PO saved successfully (direct update)`);
     
     // Verify the save by re-fetching from database
-    const verifyPO = await PurchaseOrder.findById(purchaseOrder._id);
+    const verifyPO = await PurchaseOrder.findById(purchaseOrder._id).session(session);
     console.log(`🔍 Verification - PO from DB:`);
     console.log(`   Status: ${verifyPO.status}`);
     console.log(`   Items:`, verifyPO.items.map(i => ({
@@ -369,14 +378,14 @@ export const createGRN = async (req, res) => {
       const isItemComplete = item.manuallyCompleted || item.pendingQuantity === 0;
       
       if (isItemComplete && item.receivedQuantity > 0) {
-        const product = await Product.findById(item.product);
+        const product = await Product.findById(item.product).session(session);
         
         // Find all previous GRNs for this PO and product that don't have inventory lots yet
         const previousGRNs = await GoodsReceiptNote.find({
           purchaseOrder: grn.purchaseOrder,
           'items.product': item.product,
           _id: { $ne: grn._id } // Exclude current GRN
-        }).sort({ createdAt: 1 });
+        }).sort({ createdAt: 1 }).session(session);
         
         // Create lots for previous GRNs first
         for (const prevGRN of previousGRNs) {
@@ -386,7 +395,7 @@ export const createGRN = async (req, res) => {
             const existingLot = await InventoryLot.findOne({
               grn: prevGRN._id,
               product: item.product
-            });
+            }).session(session);
             
             if (!existingLot) {
               const prevLot = new InventoryLot({
@@ -424,21 +433,22 @@ export const createGRN = async (req, res) => {
                 performedBy: 'System'
               });
               
-              await prevLot.save();
+              await prevLot.save({ session });
               inventoryLots.push(prevLot);
               console.log(`📦 Created inventory lot for previous GRN ${prevGRN.grnNumber}: ${prevItem.receivedQuantity} ${prevItem.unit}`);
               
               // Update product inventory for previous GRN
               await Product.findByIdAndUpdate(
                 item.product,
-                { $inc: { 'inventory.currentStock': prevItem.receivedQuantity } }
+                { $inc: { 'inventory.currentStock': prevItem.receivedQuantity } },
+                { session }
               );
               
               // Update previous GRN status to Complete
               await GoodsReceiptNote.findByIdAndUpdate(prevGRN._id, {
                 status: 'Complete',
                 receiptStatus: 'Complete'
-              });
+              }, { session });
               console.log(`✅ Updated GRN ${prevGRN.grnNumber} status to Complete`);
             }
           }
@@ -494,7 +504,7 @@ export const createGRN = async (req, res) => {
           performedBy: createdBy || 'System'
         });
         
-        await lot.save();
+        await lot.save({ session });
         inventoryLots.push(lot);
         console.log(`📦 Created inventory lot for ${item.productName}: ${item.receivedQuantity} ${item.unit}`);
         console.log(`✅ Lot saved with warehouse: ${lot.warehouse} (LotNumber: ${lot.lotNumber})`);
@@ -502,7 +512,8 @@ export const createGRN = async (req, res) => {
         // Update product inventory
         await Product.findByIdAndUpdate(
           item.product,
-          { $inc: { 'inventory.currentStock': item.receivedQuantity } }
+          { $inc: { 'inventory.currentStock': item.receivedQuantity } },
+          { session }
         );
       }
     }
@@ -511,7 +522,11 @@ export const createGRN = async (req, res) => {
       console.log(`✅ Created ${inventoryLots.length} inventory lot(s) for manually completed items`);
     }
     
-    // Populate the saved GRN for response
+    // Commit the transaction - all operations succeeded
+    await session.commitTransaction();
+    console.log('✅ Transaction committed successfully');
+    
+    // Populate the saved GRN for response (outside transaction)
     const populatedGRN = await GoodsReceiptNote.findById(grn._id)
       .populate('supplier', 'companyName gstNumber')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
@@ -523,12 +538,17 @@ export const createGRN = async (req, res) => {
       data: populatedGRN
     });
   } catch (error) {
-    console.error('Error creating GRN:', error);
+    // Abort transaction on any error
+    await session.abortTransaction();
+    console.error('❌ Transaction aborted - Error creating GRN:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create GRN',
       error: error.message
     });
+  } finally {
+    // Always end the session
+    session.endSession();
   }
 };
 

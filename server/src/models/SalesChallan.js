@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { generateDocumentNumber } from '../utils/generateDocumentNumber.js';
 
 const salesChallanSchema = new mongoose.Schema({
   // Basic Information
@@ -109,16 +110,20 @@ salesChallanSchema.index({ expectedDeliveryDate: 1 });
 // Pre-save middleware to generate challan number and handle status history
 salesChallanSchema.pre('save', async function(next) {
   try {
-    // Generate challan number for new documents
+    /* ===============================
+       1️⃣ Generate Challan Number
+    ================================ */
     if (this.isNew && !this.challanNumber) {
-      // Count total challans to get next number
-      const count = await this.constructor.countDocuments({});
-      
-      // Generate challan number: PKRK/SC/01, PKRK/SC/02, etc.
-      this.challanNumber = `PKRK/SC/${String(count + 1).padStart(2, '0')}`;
+      this.challanNumber = await generateDocumentNumber({
+        type: 'SC',        // Sales Challan
+        prefix: 'PKRK',
+        pad: 3
+      });
     }
-    
-    // Add status history for status changes
+
+    /* ===============================
+       2️⃣ Status History Tracking
+    ================================ */
     if (this.isModified('status') && !this.isNew) {
       this.statusHistory.push({
         status: this.status,
@@ -127,12 +132,13 @@ salesChallanSchema.pre('save', async function(next) {
         notes: `Status changed to ${this.status}`
       });
     }
-    
+
     next();
   } catch (error) {
     next(error);
   }
 });
+
 
 // Static method to get statistics
 salesChallanSchema.statics.getStats = async function() {

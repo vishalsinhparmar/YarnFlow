@@ -177,13 +177,9 @@ export const createSalesOrder = async (req, res) => {
       });
     }
 
-    // Generate SO number
-    const soNumber = await SalesOrder.generateSONumber();
-    console.log(`📝 Creating Sales Order with SO Number: ${soNumber}`);
 
     // Create sales order
     const salesOrder = new SalesOrder({
-      soNumber,
       customer: customerDoc._id,
       customerName: customerDoc.companyName || 'Unknown Company',
       category,
@@ -192,22 +188,9 @@ export const createSalesOrder = async (req, res) => {
       createdBy: createdBy || 'Admin'
     });
 
-    // Save with retry logic for duplicate key errors
-    try {
       await salesOrder.save();
-      console.log(`✅ Sales Order ${soNumber} saved successfully`);
-    } catch (saveError) {
-      // If duplicate key error, try regenerating SO number
-      if (saveError.code === 11000 && saveError.keyPattern?.soNumber) {
-        console.log(`⚠️  Duplicate SO number detected, regenerating...`);
-        const newSONumber = await SalesOrder.generateSONumber();
-        salesOrder.soNumber = newSONumber;
-        await salesOrder.save();
-        console.log(`✅ Sales Order ${newSONumber} saved successfully (retry)`);
-      } else {
-        throw saveError;
-      }
-    }
+      console.log(`✅ Sales Order ${salesOrder.soNumber} saved successfully`);
+
 
     // Populate the saved sales order for response
     const populatedSalesOrder = await SalesOrder.findById(salesOrder._id)

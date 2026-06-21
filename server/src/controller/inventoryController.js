@@ -20,7 +20,7 @@ export const getInventoryProducts = async (req, res) => {
       sortBy = 'latestReceiptDate',
       sortOrder = 'desc'
     } = req.query;
-
+    console.log('search field',search);
     console.log('📊 Fetching inventory products:', { page, limit, search, category, sortBy, sortOrder });
 
     // Get all inventory lots (single source of truth)
@@ -37,7 +37,7 @@ export const getInventoryProducts = async (req, res) => {
         }
       })
       .lean();
-
+    console.log('invetory lots',inventoryLots);
     console.log(`📦 Found ${inventoryLots.length} inventory lots`);
 
     // Aggregate by product
@@ -124,6 +124,8 @@ export const getInventoryProducts = async (req, res) => {
       }
     });
 
+
+    console.log('aggregation product list',productAggregation)
     // Convert to array
     let products = Object.values(productAggregation).map(product => {
       const supplierList = Array.from(product.suppliers);
@@ -151,6 +153,7 @@ export const getInventoryProducts = async (req, res) => {
     });
     
     console.log(`✅ Total products with stock: ${products.length}`);
+    // console.log('product list data',products)
 
     // Apply filters
     if (search) {
@@ -195,9 +198,14 @@ export const getInventoryProducts = async (req, res) => {
 
     // Convert to array and sort categories by name
     let categorizedProducts = Object.values(groupedByCategory);
+    console.log('categorized products 1' ,categorizedProducts);
+
     categorizedProducts.sort((a, b) => 
       a.categoryName.localeCompare(b.categoryName)
     );
+
+    console.log('categorized products 2',categorizedProducts);
+
 
     // Calculate totals
     const totalProducts = products.length;
@@ -206,7 +214,8 @@ export const getInventoryProducts = async (req, res) => {
     // Apply pagination to categories (not individual products)
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const paginatedCategories = categorizedProducts.slice(skip, skip + parseInt(limit));
-
+    
+    console.log('paginatedCategorized',paginatedCategories);
     res.json({
       success: true,
       data: paginatedCategories,

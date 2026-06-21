@@ -178,11 +178,10 @@ export const createPurchaseOrder = async (req, res) => {
     }
     
     // Generate PO number using static method (prevents duplicate key errors)
-    const poNumber = await PurchaseOrder.generatePONumber();
+    // const poNumber = await PurchaseOrder.generatePONumber();
     
     // Create purchase order
     const purchaseOrder = new PurchaseOrder({
-      poNumber,
       supplier: supplierId,
       category: categoryId,
       supplierDetails: {
