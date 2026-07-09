@@ -5,8 +5,7 @@ const salesChallanSchema = new mongoose.Schema({
   // Basic Information
   challanNumber: {
     type: String,
-    unique: true,
-    index: true
+    unique: true
   },
   challanDate: {
     type: Date,
@@ -18,13 +17,11 @@ const salesChallanSchema = new mongoose.Schema({
   salesOrder: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'SalesOrder',
-    required: true,
-    index: true
+    required: true
   },
   soNumber: {
     type: String,
     required: false,  // Made optional temporarily
-    index: true
   },
   
   // Customer Information (cached from SO)
@@ -57,6 +54,18 @@ const salesChallanSchema = new mongoose.Schema({
     },
     productName: { type: String, required: true },
     
+    // Sub-product tracking
+    subProduct: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SubProduct',
+      default: null
+    },
+    subProductName: { type: String, default: null },
+    subProductWeights: {
+      type: [Number],
+      default: []
+    },
+    
     // Quantities
     orderedQuantity: { type: Number, required: true, min: 0 },
     dispatchQuantity: { type: Number, required: true, min: 0 },
@@ -78,8 +87,7 @@ const salesChallanSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['Prepared', 'Dispatched', 'Delivered', 'Cancelled'],
-    default: 'Prepared',
-    index: true
+    default: 'Prepared'
   },
   
   // Workflow History

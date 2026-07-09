@@ -31,7 +31,11 @@ const SearchableSelect = ({
   className = '',
   error = '',
   onAddNew,
-  addNewLabel = 'Add New'
+  addNewLabel = 'Add New',
+  hasMore = false,
+  onLoadMore,
+  loadingMore = false,
+  total = null
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,16 +44,17 @@ const SearchableSelect = ({
   const searchInputRef = useRef(null);
   const listRef = useRef(null);
 
-  // Filter options based on search term
+  // When onSearch is provided, server handles filtering — skip local filter.
+  // Otherwise do client-side filtering.
   const filteredOptions = useMemo(() => {
+    if (onSearch) return options;
     if (!searchTerm) return options;
-    
     const term = searchTerm.toLowerCase();
     return options.filter(option => {
       const label = getOptionLabel(option);
       return label && label.toLowerCase().includes(term);
     });
-  }, [options, searchTerm, getOptionLabel]);
+  }, [options, searchTerm, getOptionLabel, onSearch]);
 
   // Get selected option
   const selectedOption = useMemo(() => {
@@ -75,16 +80,13 @@ const SearchableSelect = ({
     }
   }, [isOpen]);
 
-  // Debounced search effect - only call onSearch when user actually types
+  // Debounced search: only call onSearch when user types (non-empty term).
   useEffect(() => {
-    if (onSearch && isOpen) {
-      const timer = setTimeout(() => {
-        // Only call onSearch if searchTerm has changed from initial state
-        onSearch(searchTerm);
-      }, 300);
-
-      return () => clearTimeout(timer);
-    }
+    if (!onSearch || !isOpen || searchTerm === '') return;
+    const timer = setTimeout(() => {
+      onSearch(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
   }, [searchTerm, isOpen]);
 
   // Keyboard navigation
@@ -130,6 +132,27 @@ const SearchableSelect = ({
     }
   }, [highlightedIndex, isOpen]);
 
+  // Throttled infinite scroll handler
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !isOpen || !hasMore || !onLoadMore || loadingMore) return;
+
+    let throttleTimer = null;
+    const handleScroll = () => {
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(() => {
+        throttleTimer = null;
+        const { scrollTop, scrollHeight, clientHeight } = list;
+        if (scrollHeight - scrollTop - clientHeight < 80) {
+          onLoadMore();
+        }
+      }, 150);
+    };
+
+    list.addEventListener('scroll', handleScroll);
+    return () => list.removeEventListener('scroll', handleScroll);
+  }, [isOpen, hasMore, onLoadMore, loadingMore]);
+
   const handleSelect = (option) => {
     onChange(getOptionValue(option));
     setIsOpen(false);
@@ -141,12 +164,18 @@ const SearchableSelect = ({
     e.stopPropagation();
     onChange('');
     setSearchTerm('');
+    if (onSearch) onSearch('');
   };
 
   const handleToggle = () => {
     if (!disabled) {
-      setIsOpen(!isOpen);
-      setSearchTerm('');
+      const opening = !isOpen;
+      setIsOpen(opening);
+      if (opening) {
+        setSearchTerm('');
+        // Only re-fetch when opening with empty search AND no items loaded yet
+        if (onSearch && options.length === 0) onSearch('');
+      }
       setHighlightedIndex(0);
     }
   };
@@ -211,7 +240,12 @@ const SearchableSelect = ({
                 ref={searchInputRef}
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSearchTerm(val);
+                  // If user clears the search box, immediately reload full list
+                  if (val === '' && onSearch) onSearch('');
+                }}
                 placeholder={searchPlaceholder}
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -283,10 +317,23 @@ const SearchableSelect = ({
           </div>
 
           {/* Results Count */}
-          {filteredOptions.length > 0 && (
-            <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-600">
-              {filteredOptions.length} {filteredOptions.length === 1 ? 'result' : 'results'}
-              {searchTerm && ` for "${searchTerm}"`}
+          {(filteredOptions.length > 0 || total !== null) && (
+            <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-600 flex items-center justify-between">
+              <span>
+                {total !== null ? `Showing ${filteredOptions.length} of ${total}` : `${filteredOptions.length} ${filteredOptions.length === 1 ? 'result' : 'results'}`}
+                {searchTerm && ` for "${searchTerm}"`}
+              </span>
+              {hasMore && (
+                <span className="text-blue-600">Scroll to load more</span>
+              )}
+            </div>
+          )}
+
+          {/* Loading More Spinner */}
+          {loadingMore && (
+            <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
+              <span className="text-xs text-gray-600">Loading more...</span>
             </div>
           )}
         </div>

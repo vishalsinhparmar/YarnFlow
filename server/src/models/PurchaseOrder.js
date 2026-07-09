@@ -11,6 +11,20 @@ const purchaseOrderItemSchema = new mongoose.Schema({
     type: String,
     required: true // Store name for historical reference
   },
+  subProduct: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubProduct',
+    default: null
+  },
+  subProductName: {
+    type: String,
+    default: null
+  },
+  // Per-unit weights when sub-product tracking is used (e.g., weight per bag/roll)
+  subProductWeights: {
+    type: [Number],
+    default: []
+  },
   productCode: {
     type: String
   },
@@ -222,8 +236,7 @@ purchaseOrderSchema.pre('save', async function(next) {
 });
 
 
-// Indexes for better query performance
-purchaseOrderSchema.index({ poNumber: 1 });
+// Indexes for better query performance (poNumber index is created by unique:true)
 purchaseOrderSchema.index({ supplier: 1 });
 purchaseOrderSchema.index({ status: 1 });
 purchaseOrderSchema.index({ orderDate: -1 });

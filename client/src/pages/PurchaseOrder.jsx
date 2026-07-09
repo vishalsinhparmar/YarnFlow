@@ -103,7 +103,8 @@ const PurchaseOrder = () => {
       }
       setShowCreatePO(false);
       setSelectedPO(null);
-      fetchPurchaseOrders(currentPage, searchTerm, statusFilter);
+      setCurrentPage(1);
+      fetchPurchaseOrders(1, searchTerm, statusFilter);
       fetchStats();
     } catch (err) {
       console.error('Error saving PO:', err);
@@ -187,94 +188,96 @@ const PurchaseOrder = () => {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="bg-gradient-to-r from-orange-600 to-amber-600 rounded-2xl shadow-lg p-6">
-        <div className="flex items-center justify-between">
-          <div className="text-white">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
-                <ClipboardList className="w-6 h-6 text-white" />
+      {/* Compact Header with Stats */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                <ClipboardList className="w-6 h-6 text-orange-600" />
               </div>
-              <h1 className="text-2xl font-bold">Purchase Orders (PO)</h1>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Purchase Orders (PO)</h1>
+                <p className="text-sm text-gray-600">Manage and track purchase orders from suppliers</p>
+              </div>
             </div>
-            <p className="text-orange-100 ml-[52px]">Manage and track purchase orders from suppliers</p>
+            <button 
+              onClick={() => {
+                setSelectedPO(null);
+                setShowCreatePO(true);
+              }}
+              className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New PO
+            </button>
           </div>
-          <button 
-            onClick={() => {
-              setSelectedPO(null);
-              setShowCreatePO(true);
-            }}
-            className="bg-white text-orange-600 hover:bg-orange-50 px-6 py-3 rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            New PO
-          </button>
+
+          {/* Compact Stats Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total POs</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.totalPOs || 0}</p>
+                </div>
+                <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                  <ClipboardList className="w-5 h-5 text-gray-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-orange-600 uppercase tracking-wide">Partially Received</p>
+                  <p className="text-2xl font-bold text-orange-700 mt-1">
+                    {getStatusCount('Partially_Received')}
+                  </p>
+                </div>
+                <div className="w-10 h-10 bg-orange-200 rounded-lg flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-orange-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-green-600 uppercase tracking-wide">Fully Received</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">
+                    {getStatusCount('Fully_Received')}
+                  </p>
+                </div>
+                <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm p-6 border border-blue-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Total POs</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.totalPOs || 0}</p>
-            </div>
-            <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center shadow-inner">
-              <ClipboardList className="w-7 h-7 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl shadow-sm p-6 border border-orange-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-orange-600 uppercase tracking-wide">Partially Received</p>
-              <p className="text-3xl font-bold text-orange-600 mt-1">
-                {getStatusCount('Partially_Received')}
-              </p>
-            </div>
-            <div className="w-14 h-14 bg-orange-100 rounded-xl flex items-center justify-center shadow-inner">
-              <Clock className="w-7 h-7 text-orange-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-sm p-6 border border-green-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-green-600 uppercase tracking-wide">Fully Received</p>
-              <p className="text-3xl font-bold text-green-600 mt-1">
-                {getStatusCount('Fully_Received')}
-              </p>
-            </div>
-            <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center shadow-inner">
-              <CheckCircle className="w-7 h-7 text-green-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters and Search */}
-      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center gap-4">
+      {/* Compact Search and Filter */}
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
           <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
             </div>
             <input
               type="text"
               placeholder="Search POs by number, supplier, or notes..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all text-sm"
             />
           </div>
-          <div className="sm:w-48">
+          <div className="sm:w-40">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all bg-white"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all bg-white text-sm"
             >
               <option value="">All Status</option>
               <option value="Draft">Draft</option>

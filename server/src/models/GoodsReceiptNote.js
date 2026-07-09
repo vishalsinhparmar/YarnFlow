@@ -17,6 +17,27 @@ const grnItemSchema = new mongoose.Schema({
     required: true // Store for historical reference
   },
   
+  // Sub-product tracking
+  subProduct: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubProduct',
+    default: null
+  },
+  subProductName: {
+    type: String,
+    default: null
+  },
+  // Per-unit weights ordered on the PO (for defaulting during receipt)
+  orderedSubProductWeights: {
+    type: [Number],
+    default: []
+  },
+  // Per-unit weights captured in this GRN
+  receivedSubProductWeights: {
+    type: [Number],
+    default: []
+  },
+  
   // Quantities
   orderedQuantity: {
     type: Number,
@@ -161,8 +182,7 @@ grnSchema.pre('save', async function(next) {
   }
 });
 
-// Indexes for better query performance
-grnSchema.index({ grnNumber: 1 });
+// Indexes for better query performance (grnNumber index is created by unique:true)
 grnSchema.index({ purchaseOrder: 1 });
 grnSchema.index({ supplier: 1 });
 grnSchema.index({ status: 1 });

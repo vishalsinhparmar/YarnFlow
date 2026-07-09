@@ -14,6 +14,7 @@ const Inventory = () => {
   const [expandedCategories, setExpandedCategories] = useState({});
   const [categoryProductLimits, setCategoryProductLimits] = useState({});
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,8 +118,25 @@ const Inventory = () => {
     }));
   };
 
-  const handleViewProduct = (product) => {
-    setSelectedProduct(product);
+  const handleViewProduct = async (product) => {
+    // If product has sub-products, fetch rich detail from the dedicated API
+    if (product.hasSubProducts) {
+      try {
+        setLoadingDetail(true);
+        const res = await inventoryAPI.getProductDetail(product.productId);
+        if (res.success) {
+          setSelectedProduct({ ...product, _detailData: res.data });
+        } else {
+          setSelectedProduct(product);
+        }
+      } catch {
+        setSelectedProduct(product);
+      } finally {
+        setLoadingDetail(false);
+      }
+    } else {
+      setSelectedProduct(product);
+    }
   };
 
   const handleBackToList = () => {
@@ -172,94 +190,108 @@ const Inventory = () => {
     return <ProductDetail product={selectedProduct} onClose={handleBackToList} />;
   }
 
+  // Full-screen loading overlay while fetching product detail
+  if (loadingDetail) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-xl p-12 text-center">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
+          <p className="text-lg font-semibold text-gray-700">Loading product detail...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Show inventory list view
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl shadow-lg p-6">
-        <div className="flex items-center justify-between">
-          <div className="text-white">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
-                <Package className="w-6 h-6 text-white" />
+      {/* Compact Header with Stats */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <Package className="w-6 h-6 text-indigo-600" />
               </div>
-              <h1 className="text-2xl font-bold">Inventory Management</h1>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
+                <p className="text-sm text-gray-600">Track and manage inventory lots from approved Goods Receipt Notes</p>
+              </div>
             </div>
-            <p className="text-indigo-100 ml-[52px]">Track and manage inventory lots from approved Goods Receipt Notes</p>
+          </div>
+
+          {/* Compact Stats Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Products</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {totalProducts}
+                  </p>
+                </div>
+                <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                  <Package className="w-5 h-5 text-gray-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Active Categories</p>
+                  <p className="text-2xl font-bold text-blue-700 mt-1">
+                    {pagination?.total || categorizedProducts.length}
+                  </p>
+                </div>
+                <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
+                  <Tags className="w-5 h-5 text-blue-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-green-600 uppercase tracking-wide">Fully Received</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">
+                    {totalProducts}
+                  </p>
+                </div>
+                <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl shadow-sm p-6 border border-orange-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-orange-600 uppercase tracking-wide">Total Products</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">
-                {totalProducts}
-              </p>
-            </div>
-            <div className="w-14 h-14 bg-orange-100 rounded-xl flex items-center justify-center shadow-inner">
-              <Package className="w-7 h-7 text-orange-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm p-6 border border-blue-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Active Categories</p>
-              <p className="text-3xl font-bold text-blue-600 mt-1">
-                {pagination?.total || categorizedProducts.length}
-              </p>
-            </div>
-            <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center shadow-inner">
-              <Tags className="w-7 h-7 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-sm p-6 border border-green-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-green-600 uppercase tracking-wide">Fully Received</p>
-              <p className="text-3xl font-bold text-green-600 mt-1">
-                {totalProducts}
-              </p>
-            </div>
-            <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center shadow-inner">
-              <CheckCircle className="w-7 h-7 text-green-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Search and Category Filter */}
-      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center gap-4">
+      {/* Compact Search and Category Filter */}
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
           {/* Search Input */}
           <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
             </div>
             <input
               type="text"
               placeholder="Search products, PO numbers, suppliers..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-10 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+              className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all text-sm"
             />
             {loading && debouncedSearchTerm !== searchTerm && (
-              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                <Loader2 className="h-5 w-5 text-indigo-600 animate-spin" />
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <Loader2 className="h-4 w-4 text-indigo-600 animate-spin" />
               </div>
             )}
           </div>
           
           {/* Category Filter with SearchableSelect - Fixed width to prevent layout shift */}
           <div className="flex items-center gap-3">
-            <div className="w-[280px]">
+            <div className="w-[240px]">
               <SearchableSelect
                 options={[{ _id: '', categoryName: 'All Categories' }, ...categories]}
                 value={categoryFilter}
@@ -380,14 +412,21 @@ const Inventory = () => {
                             <tr key={idx} className="hover:bg-gray-50 transition-colors">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                                  <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
                                     <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                     </svg>
                                   </div>
-                                  <span className="text-sm font-semibold text-gray-900">
-                                    {highlightText(product.productName, debouncedSearchTerm)}
-                                  </span>
+                                  <div>
+                                    <div className="text-sm font-semibold text-gray-900">
+                                      {highlightText(product.productName, debouncedSearchTerm)}
+                                    </div>
+                                    {product.hasSubProducts && product.subProductCount > 0 && (
+                                      <span className="inline-flex items-center mt-1 px-2 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 rounded-full">
+                                        {product.subProductCount} sub-product{product.subProductCount > 1 ? 's' : ''}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">

@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ShoppingCart, X, User, Package, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { ShoppingCart, X, User, Package, Calendar, Plus } from 'lucide-react';
 import { salesOrderAPI } from '../../services/salesOrderAPI.js';
 import { apiRequest } from '../../services/common.js';
 import { inventoryAPI } from '../../services/inventoryAPI.js';
-import masterDataAPI from '../../services/masterDataAPI';
+import masterDataAPI, { subProductAPI } from '../../services/masterDataAPI';
 import CustomerForm from '../masterdata/Customers/CustomerForm';
 import SearchableSelect from '../common/SearchableSelect';
+import SubProductSelector from '../common/SubProductSelector';
+import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
 
 const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
   const [formData, setFormData] = useState({
@@ -14,6 +16,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
     category: '',
     items: [{
       product: '',
+      subProduct: '',
+      subProductName: '',
+      subProductWeights: [],
       quantity: '',
       unit: '',
       weight: '',
@@ -22,124 +27,211 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
     }]
   });
 
-  const [customers, setCustomers] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [inventoryProducts, setInventoryProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [loadingCustomers, setLoadingCustomers] = useState(false);
-  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [stockErrors, setStockErrors] = useState({});
+  const [weightErrors, setWeightErrors] = useState({});
+  // Map of productId -> array of { subProductId, subProductName, totalStock, totalWeight, unit }
+  const [subProductOptionsMap, setSubProductOptionsMap] = useState({});
 
-  // Define load functions first with useCallback
-  const loadCustomers = useCallback(async (search = '') => {
-    try {
-      setLoadingCustomers(true);
-      // Load customers from master data API (centralized base) - get all customers (up to 100)
-      let url = '/master-data/customers?limit=100';
-      if (search) url += `&search=${encodeURIComponent(search)}`;
-      const data = await apiRequest(url);
-      
-      if (data.success) {
-        setCustomers(data.data || []);
-      } else {
-        // Fallback to mock data if API fails
-        const mockCustomers = [
-          { _id: '1', companyName: 'Fashion Hub Ltd.', contactPerson: 'Rajesh Kumar', email: 'rajesh@fashionhub.com', phone: '9876543210' },
-          { _id: '2', companyName: 'Textile World Co.', contactPerson: 'Priya Sharma', email: 'priya@textileworld.com', phone: '9876543211' },
-          { _id: '3', companyName: 'Premium Fabrics Inc.', contactPerson: 'Amit Patel', email: 'amit@premiumfabrics.com', phone: '9876543212' }
-        ];
-        setCustomers(mockCustomers);
-      }
-    } catch (err) {
-      console.error('Error loading customers:', err);
-      // Fallback to mock data
-      const mockCustomers = [
-        { _id: '1', companyName: 'Fashion Hub Ltd.', contactPerson: 'Rajesh Kumar', email: 'rajesh@fashionhub.com', phone: '9876543210' },
-        { _id: '2', companyName: 'Textile World Co.', contactPerson: 'Priya Sharma', email: 'priya@textileworld.com', phone: '9876543211' },
-        { _id: '3', companyName: 'Premium Fabrics Inc.', contactPerson: 'Amit Patel', email: 'amit@premiumfabrics.com', phone: '9876543212' }
-      ];
-      setCustomers(mockCustomers);
-    } finally {
-      setLoadingCustomers(false);
+  // Paginated customers
+  const {
+    items: customers,
+    loading: loadingCustomers,
+    loadingMore: loadingMoreCustomers,
+    hasMore: hasMoreCustomers,
+    total: totalCustomers,
+    handleSearch: handleCustomerSearch,
+    handleLoadMore: loadMoreCustomers,
+    setItems: setCustomers
+  } = usePaginatedSearch(masterDataAPI.customers.getAll, { limit: 50 });
+
+  // Categories filtered by those that have inventory
+  const fetchCategoriesWithInventory = useCallback(async (params) => {
+    const [categoriesResponse, inventoryResponse] = await Promise.all([
+      masterDataAPI.categories.getAll(params),
+      inventoryAPI.getAll({ limit: 1000 })
+    ]);
+    if (!categoriesResponse.success) {
+      return { data: [], pagination: { current: 1, pages: 1, total: 0 } };
     }
-  }, []);
-
-  const loadCategories = useCallback(async (search = '') => {
-    try {
-      setLoadingCategories(true);
-      // First get all categories (up to 100)
-      const params = { limit: 100 };
-      if (search) params.search = search;
-      const categoriesResponse = await masterDataAPI.categories.getAll(params);
-      if (!categoriesResponse.success) {
-        return;
-      }
-
-      // Then get inventory to see which categories have products
-      const inventoryResponse = await inventoryAPI.getAll();
-      if (!inventoryResponse.success || !inventoryResponse.data) {
-        setCategories(categoriesResponse.data || []);
-        return;
-      }
-
-      // Get category IDs that have inventory
-      const categoriesWithInventory = new Set();
+    const categoriesWithInventory = new Set();
+    if (inventoryResponse.success && inventoryResponse.data) {
       inventoryResponse.data.forEach(cat => {
         if (cat.products && cat.products.length > 0) {
           categoriesWithInventory.add(cat.categoryId);
         }
       });
-
-      // Filter categories to only show those with inventory
-      const filteredCategories = categoriesResponse.data.filter(category => 
-        categoriesWithInventory.has(category._id)
-      );
-
-      setCategories(filteredCategories);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-    } finally {
-      setLoadingCategories(false);
     }
+    const filtered = categoriesResponse.data.filter(c => categoriesWithInventory.has(c._id));
+    return {
+      ...categoriesResponse,
+      data: filtered,
+      pagination: categoriesResponse.pagination || { current: 1, pages: 1, total: filtered.length }
+    };
   }, []);
 
-  const loadInventoryByCategory = async (categoryId) => {
+  const {
+    items: categories,
+    loading: loadingCategories,
+    loadingMore: loadingMoreCategories,
+    hasMore: hasMoreCategories,
+    total: totalCategories,
+    handleSearch: handleCategorySearch,
+    handleLoadMore: loadMoreCategories,
+    setItems: setCategories
+  } = usePaginatedSearch(fetchCategoriesWithInventory, { limit: 50 });
+
+  // Inventory products with pagination
+  const [inventoryProducts, setInventoryProducts] = useState([]);
+  const [inventoryProductPage, setInventoryProductPage] = useState(1);
+  const [inventoryProductHasMore, setInventoryProductHasMore] = useState(false);
+  const [inventoryProductLoading, setInventoryProductLoading] = useState(false);
+  const [inventoryProductLoadingMore, setInventoryProductLoadingMore] = useState(false);
+  const [inventoryProductTotal, setInventoryProductTotal] = useState(null);
+  const [inventoryProductSearch, setInventoryProductSearch] = useState('');
+  const [inventoryProductCategory, setInventoryProductCategory] = useState('');
+  const inventoryProductSearchTimer = useRef(null);
+
+  const loadInventoryByCategory = async (categoryId, page = 1, search = '', append = false) => {
+    const isLoadMore = append && page > 1;
+    if (isLoadMore) {
+      setInventoryProductLoadingMore(true);
+    } else {
+      setInventoryProductLoading(true);
+    }
+
     try {
-      const response = await inventoryAPI.getAll({ category: categoryId });
+      const response = await inventoryAPI.getAll({
+        category: categoryId,
+        flat: true,
+        limit: 50,
+        page,
+        ...(search ? { search } : {})
+      });
+
       if (response.success && response.data) {
-        // Transform inventory data to product list
-        const products = [];
-        response.data.forEach(cat => {
-          if (cat.products) {
-            cat.products.forEach(product => {
-              products.push({
-                _id: product.productId,
-                productName: product.productName,
-                productCode: product.productCode,
-                unit: product.unit,
-                totalStock: product.totalStock,
-                totalWeight: product.totalWeight
-              });
+        const products = response.data.map(product => ({
+          value: product.productId,
+          productId: product.productId,
+          productName: product.productName,
+          displayName: product.displayName,
+          productCode: product.productCode,
+          unit: product.unit,
+          totalStock: product.currentStock || product.totalStock || 0,
+          totalWeight: product.currentWeight || product.totalWeight || 0,
+          hasSubProducts: product.hasSubProducts || false,
+          subProduct: null,
+          subProductName: null,
+          isSubProduct: false
+        }));
+
+        setInventoryProductPage(page);
+        setInventoryProductSearch(search);
+        setInventoryProductCategory(categoryId);
+        setInventoryProductTotal(response.pagination?.total ?? null);
+        setInventoryProductHasMore(
+          response.pagination?.current < response.pagination?.pages
+        );
+
+        if (append) {
+          setInventoryProducts(prev => {
+            const existingIds = new Set(prev.map(p => p.productId));
+            const newProducts = products.filter(p => !existingIds.has(p.productId));
+            return [...prev, ...newProducts];
+          });
+        } else {
+          setInventoryProducts(products);
+        }
+
+        // For products that have sub-products, load sub-product detail for this page
+        const subProductMap = { ...subProductOptionsMap };
+        await Promise.all(
+          products
+            .filter(p => p.hasSubProducts)
+            .map(async (p) => {
+              try {
+                const detail = await inventoryAPI.getProductDetail(p.productId);
+                if (detail.success && detail.data && detail.data.subProductBreakdown) {
+                  subProductMap[p.productId] = detail.data.subProductBreakdown
+                    .filter(sp => sp.subProductId)
+                    .map(sp => ({
+                      subProductId: sp.subProductId,
+                      subProductName: sp.subProductName,
+                      totalStock: sp.currentStock || 0,
+                      totalWeight: sp.currentWeight || 0,
+                      unit: p.unit
+                    }));
+                }
+              } catch (err) {
+                console.error('Error loading sub-product detail for', p.productId, err);
+              }
+            })
+        );
+        setSubProductOptionsMap(subProductMap);
+
+        // Sync stock/weight data for existing items when editing an order
+        if (!append) {
+          setFormData(prev => {
+            const updatedItems = prev.items.map(item => {
+              if (item.subProduct && subProductMap[item.product]) {
+                const sp = subProductMap[item.product].find(s => s.subProductId === item.subProduct);
+                if (sp) {
+                  return { ...item, availableStock: sp.totalStock, totalProductWeight: sp.totalWeight, productStock: sp.totalStock };
+                }
+              } else if (item.product) {
+                const inv = products.find(p => p.productId === item.product);
+                if (inv && !inv.hasSubProducts) {
+                  return { ...item, availableStock: inv.totalStock, totalProductWeight: inv.totalWeight, productStock: inv.totalStock };
+                }
+              }
+              return item;
             });
-          }
-        });
-        setInventoryProducts(products);
+            return { ...prev, items: updatedItems };
+          });
+        }
       } else {
-        setInventoryProducts([]);
+        if (!append) {
+          setInventoryProducts([]);
+          setSubProductOptionsMap({});
+        }
+        setInventoryProductHasMore(false);
       }
     } catch (error) {
       console.error('Error loading inventory:', error);
-      setInventoryProducts([]);
+      if (!append) {
+        setInventoryProducts([]);
+        setSubProductOptionsMap({});
+      }
+      setInventoryProductHasMore(false);
+    } finally {
+      if (isLoadMore) {
+        setInventoryProductLoadingMore(false);
+      } else {
+        setInventoryProductLoading(false);
+      }
     }
   };
 
-  // Load customers and categories on mount
+  const handleInventoryProductSearch = (search) => {
+    setInventoryProductSearch(search);
+    if (inventoryProductSearchTimer.current) clearTimeout(inventoryProductSearchTimer.current);
+    inventoryProductSearchTimer.current = setTimeout(() => {
+      if (formData.category) {
+        loadInventoryByCategory(formData.category, 1, search, false);
+      }
+    }, 300);
+  };
+
+  const handleInventoryProductLoadMore = () => {
+    if (inventoryProductLoading || inventoryProductLoadingMore || !inventoryProductHasMore) return;
+    loadInventoryByCategory(formData.category, inventoryProductPage + 1, inventoryProductSearch, true);
+  };
+
+  // Reset form / load inventory when modal opens
   useEffect(() => {
     if (isOpen) {
-      loadCustomers();
-      loadCategories();
-      
       // Reset form data when opening modal
       if (!order) {
         setFormData({
@@ -148,6 +240,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
           category: '',
           items: [{
             product: '',
+            subProduct: '',
+            subProductName: '',
+            subProductWeights: [],
             quantity: '',
             unit: '',
             weight: '',
@@ -167,6 +262,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
           category: categoryId,
           items: order.items.map(item => ({
             product: item.product._id || item.product,
+            subProduct: item.subProduct?._id || item.subProduct || '',
+            subProductName: item.subProductName || '',
+            subProductWeights: Array.isArray(item.subProductWeights) ? item.subProductWeights : [],
             quantity: item.quantity || '',
             unit: item.unit || '',
             weight: item.weight || '',
@@ -181,7 +279,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
         }
       }
     }
-  }, [isOpen, order, loadCustomers, loadCategories]);
+  }, [isOpen, order]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -198,6 +296,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
       category: value,
       items: [{
         product: '',
+        subProduct: '',
+        subProductName: '',
+        subProductWeights: [],
         quantity: '',
         unit: '',
         weight: '',
@@ -206,62 +307,153 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
     }));
     
     if (value) {
-      loadInventoryByCategory(value);
+      loadInventoryByCategory(value, 1, '', false);
     } else {
       setInventoryProducts([]);
+      setSubProductOptionsMap({});
+      setInventoryProductPage(1);
+      setInventoryProductHasMore(false);
+      setInventoryProductSearch('');
+      setInventoryProductCategory('');
+    }
+  };
+
+  const setItemWeightError = (index, item) => {
+    const availableWeight = item.totalProductWeight || 0;
+    const weight = parseFloat(item.weight) || 0;
+    if (availableWeight > 0 && weight > availableWeight) {
+      setWeightErrors(prev => ({ ...prev, [index]: `Weight exceeds available ${availableWeight.toFixed(2)} kg` }));
+    } else {
+      setWeightErrors(prev => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
     }
   };
 
   const handleItemChange = (index, field, value) => {
     const updatedItems = [...formData.items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      [field]: value
-    };
+    const item = { ...updatedItems[index] };
+    item[field] = value;
 
-    // Auto-populate from inventory when product selected
-    if (field === 'product') {
-      const selectedProduct = inventoryProducts.find(p => p._id === value);
-      if (selectedProduct) {
-        updatedItems[index] = {
-          ...updatedItems[index],
-          unit: selectedProduct.unit,
-          availableStock: selectedProduct.totalStock,
-          totalProductWeight: selectedProduct.totalWeight || 0,
-          productStock: selectedProduct.totalStock || 0
-          // Don't auto-fill weight - let user enter it
-        };
-      }
-    }
-    
-    // Auto-calculate suggested weight when quantity changes
+    // Auto-calculate suggested weight when quantity changes and enforce stock ceiling
     if (field === 'quantity') {
-      const qty = parseFloat(value) || 0;
-      const totalWeight = updatedItems[index].totalProductWeight || 0;
-      const totalStock = updatedItems[index].productStock || 1;
-      
-      // Calculate weight per unit from inventory
-      const weightPerUnit = totalStock > 0 ? parseFloat((totalWeight / totalStock).toFixed(4)) : 0;
-      
-      // Suggest weight based on quantity (user can still edit)
-      if (weightPerUnit > 0 && qty > 0) {
-        updatedItems[index].weight = parseFloat((qty * weightPerUnit).toFixed(2));
+      const requestedQty = parseFloat(value) || 0;
+      const available = item.availableStock || 0;
+      let qty = requestedQty;
+
+      if (available > 0 && requestedQty > available) {
+        qty = available;
+        setStockErrors(prev => ({ ...prev, [index]: `Only ${available} ${item.unit || 'units'} available in stock` }));
+      } else {
+        setStockErrors(prev => {
+          const next = { ...prev };
+          delete next[index];
+          return next;
+        });
       }
+
+      const totalWeight = item.totalProductWeight || 0;
+      const totalStock = item.productStock || 1;
+      const weightPerUnit = totalStock > 0 ? parseFloat((totalWeight / totalStock).toFixed(4)) : 0;
+
+      if (item.subProduct) {
+        // For sub-products, build/update per-unit weight array using the inventory weight per unit
+        const perUnit = weightPerUnit > 0 ? weightPerUnit : 0;
+        item.subProductWeights = Array.from({ length: Math.max(0, qty) }, () => perUnit);
+        item.weight = parseFloat((qty * perUnit).toFixed(2));
+      } else if (weightPerUnit > 0 && qty > 0) {
+        item.weight = parseFloat((qty * weightPerUnit).toFixed(2));
+      }
+      item.quantity = qty;
+      setItemWeightError(index, item);
     }
 
+    // When total weight is manually edited, validate against available weight and spread evenly for sub-products
+    if (field === 'weight') {
+      const total = parseFloat(value) || 0;
+      item.weight = total;
+      if (item.subProduct) {
+        const qty = Math.max(1, parseFloat(item.quantity) || 1);
+        item.subProductWeights = Array.from({ length: Math.floor(qty) }, () => total / qty);
+      }
+      setItemWeightError(index, item);
+    }
+
+    updatedItems[index] = item;
     setFormData(prev => ({
       ...prev,
       items: updatedItems
     }));
   };
 
-  const addItem = () => {
+  const handleSubProductWeightsChange = (index, weights) => {
+    const updatedItems = [...formData.items];
+    const updatedItem = {
+      ...updatedItems[index],
+      subProductWeights: weights,
+      weight: weights.reduce((sum, w) => sum + (Number(w) || 0), 0)
+    };
+    updatedItems[index] = updatedItem;
+    setFormData(prev => ({ ...prev, items: updatedItems }));
+    setItemWeightError(index, updatedItem);
+  };
+
+  // Unique product options from inventory (flattened inventory rows may repeat products per sub-product)
+  const getProductOptions = () => {
+    const seen = new Map();
+    inventoryProducts.forEach(inv => {
+      if (!seen.has(inv.productId)) {
+        seen.set(inv.productId, {
+          _id: inv.productId,
+          productId: inv.productId,
+          productName: inv.productName,
+          productCode: inv.productCode,
+          unit: inv.unit,
+          value: inv.productId
+        });
+      }
+    });
+    return Array.from(seen.values());
+  };
+
+  // Group flat items by product so one product card can contain multiple sub-product rows
+  const getProductGroups = () => {
+    const groups = [];
+    const seen = new Map();
+    formData.items.forEach((item, index) => {
+      const key = item.product || `__empty__${index}`;
+      if (!seen.has(key)) {
+        const group = {
+          product: item.product,
+          productName: item.productName,
+          productCode: item.productCode,
+          unit: item.unit,
+          indices: [],
+          items: []
+        };
+        seen.set(key, group);
+        groups.push(group);
+      }
+      seen.get(key).indices.push(index);
+      seen.get(key).items.push(item);
+    });
+    return groups;
+  };
+
+  const addProductGroup = () => {
     setFormData(prev => ({
       ...prev,
       items: [
         ...prev.items,
         {
           product: '',
+          productName: '',
+          productCode: '',
+          subProduct: '',
+          subProductName: '',
+          subProductWeights: [],
           quantity: '',
           unit: '',
           weight: '',
@@ -272,13 +464,146 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
     }));
   };
 
-  const removeItem = (index) => {
+  const removeProductGroup = (group) => {
+    const remaining = formData.items.filter((_, i) => !group.indices.includes(i));
+    if (remaining.length === 0) {
+      remaining.push({
+        product: '',
+        productName: '',
+        productCode: '',
+        subProduct: '',
+        subProductName: '',
+        subProductWeights: [],
+        quantity: '',
+        unit: '',
+        weight: '',
+        availableStock: 0,
+        notes: ''
+      });
+    }
+    setFormData(prev => ({ ...prev, items: remaining }));
+    setStockErrors(prev => {
+      const next = { ...prev };
+      group.indices.forEach(i => delete next[i]);
+      return next;
+    });
+    setWeightErrors(prev => {
+      const next = { ...prev };
+      group.indices.forEach(i => delete next[i]);
+      return next;
+    });
+  };
+
+  const addSubProductRow = (group) => {
+    const newItem = {
+      product: group.product,
+      productName: group.productName,
+      productCode: group.productCode,
+      subProduct: '',
+      subProductName: '',
+      subProductWeights: [],
+      quantity: '',
+      unit: group.unit,
+      weight: '',
+      availableStock: 0,
+      notes: ''
+    };
+    const insertAt = group.indices[group.indices.length - 1] + 1;
+    const updated = [...formData.items];
+    updated.splice(insertAt, 0, newItem);
+    setFormData(prev => ({ ...prev, items: updated }));
+  };
+
+  const removeSubProductRow = (index) => {
     if (formData.items.length > 1) {
       setFormData(prev => ({
         ...prev,
         items: prev.items.filter((_, i) => i !== index)
       }));
+      setStockErrors(prev => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
     }
+  };
+
+  const updateGroupProduct = (group, productId) => {
+    const selected = getProductOptions().find(p => p.productId === productId) || null;
+    const hasSubProductOptions = getSubProductOptions(productId).length > 0;
+    // For non-sub-product products, stock and weight are derived from the product-level inventory row
+    const productLevelInv = hasSubProductOptions
+      ? null
+      : inventoryProducts.find(inv => inv.productId === productId) || null;
+    const updatedItems = [...formData.items];
+    group.indices.forEach(i => {
+      const existing = updatedItems[i];
+      updatedItems[i] = {
+        ...existing,
+        product: productId || '',
+        productName: selected?.productName || existing.productName || '',
+        productCode: selected?.productCode || existing.productCode || '',
+        subProduct: '',
+        subProductName: '',
+        subProductWeights: [],
+        quantity: existing.quantity || '',
+        unit: selected?.unit || existing.unit || '',
+        weight: existing.subProduct || hasSubProductOptions ? '' : existing.weight || '',
+        availableStock: productLevelInv ? productLevelInv.totalStock : 0,
+        totalProductWeight: productLevelInv ? productLevelInv.totalWeight : 0,
+        productStock: productLevelInv ? productLevelInv.totalStock : 0,
+        notes: existing.notes || ''
+      };
+    });
+    setFormData(prev => ({ ...prev, items: updatedItems }));
+    setStockErrors(prev => {
+      const next = { ...prev };
+      group.indices.forEach(i => delete next[i]);
+      return next;
+    });
+    setWeightErrors(prev => {
+      const next = { ...prev };
+      group.indices.forEach(i => delete next[i]);
+      return next;
+    });
+  };
+
+  const getSubProductOptions = (productId) => {
+    return subProductOptionsMap[productId] || [];
+  };
+
+  const handleSubProductSelect = (index, subProductId) => {
+    const productId = formData.items[index].product;
+    const spOptions = subProductOptionsMap[productId] || [];
+    const selected = spOptions.find(sp => sp.subProductId === subProductId) || null;
+    const updatedItems = [...formData.items];
+    const item = { ...updatedItems[index] };
+    item.subProduct = subProductId || '';
+    item.subProductName = selected?.subProductName || '';
+    item.availableStock = selected?.totalStock || 0;
+    item.totalProductWeight = selected?.totalWeight || 0;
+    item.productStock = selected?.totalStock || 0;
+    item.unit = selected?.unit || item.unit || '';
+    item.weight = item.quantity ? calculateWeight(item.quantity, item.totalProductWeight, item.productStock) : '';
+    item.subProductWeights = [];
+    updatedItems[index] = item;
+    setFormData(prev => ({ ...prev, items: updatedItems }));
+    setStockErrors(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+    setWeightErrors(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  };
+
+  const calculateWeight = (quantity, totalWeight, totalStock) => {
+    const qty = parseFloat(quantity) || 0;
+    const weightPerUnit = totalStock > 0 ? parseFloat((totalWeight / totalStock).toFixed(4)) : 0;
+    return weightPerUnit > 0 && qty > 0 ? parseFloat((qty * weightPerUnit).toFixed(2)) : '';
   };
 
   const handleCustomerSaved = async (customerData) => {
@@ -290,19 +615,15 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
       });
       
       setShowCustomerModal(false);
-      
-      // Reload customers and wait for state update
-      await loadCustomers();
-      
-      // Use setTimeout to ensure state is updated before setting selection
-      setTimeout(() => {
-        if (response && response._id) {
-          setFormData(prev => ({
-            ...prev,
-            customer: response._id
-          }));
-        }
-      }, 100);
+
+      if (response && response._id) {
+        // Optimistically add the new customer and select it
+        setCustomers(prev => [response, ...prev]);
+        setFormData(prev => ({
+          ...prev,
+          customer: response._id
+        }));
+      }
       
     } catch (error) {
       console.error('Error creating customer:', error);
@@ -344,8 +665,21 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
           setLoading(false);
           return;
         }
+        const hasSubProductOptions = getSubProductOptions(item.product).length > 0;
+        if (hasSubProductOptions && !item.subProduct) {
+          setError(`Please select a sub-product for item ${i + 1}`);
+          setLoading(false);
+          return;
+        }
         if (!item.quantity || parseFloat(item.quantity) <= 0) {
           setError(`Please enter a valid quantity for item ${i + 1}`);
+          setLoading(false);
+          return;
+        }
+        const available = item.availableStock || 0;
+        const qty = parseFloat(item.quantity) || 0;
+        if (available > 0 && qty > available) {
+          setError(`Item ${i + 1}: requested ${qty} ${item.unit} but only ${available} ${item.unit} available`);
           setLoading(false);
           return;
         }
@@ -356,16 +690,54 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
         }
       }
 
+      // Group items by product+sub-product to validate total quantity and weight like the backend
+      const grouped = new Map();
+      formData.items.forEach((item, i) => {
+        const key = `${item.product}-${item.subProduct || '__none__'}`;
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            productName: item.productName || item.product,
+            subProductName: item.subProductName,
+            unit: item.unit,
+            availableStock: item.availableStock || 0,
+            availableWeight: item.totalProductWeight || 0,
+            totalQty: 0,
+            totalWeight: 0,
+            indices: []
+          });
+        }
+        const g = grouped.get(key);
+        g.totalQty += parseFloat(item.quantity) || 0;
+        g.totalWeight += parseFloat(item.weight) || 0;
+        g.indices.push(i + 1);
+      });
+
+      for (const g of grouped.values()) {
+        if (g.availableStock > 0 && g.totalQty > g.availableStock) {
+          setError(`Items ${g.indices.join(', ')}: total ${g.totalQty} ${g.unit} exceeds available ${g.availableStock} ${g.unit}`);
+          setLoading(false);
+          return;
+        }
+        if (g.availableWeight > 0 && g.totalWeight > g.availableWeight) {
+          setError(`Items ${g.indices.join(', ')}: total weight ${g.totalWeight.toFixed(2)} kg exceeds available ${g.availableWeight.toFixed(2)} kg`);
+          setLoading(false);
+          return;
+        }
+      }
+
       // Prepare data for API
       const orderData = {
         customer: formData.customer,
         category: formData.category,
         items: formData.items.map(item => {
-          const selectedProduct = inventoryProducts.find(p => p._id === item.product);
+          const selectedProduct = inventoryProducts.find(p => p.productId === item.product && p.subProduct === item.subProduct);
           return {
             product: item.product,
-            productName: selectedProduct?.productName || 'Unknown Product',
-            productCode: selectedProduct?.productCode || 'UNKNOWN',
+            productName: item.productName || selectedProduct?.productName || item.subProductName || 'Unknown Product',
+            productCode: item.productCode || selectedProduct?.productCode || 'UNKNOWN',
+            subProduct: item.subProduct || null,
+            subProductName: item.subProductName || null,
+            subProductWeights: Array.isArray(item.subProductWeights) ? item.subProductWeights : [],
             quantity: parseFloat(item.quantity),
             unit: item.unit,
             weight: parseFloat(item.weight || 0),
@@ -487,8 +859,12 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                 searchPlaceholder="Search customers..."
                 getOptionLabel={(customer) => customer.companyName}
                 getOptionValue={(customer) => customer._id}
-                onSearch={loadCustomers}
+                onSearch={handleCustomerSearch}
                 loading={loadingCustomers}
+                loadingMore={loadingMoreCustomers}
+                hasMore={hasMoreCustomers}
+                onLoadMore={loadMoreCustomers}
+                total={totalCustomers}
                 onAddNew={() => setShowCustomerModal(true)}
                 addNewLabel="Add Customer"
                 renderOption={(customer, isSelected) => (
@@ -536,8 +912,12 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
               searchPlaceholder="Search categories..."
               getOptionLabel={(category) => category.categoryName}
               getOptionValue={(category) => category._id}
-              onSearch={loadCategories}
+              onSearch={handleCategorySearch}
               loading={loadingCategories}
+              loadingMore={loadingMoreCategories}
+              hasMore={hasMoreCategories}
+              onLoadMore={loadMoreCategories}
+              total={totalCategories}
               renderOption={(category, isSelected) => (
                 <div className="flex flex-col">
                   <span className="font-medium">{category.categoryName}</span>
@@ -571,79 +951,65 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
               </div>
               <button
                 type="button"
-                onClick={addItem}
+                onClick={addProductGroup}
                 disabled={!formData.category}
                 className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                Add Item
+                Add Product
               </button>
             </div>
 
             <div className="space-y-5">
-              {formData.items.map((item, index) => (
-                <div key={index} className="bg-white border-2 border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="bg-blue-100 text-blue-700 font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
-                      {index + 1}
+              {getProductGroups().map((group, groupIndex) => (
+                <div key={groupIndex} className="bg-white border-2 border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-blue-100 text-blue-700 font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
+                        {groupIndex + 1}
+                      </div>
+                      <h4 className="font-semibold text-gray-900 text-lg">Product Section</h4>
                     </div>
-                    <h4 className="font-semibold text-gray-900 text-lg">Item #{index + 1}</h4>
+                    <button
+                      type="button"
+                      onClick={() => removeProductGroup(group)}
+                      className="px-3 py-1.5 text-red-600 hover:bg-red-50 border border-red-300 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove Product
+                    </button>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div className="md:col-span-2">
-                      <SearchableSelect
-                        label="Product"
-                        required
-                        options={inventoryProducts}
-                        value={item.product}
-                        onChange={(value) => handleItemChange(index, 'product', value)}
-                        placeholder={formData.category ? 'Select Product' : 'Select Category First'}
-                        searchPlaceholder="Search products..."
-                        getOptionLabel={(product) => product.productName}
-                        getOptionValue={(product) => product._id}
-                        disabled={!formData.category}
-                        emptyMessage={!formData.category ? 'Please select a category first' : 'No products in inventory'}
-                        renderOption={(product, isSelected) => (
-                          <div className="flex flex-col">
-                            <span className="font-medium">{product.productName}</span>
-                            <span className="text-xs text-gray-500">
-                              Stock: {product.totalStock} {product.unit}
-                            </span>
-                          </div>
-                        )}
-                      />
-                    </div>
 
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                        <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                        </svg>
-                        Quantity *
-                      </label>
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                        required
-                        min="0.01"
-                        max={item.availableStock || undefined}
-                        step="0.01"
-                        placeholder="Enter quantity"
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all"
-                      />
-                      {item.availableStock > 0 && (
-                        <p className="text-xs text-green-600 mt-1.5 flex items-center">
-                          <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          Available: {item.availableStock} {item.unit}
-                        </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                    <SearchableSelect
+                      label="Product"
+                      required
+                      options={getProductOptions()}
+                      value={group.product}
+                      onChange={(value) => updateGroupProduct(group, value)}
+                      placeholder={formData.category ? 'Select Product' : 'Select Category First'}
+                      searchPlaceholder="Search products..."
+                      getOptionLabel={(product) => product.productName}
+                      getOptionValue={(product) => product.value}
+                      onSearch={handleInventoryProductSearch}
+                      loading={inventoryProductLoading}
+                      loadingMore={inventoryProductLoadingMore}
+                      hasMore={inventoryProductHasMore}
+                      onLoadMore={handleInventoryProductLoadMore}
+                      total={inventoryProductTotal}
+                      disabled={!formData.category}
+                      emptyMessage={!formData.category ? 'Please select a category first' : 'No products in inventory'}
+                      renderOption={(product, isSelected) => (
+                        <div className="flex flex-col">
+                          <span className="font-medium">{product.productName}</span>
+                          <span className="text-xs text-gray-500">{product.productCode}</span>
+                        </div>
                       )}
-                    </div>
-
+                    />
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
                         <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -653,78 +1019,172 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                       </label>
                       <input
                         type="text"
-                        value={item.unit}
+                        value={group.unit}
                         readOnly
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-gray-600 cursor-not-allowed"
                       />
                     </div>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                        <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                        </svg>
-                        Weight (Kg) *
-                      </label>
-                      <input
-                        type="number"
-                        value={item.weight}
-                        onChange={(e) => handleItemChange(index, 'weight', e.target.value)}
-                        required
-                        min="0"
-                        step="0.01"
-                        placeholder="Auto-calculated or enter manually"
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all"
-                      />
-                      {item.totalProductWeight > 0 && item.productStock > 0 && (
-                        <p className="text-xs text-blue-600 mt-1.5 flex items-center">
-                          <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                          </svg>
-                          Suggested: {((item.totalProductWeight / item.productStock) * (parseFloat(item.quantity) || 0)).toFixed(2)} Kg
-                          ({(item.totalProductWeight / item.productStock).toFixed(2)} Kg per {item.unit})
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-end">
-                      {formData.items.length > 1 && (
+                  {group.product && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-12 gap-3 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <div className="col-span-3">Sub Product</div>
+                        <div className="col-span-2">Qty</div>
+                        <div className="col-span-2">Unit</div>
+                        <div className="col-span-3">Weight (Kg)</div>
+                        <div className="col-span-2"></div>
+                      </div>
+                      {group.items.map((item, rowIndex) => {
+                        const globalIndex = group.indices[rowIndex];
+                        const hasSubProductOptions = getSubProductOptions(group.product).length > 0;
+                        return (
+                          <div key={globalIndex} className="grid grid-cols-12 gap-3 items-start bg-gray-50 rounded-lg p-3 border border-gray-100">
+                            <div className="col-span-3">
+                              {hasSubProductOptions ? (
+                                <SearchableSelect
+                                  options={getSubProductOptions(group.product)}
+                                  value={item.subProduct || ''}
+                                  onChange={(value) => handleSubProductSelect(globalIndex, value)}
+                                  placeholder="Select Sub Product"
+                                  searchPlaceholder="Search sub-products..."
+                                  getOptionLabel={(sp) => `${sp.subProductName} (Stock: ${sp.totalStock})`}
+                                  getOptionValue={(sp) => sp.subProductId}
+                                  renderOption={(sp, isSelected) => (
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{sp.subProductName}</span>
+                                      <span className="text-xs text-gray-500">
+                                        Available: {sp.totalStock} {sp.unit} · Weight: {sp.totalWeight?.toFixed(2) || 0} kg
+                                      </span>
+                                    </div>
+                                  )}
+                                />
+                              ) : (
+                                <span className="text-xs text-gray-400 flex items-center h-full">-</span>
+                              )}
+                            </div>
+                            <div className="col-span-2">
+                              <label className="sr-only">Quantity</label>
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => handleItemChange(globalIndex, 'quantity', e.target.value)}
+                                required
+                                min="0.01"
+                                max={item.availableStock || undefined}
+                                step="0.01"
+                                placeholder="Qty"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-400 text-sm"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <input
+                                type="text"
+                                value={item.unit}
+                                readOnly
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-gray-600 text-sm cursor-not-allowed"
+                              />
+                            </div>
+                            <div className="col-span-3">
+                              <label className="sr-only">Weight</label>
+                              <input
+                                type="number"
+                                value={item.weight}
+                                onChange={(e) => handleItemChange(globalIndex, 'weight', e.target.value)}
+                                required
+                                min="0"
+                                step="0.01"
+                                placeholder={item.subProduct ? 'Auto' : 'Kg'}
+                                className={`w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-400 text-sm ${item.subProduct ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                disabled={!!item.subProduct}
+                                readOnly={!!item.subProduct}
+                              />
+                            </div>
+                            <div className="col-span-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => removeSubProductRow(globalIndex)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Remove row"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="col-span-12">
+                              {item.availableStock > 0 && (
+                                <p className="text-xs text-green-600 flex items-center">
+                                  <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                  </svg>
+                                  Available: {item.availableStock} {item.unit}
+                                </p>
+                              )}
+                              {stockErrors[globalIndex] && (
+                                <p className="text-xs text-red-600 flex items-center">
+                                  <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                  {stockErrors[globalIndex]}
+                                </p>
+                              )}
+                              {weightErrors[globalIndex] && (
+                                <p className="text-xs text-red-600 flex items-center">
+                                  <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                  {weightErrors[globalIndex]}
+                                </p>
+                              )}
+                              {item.totalProductWeight > 0 && item.productStock > 0 && (
+                                <p className="text-xs text-blue-600 mt-1 flex items-center">
+                                  <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                  </svg>
+                                  Suggested: {calculateWeight(item.quantity, item.totalProductWeight, item.productStock)} Kg
+                                </p>
+                              )}
+                              {item.subProduct && item.quantity > 0 && (
+                                <div className="mt-2">
+                                  <SubProductSelector
+                                    productId={item.product}
+                                    selectedSubProduct={item.subProduct}
+                                    selectedSubProductName={item.subProductName}
+                                    quantity={item.quantity}
+                                    weights={item.subProductWeights}
+                                    categoryHasSubProducts={true}
+                                    onSelectSubProduct={() => {}}
+                                    onWeightsChange={(weights) => handleSubProductWeightsChange(globalIndex, weights)}
+                                    disableSelection={true}
+                                    allowAddNew={false}
+                                    compact
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            <div className="col-span-12">
+                              <textarea
+                                value={item.notes || ''}
+                                onChange={(e) => handleItemChange(globalIndex, 'notes', e.target.value)}
+                                placeholder="Notes"
+                                rows="1"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-400 transition-all resize-none text-sm"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {getSubProductOptions(group.product).length > 0 && (
                         <button
                           type="button"
-                          onClick={() => removeItem(index)}
-                          className="w-full px-3 py-2.5 text-red-600 hover:bg-red-50 border-2 border-red-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                          onClick={() => addSubProductRow(group)}
+                          className="mt-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-2"
                         >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Remove
+                          <Plus className="w-4 h-4" />
+                          Add Sub Product
                         </button>
                       )}
                     </div>
-                  </div>
-
-                  {/* Item Notes - NEW */}
-                  <div className="mt-4">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                      <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                      </svg>
-                      Item Notes
-                    </label>
-                    <textarea
-                      value={item.notes || ''}
-                      onChange={(e) => handleItemChange(index, 'notes', e.target.value)}
-                      placeholder="Add special instructions or notes for this item..."
-                      rows="2"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all resize-none"
-                    />
-                    <p className="text-xs text-gray-500 mt-1.5 flex items-center">
-                      <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                      These notes will appear on the challan and PDF
-                    </p>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

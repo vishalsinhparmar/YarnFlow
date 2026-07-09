@@ -16,11 +16,13 @@ export const importMasterData = async (type, file) => {
   
   // Use fetch directly for file upload (FormData requires different handling)
   const { API_BASE_URL } = await import('./common.js');
+  const token = localStorage.getItem('token');
   
   const response = await fetch(`${API_BASE_URL}/master-data/import/${type}`, {
     method: 'POST',
-    body: formData
-    // Note: Don't set Content-Type header - browser will set it automatically with boundary for multipart/form-data
+    body: formData,
+    // Do NOT set Content-Type — browser sets multipart/form-data with boundary automatically
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
   
   const data = await response.json().catch(() => ({}));
@@ -214,6 +216,37 @@ export const productAPI = {
   },
 };
 
+// ============ SUB-PRODUCT API ============
+export const subProductAPI = {
+  // Get all sub-products for a product
+  getAll: async (productId) => {
+    return apiRequest(`/products/${productId}/sub-products`);
+  },
+
+  // Bulk add multiple sub-products at once (names: string[])
+  bulkAdd: async (productId, names) => {
+    return apiRequest(`/products/${productId}/sub-products/bulk`, {
+      method: 'POST',
+      body: JSON.stringify({ names }),
+    });
+  },
+
+  // Update a single sub-product by its own ID
+  update: async (id, data) => {
+    return apiRequest(`/sub-products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Delete a single sub-product by its own ID
+  delete: async (id) => {
+    return apiRequest(`/sub-products/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 // ============ UNIT API ============
 export const unitAPI = {
   // Get all units
@@ -330,6 +363,7 @@ export default {
   suppliers: supplierAPI,
   categories: categoryAPI,
   products: productAPI,
+  subProducts: subProductAPI,
   units: unitAPI,
   stats: {
     get: getMasterDataStats

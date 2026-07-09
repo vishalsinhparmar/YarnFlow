@@ -15,7 +15,7 @@ export const getAllSalesOrders = async (req, res) => {
       customer,
       orderDate,
       search,
-      sortBy = 'orderDate',
+      sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
 
@@ -43,6 +43,7 @@ export const getAllSalesOrders = async (req, res) => {
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const sortOptions = {};
+    // Default dropdown ordering is ascending by SO number; explicit sort params override it
     sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
     // Execute query with population
@@ -50,6 +51,7 @@ export const getAllSalesOrders = async (req, res) => {
       .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
       .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name')
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit));
@@ -87,7 +89,8 @@ export const getSalesOrderById = async (req, res) => {
     const salesOrder = await SalesOrder.findById(id)
       .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName');
+      .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name');
 
     if (!salesOrder) {
       return res.status(404).json({
@@ -140,8 +143,10 @@ export const createSalesOrder = async (req, res) => {
       });
     }
 
-    // Validate products exist and check inventory availability
+    // Validate products exist and group by product+sub-product to validate total quantity/weight
     const validatedItems = [];
+    const groupedItems = new Map();
+
     for (const item of items) {
       const product = await Product.findById(item.product);
       if (!product) {
@@ -151,30 +156,65 @@ export const createSalesOrder = async (req, res) => {
         });
       }
 
-      // Check inventory availability
-      const inventoryLots = await InventoryLot.find({
-        product: item.product,
-        status: 'Active',
-        currentQuantity: { $gt: 0 }
-      });
-
-      const totalAvailable = inventoryLots.reduce((sum, lot) => sum + lot.currentQuantity, 0);
-      
-      if (totalAvailable < item.quantity) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient stock for ${product.productName}. Available: ${totalAvailable} ${item.unit}, Requested: ${item.quantity} ${item.unit}`
-        });
-      }
+      const key = `${item.product}-${item.subProduct || '__none__'}`;
+      const grouped = groupedItems.get(key) || {
+        product,
+        productId: item.product,
+        subProductId: item.subProduct || null,
+        subProductName: item.subProductName || null,
+        totalQuantity: 0,
+        totalWeight: 0,
+        label: item.subProductName || product.productName,
+        unit: item.unit
+      };
+      grouped.totalQuantity += Number(item.quantity) || 0;
+      grouped.totalWeight += Number(item.weight) || 0;
+      groupedItems.set(key, grouped);
 
       validatedItems.push({
         product: product._id,
         productName: product.productName,
+        subProduct: item.subProduct || null,
+        subProductName: item.subProductName || null,
+        subProductWeights: Array.isArray(item.subProductWeights) ? item.subProductWeights : [],
         quantity: item.quantity,
         unit: item.unit,
         weight: item.weight || 0,
         notes: item.notes || ''  // ✅ Include notes from request
       });
+    }
+
+    // Check inventory availability grouped by product/sub-product
+    for (const grouped of groupedItems.values()) {
+      const inventoryFilter = {
+        product: grouped.productId,
+        status: 'Active',
+        currentQuantity: { $gt: 0 }
+      };
+      if (grouped.subProductId) {
+        inventoryFilter.subProduct = grouped.subProductId;
+      }
+      const inventoryLots = await InventoryLot.find(inventoryFilter);
+
+      const totalAvailableQty = inventoryLots.reduce((sum, lot) => sum + (lot.currentQuantity || 0), 0);
+      const totalAvailableWeight = inventoryLots.reduce((sum, lot) => {
+        const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
+        return sum + (lot.currentQuantity || 0) * weightPerUnit;
+      }, 0);
+
+      if (totalAvailableQty < grouped.totalQuantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for ${grouped.label}. Available: ${totalAvailableQty} ${grouped.unit}, Requested: ${grouped.totalQuantity} ${grouped.unit}`
+        });
+      }
+
+      if (grouped.totalWeight > 0 && grouped.totalWeight > totalAvailableWeight) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient weight for ${grouped.label}. Available: ${totalAvailableWeight.toFixed(2)} kg, Requested: ${grouped.totalWeight.toFixed(2)} kg`
+        });
+      }
     }
 
 
@@ -196,7 +236,8 @@ export const createSalesOrder = async (req, res) => {
     const populatedSalesOrder = await SalesOrder.findById(salesOrder._id)
       .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName');
+      .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name');
 
     res.status(201).json({
       success: true,
@@ -255,7 +296,8 @@ export const updateSalesOrder = async (req, res) => {
     const populatedSalesOrder = await SalesOrder.findById(salesOrder._id)
       .populate('customer', 'companyName gstNumber address')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName');
+      .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name');
 
     res.status(200).json({
       success: true,

@@ -1,6 +1,10 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'yarnflow_dev_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET environment variable is not set');
+}
+const SECRET = JWT_SECRET || 'yarnflow_dev_secret_change_in_production';
 
 export const authMiddleware = async (req, res, next) => {
   try {
@@ -15,7 +19,7 @@ export const authMiddleware = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
     
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, SECRET);
     req.user = decoded;
     
     next();

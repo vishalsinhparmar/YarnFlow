@@ -3,7 +3,30 @@ import SalesChallan from '../models/SalesChallan.js';
 import SalesOrder from '../models/SalesOrder.js';
 import InventoryLot from '../models/InventoryLot.js';
 import Product from '../models/Product.js';
+import CompanyProfile from '../models/CompanyProfile.js';
 import { generateSalesChallanPDF, generateSalesOrderConsolidatedPDF } from '../utils/pdfGenerator.js';
+
+// ============ HELPER: fetch active company profile ============
+const getActiveCompanyProfile = async () => {
+  let profile = await CompanyProfile.findOne({ isActive: true }).lean();
+  console.log('[PDF] Company profile terms from DB:', JSON.stringify(profile?.challanTermsAndConditions));
+  if (!profile) {
+    // Return safe defaults if no profile configured yet
+    profile = {
+      companyName: process.env.COMPANY_NAME || 'Your Company Name',
+      headOfficeAddress: process.env.COMPANY_ADDRESS || '',
+      branchOfficeAddress: '',
+      phone: process.env.COMPANY_PHONE || '',
+      gstin: process.env.COMPANY_GSTIN || '',
+      msmeNo: '',
+      city: process.env.COMPANY_CITY || '',
+      challanTermsAndConditions: [],
+      challanFooterNote: 'Computer-generated delivery challan',
+      signatureLabel: 'For'
+    };
+  }
+  return profile;
+};
 
 // ============ HELPER FUNCTIONS ============
 
@@ -253,12 +276,15 @@ export const createSalesChallan = async (req, res) => {
       warehouseLocation,
       expectedDeliveryDate: expectedDeliveryDate || null,
       items: items.map(item => {
-        // Find corresponding SO item to get notes
+        // Find corresponding SO item to get notes and sub-product details
         const soItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
         return {
           salesOrderItem: item.salesOrderItem,
           product: item.product,
           productName: item.productName,
+          subProduct: soItem?.subProduct || item.subProduct || null,
+          subProductName: soItem?.subProductName || item.subProductName || null,
+          subProductWeights: soItem?.subProductWeights || item.subProductWeights || [],
           orderedQuantity: item.orderedQuantity,
           dispatchQuantity: item.dispatchQuantity,
           unit: item.unit,
@@ -347,7 +373,8 @@ export const createSalesChallan = async (req, res) => {
       console.log(`   Challan numbers: ${challansForThisItem.map(ch => ch.challanNumber).join(', ')}`);
       
       // Check if stock has already been deducted by looking for a movement with all these challan numbers
-      const challanNumbersStr = challansForThisItem.map(ch => ch.challanNumber).sort().join(', ');
+      // Include the SO item id so multi-sub-product orders don't collide on the same product+challan reference
+      const challanNumbersStr = `${challansForThisItem.map(ch => ch.challanNumber).sort().join(', ')}|SOItem:${item.salesOrderItem}`;
       console.log(`   Looking for existing movement with reference: "${challanNumbersStr}"`);
       
       const existingMovement = await InventoryLot.findOne({
@@ -382,15 +409,39 @@ export const createSalesChallan = async (req, res) => {
       console.log(`📊 Total to deduct: ${totalQtyToDeduct} ${item.unit}, ${totalWeightToDeduct.toFixed(2)} kg`);
       
       // Find available inventory lots for this product (FIFO - First In First Out) - within transaction
-      const lots = await InventoryLot.find({
+      // Restrict by sub-product if the sales order item specifies one
+      const currentSOItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
+      const lotFilter = {
         product: item.product,
         status: 'Active',
         currentQuantity: { $gt: 0 }
-      }).sort({ receivedDate: 1 }).session(session); // FIFO: oldest first
+      };
+      if (currentSOItem?.subProduct) {
+        lotFilter.subProduct = currentSOItem.subProduct;
+      }
+      const lots = await InventoryLot.find(lotFilter).sort({ receivedDate: 1 }).session(session); // FIFO: oldest first
 
       if (lots.length === 0) {
         console.warn(`⚠️ No inventory lots found for ${item.productName}`);
         continue;
+      }
+
+      // Calculate available quantity and weight to enforce non-negative inventory
+      const availableQty = lots.reduce((sum, lot) => sum + (lot.currentQuantity - (lot.reservedQuantity || 0)), 0);
+      const availableWeight = lots.reduce((sum, lot) => {
+        const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
+        return sum + (lot.currentQuantity - (lot.reservedQuantity || 0)) * weightPerUnit;
+      }, 0);
+
+      if (totalQtyToDeduct > availableQty) {
+        const err = new Error(`Insufficient stock for ${item.productName}. Available: ${availableQty} ${item.unit}, Required: ${totalQtyToDeduct} ${item.unit}`);
+        err.statusCode = 400;
+        throw err;
+      }
+      if (totalWeightToDeduct > availableWeight) {
+        const err = new Error(`Insufficient weight for ${item.productName}. Available: ${availableWeight.toFixed(2)} kg, Required: ${totalWeightToDeduct.toFixed(2)} kg`);
+        err.statusCode = 400;
+        throw err;
       }
 
       let remainingQty = totalQtyToDeduct;
@@ -401,10 +452,10 @@ export const createSalesChallan = async (req, res) => {
       for (const lot of lots) {
         if (remainingQty <= 0) break;
 
-        const availableQty = lot.currentQuantity - (lot.reservedQuantity || 0);
-        if (availableQty <= 0) continue;
+        const lotAvailableQty = lot.currentQuantity - (lot.reservedQuantity || 0);
+        if (lotAvailableQty <= 0) continue;
 
-        const qtyToDeduct = Math.min(remainingQty, availableQty);
+        const qtyToDeduct = Math.min(remainingQty, lotAvailableQty);
         
         // Calculate proportional weight to deduct
         const weightPerUnit = remainingQty > 0 ? remainingWeight / remainingQty : 0;
@@ -414,14 +465,14 @@ export const createSalesChallan = async (req, res) => {
         lot.currentQuantity -= qtyToDeduct;
 
         // Add movement record with weight for ALL challans (not just current one)
-        // Reference all challan numbers that contributed to this deduction
+        // Reference all challan numbers that contributed to this deduction, scoped to the SO item
         const challanRefs = challansForThisItem.map(ch => ch.challanNumber).join(', ');
         lot.movements.push({
           type: 'Issued',
           quantity: qtyToDeduct,
           weight: weightToDeduct,
           date: new Date(),
-          reference: challanRefs,
+          reference: challanNumbersStr,
           notes: `Stock out for Sales Challan(s): ${challanRefs} (SO Item Completed)`,
           performedBy: createdBy || 'Admin'
         });
@@ -452,6 +503,9 @@ export const createSalesChallan = async (req, res) => {
 
       if (remainingQty > 0) {
         console.warn(`⚠️ Insufficient stock for ${item.productName}. Short by ${remainingQty} ${item.unit}`);
+        const err = new Error(`Insufficient stock for ${item.productName}. Short by ${remainingQty} ${item.unit}`);
+        err.statusCode = 400;
+        throw err;
       }
     }
 
@@ -489,6 +543,14 @@ export const createSalesChallan = async (req, res) => {
         message: 'Validation failed',
         errors: validationErrors,
         details: error.message
+      });
+    }
+    
+    // Return 400 for client-side validation errors (insufficient stock/weight)
+    if (error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
       });
     }
     
@@ -755,15 +817,8 @@ export const generateChallanPDF = async (req, res) => {
       });
     }
 
-    // Company information (your company - the sender)
-    const companyInfo = {
-      name: process.env.COMPANY_NAME || 'YarnFlow',
-      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
-      city: process.env.COMPANY_CITY || 'City, State - 000000',
-      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
-      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
-      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
-    };
+    // Fetch live company profile from DB
+    const companyInfo = await getActiveCompanyProfile();
 
     // Generate PDF buffer
     const pdfBuffer = await generateSalesChallanPDF(challan.toObject(), companyInfo);
@@ -824,15 +879,8 @@ export const generateSOConsolidatedPDF = async (req, res) => {
       });
     }
 
-    // Company information (your company - the sender)
-    const companyInfo = {
-      name: process.env.COMPANY_NAME || 'YarnFlow',
-      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
-      city: process.env.COMPANY_CITY || 'City, State - 000000',
-      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
-      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
-      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
-    };
+    // Fetch live company profile from DB
+    const companyInfo = await getActiveCompanyProfile();
 
     // Consolidate all challan data
     const consolidatedData = {
@@ -896,15 +944,8 @@ export const previewSOConsolidatedPDF = async (req, res) => {
       });
     }
 
-    // Company information
-    const companyInfo = {
-      name: process.env.COMPANY_NAME || 'YarnFlow',
-      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
-      city: process.env.COMPANY_CITY || 'City, State - 000000',
-      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
-      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
-      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
-    };
+    // Fetch live company profile from DB
+    const companyInfo = await getActiveCompanyProfile();
 
     // Consolidate data
     const consolidatedData = {
@@ -966,15 +1007,8 @@ export const previewChallanPDF = async (req, res) => {
       });
     }
 
-    // Company information (your company - the sender)
-    const companyInfo = {
-      name: process.env.COMPANY_NAME || 'YarnFlow',
-      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
-      city: process.env.COMPANY_CITY || 'City, State - 000000',
-      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
-      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
-      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
-    };
+    // Fetch live company profile from DB
+    const companyInfo = await getActiveCompanyProfile();
 
     // Generate PDF buffer
     const pdfBuffer = await generateSalesChallanPDF(challan.toObject(), companyInfo);

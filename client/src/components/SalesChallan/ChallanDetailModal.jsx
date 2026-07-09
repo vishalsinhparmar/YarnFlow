@@ -106,6 +106,28 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
     });
   };
 
+  const getProductGroups = () => {
+    const groups = [];
+    const seen = new Map();
+    (challan.items || []).forEach((item, index) => {
+      const key = item.product || `__empty__${index}`;
+      if (!seen.has(key)) {
+        seen.set(key, {
+          product: item.product,
+          productName: item.productName,
+          productCode: item.productCode,
+          unit: item.unit,
+          indices: [],
+          items: []
+        });
+        groups.push(seen.get(key));
+      }
+      seen.get(key).indices.push(index);
+      seen.get(key).items.push(item);
+    });
+    return groups;
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -205,7 +227,7 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
               </svg>
               <h3 className="text-xl font-semibold text-gray-900">Dispatched Items</h3>
               <span className="ml-3 bg-orange-100 text-orange-800 text-sm font-medium px-3 py-1 rounded-full">
-                {challan.items?.length || 0} item(s)
+                {challan.items?.length || 0} item(s) across {getProductGroups().length} product{getProductGroups().length !== 1 ? 's' : ''}
               </span>
             </div>
             <div className="overflow-x-auto">
@@ -233,7 +255,22 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {challan.items?.map((item, index) => {
+                  {getProductGroups().map((group, groupIndex) => (
+                    <React.Fragment key={groupIndex}>
+                      <tr className="bg-blue-50">
+                        <td className="px-6 py-2" colSpan="6">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-bold text-gray-900">{group.productName || 'N/A'}</span>
+                              {group.productCode && (
+                                <span className="text-xs text-gray-500 ml-2">({group.productCode})</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-blue-700 font-medium">Unit: {group.unit || 'Bags'}</span>
+                          </div>
+                        </td>
+                      </tr>
+                      {group.items.map((item, rowIndex) => {
                     const dispatchedInThisChallan = item.dispatchQuantity || 0;
                     const soTotalQty = item.orderedQuantity || 0;
                     const manuallyCompleted = item.manuallyCompleted || false;
@@ -246,9 +283,10 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                     if (soData && soData.items) {
                       // Find the SO item to get total dispatched across all challans
                       const soItem = soData.items.find(si => 
-                        si.product === item.product || 
+                        (si.product === item.product || 
                         si.product?._id === item.product ||
-                        si._id?.toString() === item.salesOrderItem?.toString()
+                        si._id?.toString() === item.salesOrderItem?.toString()) &&
+                        (si.subProduct === item.subProduct || si.subProduct?._id === item.subProduct)
                       );
                       
                       if (soItem) {
@@ -280,10 +318,18 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                     }
                     
                     return (
-                      <tr key={index} className="hover:bg-gray-50">
+                      <tr key={rowIndex} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-900">{item.productName}</div>
-                          <div className="text-sm text-gray-500">{item.productCode}</div>
+                          {item.subProductName && (
+                            <div className="text-sm font-semibold text-green-700">
+                              {item.productName} X {item.subProductName}
+                            </div>
+                          )}
+                          {Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0 && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Per-unit weights: {item.subProductWeights.map(w => Number(w).toFixed(2)).join(', ')} kg
+                            </div>
+                          )}
                           {item.notes && (
                             <div className="text-xs text-blue-600 italic bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
                               📝 {item.notes}
@@ -334,6 +380,8 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                       </tr>
                     );
                   })}
+                </React.Fragment>
+              ))}
                 </tbody>
               </table>
             </div>

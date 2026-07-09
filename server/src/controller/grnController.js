@@ -73,6 +73,10 @@ export const getAllGRNs = async (req, res) => {
               path: 'category',
               select: 'categoryName name'
             }
+          },
+          {
+            path: 'items.subProduct',
+            select: 'name'
           }
         ]
       })
@@ -83,6 +87,10 @@ export const getAllGRNs = async (req, res) => {
           path: 'category',
           select: 'categoryName name'
         }
+      })
+      .populate({
+        path: 'items.subProduct',
+        select: 'name'
       })
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -118,7 +126,8 @@ export const getGRNById = async (req, res) => {
     const grn = await GoodsReceiptNote.findById(id)
       .populate('supplier', 'companyName gstNumber')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate items')
-      .populate('items.product', 'productName');
+      .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name');
     
     if (!grn) {
       return res.status(404).json({
@@ -197,8 +206,8 @@ export const createGRN = async (req, res) => {
         });
       }
       
-      // Get ordered weight from PO item specifications
-      const orderedWeight = poItem.specifications?.weight || 0;
+      // Get ordered weight from PO item (prefer explicit weight, fallback to specifications for legacy)
+      const orderedWeight = poItem.weight || poItem.specifications?.weight || 0;
       console.log('orderWeight',orderedWeight);      // Calculate previously received (from PO's receivedQuantity, excluding this GRN)
       const previouslyReceived = poItem.receivedQuantity || 0;
       console.log("previouslyReceived",previouslyReceived)
@@ -212,11 +221,18 @@ export const createGRN = async (req, res) => {
       }
       console.log('previousWeight',previousWeight);
 
+      // Sub-product weights from PO (ordered weights) and this GRN
+      const orderedSubProductWeights = poItem.subProductWeights || [];
+      const receivedSubProductWeights = Array.isArray(item.receivedSubProductWeights)
+        ? item.receivedSubProductWeights.slice(0, item.receivedQuantity)
+        : [];
       
       // Calculate received weight for this GRN
       let receivedWeight = item.receivedWeight || 0;
       console.log('before receivedWeight',receivedWeight);
-      if (receivedWeight === 0 && item.receivedQuantity > 0 && poItem.quantity > 0 && orderedWeight > 0) {
+      if (receivedSubProductWeights.length > 0) {
+        receivedWeight = receivedSubProductWeights.reduce((sum, w) => sum + (Number(w) || 0), 0);
+      } else if (receivedWeight === 0 && item.receivedQuantity > 0 && poItem.quantity > 0 && orderedWeight > 0) {
         const weightPerUnit = orderedWeight / poItem.quantity;
         receivedWeight = item.receivedQuantity * weightPerUnit;
       }
@@ -232,12 +248,16 @@ export const createGRN = async (req, res) => {
         purchaseOrderItem: item.purchaseOrderItem,
         product: product._id,
         productName: product.productName,
+        subProduct: poItem.subProduct || null,
+        subProductName: poItem.subProductName || null,
         orderedQuantity: poItem.quantity,
         orderedWeight: orderedWeight,
+        orderedSubProductWeights: orderedSubProductWeights,
         previouslyReceived: previouslyReceived,
         previousWeight: previousWeight,
         receivedQuantity: item.receivedQuantity,
         receivedWeight: receivedWeight,
+        receivedSubProductWeights: receivedSubProductWeights,
         pendingQuantity: pendingQuantity,
         pendingWeight: pendingWeight,
         unit: poItem.unit || product.inventory?.unit || 'Bags',
@@ -389,12 +409,13 @@ export const createGRN = async (req, res) => {
         
         // Create lots for previous GRNs first
         for (const prevGRN of previousGRNs) {
-          const prevItem = prevGRN.items.find(i => i.product.toString() === item.product.toString());
+          const prevItem = prevGRN.items.find(i => i.purchaseOrderItem.toString() === item.purchaseOrderItem.toString());
           if (prevItem && prevItem.receivedQuantity > 0) {
-            // Check if lot already exists for this GRN and product
+            // Check if lot already exists for this GRN, product and sub-product
             const existingLot = await InventoryLot.findOne({
               grn: prevGRN._id,
-              product: item.product
+              product: item.product,
+              subProduct: prevItem.subProduct || null
             }).session(session);
             
             if (!existingLot) {
@@ -405,6 +426,9 @@ export const createGRN = async (req, res) => {
                 poNumber: prevGRN.poNumber,
                 product: item.product,
                 productName: product.productName,
+                subProduct: prevItem.subProduct || null,
+                subProductName: prevItem.subProductName || null,
+                subProductWeights: prevItem.receivedSubProductWeights || [],
                 category: product.category,
                 supplier: prevGRN.supplier,
                 supplierName: prevGRN.supplierDetails?.companyName || grn.supplierDetails.companyName,
@@ -427,6 +451,7 @@ export const createGRN = async (req, res) => {
               prevLot.movements.push({
                 type: 'Received',
                 quantity: prevItem.receivedQuantity,
+                weight: prevItem.receivedWeight || 0,
                 date: prevGRN.receiptDate,
                 reference: prevGRN.grnNumber,
                 notes: `Received via GRN ${prevGRN.grnNumber}`,
@@ -469,6 +494,9 @@ export const createGRN = async (req, res) => {
           poNumber: grn.poNumber,
           product: item.product,
           productName: product.productName,
+          subProduct: item.subProduct || null,
+          subProductName: item.subProductName || null,
+          subProductWeights: item.receivedSubProductWeights || [],
           category: product.category,
           supplier: grn.supplier,
           supplierName: grn.supplierDetails.companyName,
@@ -496,6 +524,7 @@ export const createGRN = async (req, res) => {
         lot.movements.push({
           type: 'Received',
           quantity: item.receivedQuantity,
+          weight: item.receivedWeight || 0,
           date: grn.receiptDate,
           reference: grn.grnNumber,
           notes: item.manuallyCompleted 
@@ -530,7 +559,8 @@ export const createGRN = async (req, res) => {
     const populatedGRN = await GoodsReceiptNote.findById(grn._id)
       .populate('supplier', 'companyName gstNumber')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
-      .populate('items.product', 'productName');
+      .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name');
     
     res.status(201).json({
       success: true,
@@ -587,7 +617,8 @@ export const updateGRN = async (req, res) => {
     )
     .populate('supplier', 'companyName gstNumber')
     .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
-    .populate('items.product', 'productName');
+    .populate('items.product', 'productName')
+    .populate('items.subProduct', 'name');
     
     res.status(200).json({
       success: true,
@@ -726,6 +757,9 @@ export const approveGRN = async (req, res) => {
           poNumber: grn.poNumber,
           product: item.product._id,
           productName: item.productName,
+          subProduct: item.subProduct || null,
+          subProductName: item.subProductName || null,
+          subProductWeights: item.receivedSubProductWeights || [],
           category: item.product.category,
           supplier: grn.supplier._id,
           supplierName: grn.supplierDetails.companyName,
@@ -749,6 +783,7 @@ export const approveGRN = async (req, res) => {
         lot.movements.push({
           type: 'Received',
           quantity: lotQuantity,
+          weight: lotWeight || 0,
           date: grn.receiptDate,
           reference: grn.grnNumber,
           notes: item.manuallyCompleted 
@@ -769,7 +804,8 @@ export const approveGRN = async (req, res) => {
     const populatedGRN = await GoodsReceiptNote.findById(grn._id)
       .populate('supplier', 'companyName gstNumber')
       .populate('purchaseOrder', 'poNumber orderDate expectedDeliveryDate')
-      .populate('items.product', 'productName');
+      .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name');
     
     res.status(200).json({
       success: true,

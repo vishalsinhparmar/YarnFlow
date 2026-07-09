@@ -16,17 +16,15 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load remembered credentials on mount
+  // Load remembered email on mount (password is never persisted)
   useEffect(() => {
     const rememberedEmail = localStorage.getItem('rememberedEmail');
-    const rememberedPassword = localStorage.getItem('rememberedPassword');
-    
-    if (rememberedEmail && rememberedPassword) {
-      setFormData({
+    if (rememberedEmail) {
+      setFormData((prev) => ({
+        ...prev,
         email: rememberedEmail,
-        password: rememberedPassword,
         rememberMe: true,
-      });
+      }));
     }
   }, []);
 

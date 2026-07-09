@@ -6,7 +6,9 @@ import { inventoryAPI } from '../../services/inventoryAPI';
 import { apiRequest } from '../../services/common';
 import NewSalesOrderModal from '../SalesOrders/NewSalesOrderModal';
 import SearchableSelect from '../common/SearchableSelect';
-import { WAREHOUSE_LOCATIONS, getWarehouseName } from '../../constants/warehouseLocations';
+import SubProductSelector from '../common/SubProductSelector';
+import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
+import warehouseAPI from '../../services/warehouseAPI';
 
 const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = null }) => {
   const [formData, setFormData] = useState({
@@ -17,15 +19,42 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
     notes: ''
   });
 
-  const [salesOrders, setSalesOrders] = useState([]);
   const [selectedSO, setSelectedSO] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [loadingSOs, setLoadingSOs] = useState(false);
   const [loadingSODetails, setLoadingSODetails] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showNewSOModal, setShowNewSOModal] = useState(false);
   const [dispatchedQuantities, setDispatchedQuantities] = useState({});
+  const [warehouseLocations, setWarehouseLocations] = useState([]);
+
+  useEffect(() => {
+    warehouseAPI.getAll().then(res => setWarehouseLocations(res.data || [])).catch(() => {});
+  }, []);
+
+  // Paginated sales orders with client-side status filter
+  const fetchSalesOrders = useCallback(async (params) => {
+    const response = await salesOrderAPI.getAll(params);
+    if (response.success && response.data) {
+      const availableOrders = response.data.filter(so =>
+        !['Delivered', 'Cancelled'].includes(so.status)
+      );
+      return { ...response, data: availableOrders };
+    }
+    return response;
+  }, []);
+
+  const {
+    items: salesOrders,
+    setItems: setSalesOrders,
+    loading: loadingSOs,
+    loadingMore: loadingMoreSOs,
+    hasMore: hasMoreSOs,
+    total: totalSOs,
+    handleSearch: handleSOSearch,
+    handleLoadMore: loadMoreSOs,
+    refresh: refreshSOs
+  } = usePaginatedSearch(fetchSalesOrders, { limit: 50, extraParams: { sortBy: 'createdAt', sortOrder: 'desc' } });
 
   // Reset form when modal closes
   useEffect(() => {
@@ -45,54 +74,6 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
     }
   }, [isOpen]);
 
-  // Define loadSalesOrders BEFORE useEffect that uses it
-  const loadSalesOrders = useCallback(async (search = '') => {
-    try {
-      setLoadingSOs(true);
-      setError('');
-      
-      console.log('Loading sales orders...', search ? `with search: ${search}` : '');
-      const params = { limit: 100 };
-      if (search) params.search = search;
-      
-      const response = await salesOrderAPI.getAll(params);
-      console.log('Sales Orders API Response:', response);
-      
-      if (response.success && response.data) {
-        console.log('Total SOs received:', response.data.length);
-        
-        // Filter out Delivered and Cancelled orders
-        const availableOrders = response.data.filter(so => 
-          !['Delivered', 'Cancelled'].includes(so.status)
-        );
-        console.log('Available SOs (excluding Delivered/Cancelled):', availableOrders);
-        
-        setSalesOrders(availableOrders);
-        
-        if (availableOrders.length === 0 && !search) {
-          setError('No sales orders available. Please create a sales order first.');
-        }
-      } else {
-        console.error('API returned unsuccessful response:', response);
-        setSalesOrders([]);
-        if (!search) setError('Failed to load sales orders');
-      }
-    } catch (err) {
-      console.error('Error loading sales orders:', err);
-      if (!search) setError('Failed to load sales orders: ' + err.message);
-      setSalesOrders([]);
-    } finally {
-      setLoadingSOs(false);
-    }
-  }, []);
-
-  // Load sales orders when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadSalesOrders();
-    }
-  }, [isOpen, loadSalesOrders]);
-
   // Handle pre-selected SO (separate effect to avoid race conditions)
   useEffect(() => {
     if (isOpen && preSelectedOrderId && salesOrders.length > 0) {
@@ -100,6 +81,16 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       handleSOSelection(preSelectedOrderId);
     }
   }, [isOpen, preSelectedOrderId, salesOrders]);
+
+  // Show message when no sales orders are available after loading
+  // Only trigger after we have received a real response (totalSOs is not null)
+  useEffect(() => {
+    if (isOpen && !loadingSOs && totalSOs === 0 && salesOrders.length === 0 && !formData.salesOrder) {
+      setError('No sales orders available. Please create a sales order first.');
+    } else if (salesOrders.length > 0) {
+      setError(prev => prev === 'No sales orders available. Please create a sales order first.' ? '' : prev);
+    }
+  }, [isOpen, loadingSOs, totalSOs, salesOrders.length, formData.salesOrder]);
 
   // Handle sales order selection
   const handleSOSelection = async (soId) => {
@@ -144,17 +135,25 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           const dispatched = dispatchedMap[item._id] || 0;
           const remaining = Math.max(0, (item.quantity || 0) - dispatched);
           
-          // Calculate proportional weight based on remaining quantity
-          const totalWeight = item.weight || 0;
+          // Use sub-product ordered weights if available, otherwise fall back to total SO weight
+          const orderedWeights = Array.isArray(item.subProductWeights) ? item.subProductWeights : [];
+          const totalWeight = orderedWeights.length > 0
+            ? orderedWeights.reduce((sum, w) => sum + (Number(w) || 0), 0)
+            : (item.weight || 0);
           const totalQuantity = item.quantity || 1;
           const weightPerUnit = parseFloat((totalWeight / totalQuantity).toFixed(4));
           const remainingWeight = parseFloat((remaining * weightPerUnit).toFixed(2));
+          const remainingWeights = orderedWeights.slice(0, remaining);
           
           return {
             salesOrderItem: item._id,
             product: item.product?._id || item.product,
             productName: item.product?.productName || item.productName || '',
             productCode: item.product?.productCode || item.productCode || '',
+            subProduct: item.subProduct?._id || item.subProduct || null,
+            subProductName: item.subProductName || null,
+            subProductWeights: remainingWeights,
+            orderedSubProductWeights: orderedWeights,
             orderedQuantity: item.quantity || 0,
             dispatchQuantity: remaining, // Default to remaining quantity
             previouslyDispatched: dispatched,
@@ -177,23 +176,24 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           setError('⚠️ This Sales Order is already fully dispatched. All items have been completed.');
         }
 
-        // Fetch warehouse locations for each product from inventory lots
-        const productIds = items.map(item => item.product).filter(Boolean);
-        if (productIds.length > 0) {
+        // Fetch warehouse locations for each product/sub-product from inventory lots
+        const itemsWithStock = items.filter(item => item.product);
+        if (itemsWithStock.length > 0) {
           try {
-            // Fetch inventory lots for these products
-            const lotsPromises = productIds.map(productId =>
-              apiRequest(`/inventory/lots?product=${productId}&status=Active`)
+            // Fetch inventory lots for each product/sub-product
+            const lotsPromises = itemsWithStock.map(item =>
+              apiRequest(`/inventory/lots?product=${item.product}${item.subProduct ? `&subProduct=${item.subProduct}` : ''}&status=Active`)
             );
             
             const lotsResponses = await Promise.all(lotsPromises);
             
-            // Map product to warehouse locations with quantities
+            // Map product/sub-product to warehouse locations with quantities
             const productWarehouseMap = {};
             lotsResponses.forEach((response, index) => {
-              const productId = productIds[index];
+              const item = itemsWithStock[index];
+              const key = item.subProduct || item.product;
               if (response.success && response.data) {
-                productWarehouseMap[productId] = [];
+                productWarehouseMap[key] = [];
                 
                 // Group lots by warehouse
                 const warehouseStockMap = {};
@@ -212,14 +212,14 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                 });
                 
                 // Convert to array
-                productWarehouseMap[productId] = Object.values(warehouseStockMap);
+                productWarehouseMap[key] = Object.values(warehouseStockMap);
               }
             });
             
             // Add warehouse info to items
             const itemsWithWarehouses = items.map(item => ({
               ...item,
-              warehouses: productWarehouseMap[item.product] || []
+              warehouses: productWarehouseMap[item.subProduct || item.product] || []
             }));
             
             console.log('📦 Warehouse data for products:', productWarehouseMap);
@@ -285,26 +285,74 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
   const handleItemChange = (index, field, value) => {
     const updatedItems = [...formData.items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      [field]: value
-    };
+    const item = { ...updatedItems[index] };
+    item[field] = value;
 
     // Calculate pending quantity and weight when dispatch quantity changes
     if (field === 'dispatchQuantity') {
-      const orderedQty = updatedItems[index].orderedQuantity || 0;
+      const orderedQty = item.orderedQuantity || 0;
       const dispatchQty = parseFloat(value) || 0;
-      updatedItems[index].pendingQuantity = Math.max(0, orderedQty - dispatchQty);
+      item.pendingQuantity = Math.max(0, orderedQty - dispatchQty);
       
-      // Auto-calculate proportional weight based on dispatch quantity
-      const weightPerUnit = updatedItems[index].weightPerUnit || 0;
-      updatedItems[index].weight = parseFloat((dispatchQty * weightPerUnit).toFixed(2));
+      if (item.subProduct) {
+        const orderedWeights = item.orderedSubProductWeights || [];
+        item.subProductWeights = orderedWeights.slice(0, dispatchQty);
+        item.weight = item.subProductWeights.reduce((sum, w) => sum + (Number(w) || 0), 0);
+      } else {
+        // Auto-calculate proportional weight based on dispatch quantity
+        const weightPerUnit = item.weightPerUnit || 0;
+        item.weight = parseFloat((dispatchQty * weightPerUnit).toFixed(2));
+      }
     }
 
+    // When total weight is manually edited, update the item weight (and sub-product weights if applicable)
+    if (field === 'weight') {
+      const total = parseFloat(value) || 0;
+      item.weight = total;
+      if (item.subProduct) {
+        const qty = Math.max(1, parseFloat(item.dispatchQuantity) || 1);
+        item.subProductWeights = Array.from({ length: Math.floor(qty) }, () => total / qty);
+      }
+    }
+
+    updatedItems[index] = item;
     setFormData(prev => ({
       ...prev,
       items: updatedItems
     }));
+  };
+
+  const handleSubProductWeightsChange = (index, weights) => {
+    const updatedItems = [...formData.items];
+    updatedItems[index] = {
+      ...updatedItems[index],
+      subProductWeights: weights,
+      weight: weights.reduce((sum, w) => sum + (Number(w) || 0), 0)
+    };
+    setFormData(prev => ({ ...prev, items: updatedItems }));
+  };
+
+  // Group dispatch items by product so multiple sub-product rows render under one product header
+  const getProductGroups = (items) => {
+    const groups = [];
+    const seen = new Map();
+    items.forEach((item, index) => {
+      const key = item.product || `__empty__${index}`;
+      if (!seen.has(key)) {
+        seen.set(key, {
+          product: item.product,
+          productName: item.productName,
+          productCode: item.productCode,
+          unit: item.unit,
+          indices: [],
+          items: []
+        });
+        groups.push(seen.get(key));
+      }
+      seen.get(key).indices.push(index);
+      seen.get(key).items.push(item);
+    });
+    return groups;
   };
 
   const handleAddSO = () => {
@@ -322,15 +370,14 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       const successMsg = `✅ Sales Order ${newSO.soNumber || 'created'} successfully! Auto-selecting...`;
       setSuccessMessage(successMsg);
       
-      // Reload SOs and auto-select the new one
-      await loadSalesOrders();
-      
-      // Small delay to ensure SO is in the list, then auto-select
-      setTimeout(() => {
-        handleSOSelection(newSO._id);
-        // Clear success message after selection
-        setTimeout(() => setSuccessMessage(''), 3000);
-      }, 300);
+      // Optimistically add the new SO and refresh the list
+      setSalesOrders(prev => [newSO, ...prev]);
+      await refreshSOs();
+
+      // Auto-select the new SO
+      handleSOSelection(newSO._id);
+      // Clear success message after selection
+      setTimeout(() => setSuccessMessage(''), 3000);
     }
   };
 
@@ -374,6 +421,14 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
         setError(`Dispatch quantity for ${item.productName} cannot exceed remaining quantity (${maxDispatch} ${item.unit})`);
         return false;
       }
+
+      // Check if total weight exceeds the remaining weight for the SO item
+      const maxWeight = maxDispatch * (item.weightPerUnit || 0);
+      const itemWeight = parseFloat(item.weight || 0);
+      if (maxWeight > 0 && itemWeight > maxWeight) {
+        setError(`Dispatch weight for ${item.productName} cannot exceed remaining weight (${maxWeight.toFixed(2)} kg)`);
+        return false;
+      }
     }
 
     return true;
@@ -406,6 +461,9 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             product: item.product,
             productName: item.productName || '',
             productCode: item.productCode || '',
+            subProduct: item.subProduct || null,
+            subProductName: item.subProductName || null,
+            subProductWeights: Array.isArray(item.subProductWeights) ? item.subProductWeights : [],
             orderedQuantity: parseFloat(item.orderedQuantity) || 0,
             dispatchQuantity: parseFloat(item.dispatchQuantity) || 0,
             unit: item.unit || '',
@@ -529,8 +587,12 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                   searchPlaceholder="Search by SO number or customer..."
                   getOptionLabel={(so) => `${so.soNumber} - ${so.customer?.companyName || 'Unknown Customer'}`}
                   getOptionValue={(so) => so._id}
-                  onSearch={loadSalesOrders}
+                  onSearch={handleSOSearch}
                   loading={loadingSOs || loadingSODetails}
+                  loadingMore={loadingMoreSOs}
+                  hasMore={hasMoreSOs}
+                  onLoadMore={loadMoreSOs}
+                  total={totalSOs}
                   disabled={loadingSODetails}
                   onAddNew={handleAddSO}
                   addNewLabel="Add SO"
@@ -643,8 +705,8 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white hover:border-purple-400 transition-all appearance-none"
                   >
                     <option value="">Select Warehouse Location</option>
-                    {WAREHOUSE_LOCATIONS.map(warehouse => (
-                      <option key={warehouse.id} value={warehouse.id}>
+                    {warehouseLocations.map(warehouse => (
+                      <option key={warehouse._id} value={warehouse._id}>
                         {warehouse.name}
                       </option>
                     ))}
@@ -680,12 +742,14 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
           {/* Items to Dispatch */}
           {!loadingSODetails && formData.items && formData.items.length > 0 && (() => {
-            // Filter out fully dispatched items
-            const itemsToDispatch = formData.items.filter(item => {
-              const dispatchedQty = item.previouslyDispatched || 0;
-              const maxDispatch = item.orderedQuantity - dispatchedQty;
-              return maxDispatch > 0; // Only show items with remaining quantity
-            });
+            // Filter out fully dispatched items while preserving original formData index
+            const itemsToDispatch = formData.items
+              .map((item, originalIndex) => ({ ...item, originalIndex }))
+              .filter(item => {
+                const dispatchedQty = item.previouslyDispatched || 0;
+                const maxDispatch = item.orderedQuantity - dispatchedQty;
+                return maxDispatch > 0; // Only show items with remaining quantity
+              });
 
             return itemsToDispatch.length > 0 ? (
               <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 shadow-sm border border-orange-100">
@@ -714,128 +778,174 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
                 {/* Table Body */}
                 <div className="border-l border-r border-b border-gray-200 rounded-b-lg">
-                  {itemsToDispatch.map((item, index) => {
-                    const dispatchedQty = item.previouslyDispatched || 0;
-                    const maxDispatch = item.orderedQuantity - dispatchedQty;
-                    const currentDispatch = parseFloat(item.dispatchQuantity || 0);
-                    const totalAfterThis = dispatchedQty + currentDispatch;
-                    const progress = ((totalAfterThis) / item.orderedQuantity * 100).toFixed(0);
-                  
-                  return (
-                    <div key={index} className="px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
-                      <div className="grid grid-cols-12 gap-4 items-center">
-                        {/* Product */}
-                        <div className="col-span-2">
-                          <div className="font-medium text-gray-900 text-sm">{item.productName}</div>
-                          {item.notes && (
-                            <div className="text-xs text-blue-600 italic mt-1 bg-blue-50 px-2 py-1 rounded inline-block">
-                              📝 {item.notes}
-                            </div>
+                  {getProductGroups(itemsToDispatch).map((group, groupIndex) => (
+                    <div key={groupIndex}>
+                      {/* Product header */}
+                      <div className="px-4 py-2 bg-blue-100 border-b border-gray-200 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-gray-900">{group.productName}</span>
+                          {group.productCode && (
+                            <span className="text-xs text-gray-500">({group.productCode})</span>
                           )}
+                          <span className="text-xs text-blue-700 font-medium">Unit: {group.unit}</span>
                         </div>
+                        <span className="text-xs text-gray-500">
+                          {group.items.length} sub-product row(s)
+                        </span>
+                      </div>
+                      {group.items.map((item, rowIndex) => {
+                        const originalIndex = item.originalIndex;
+                        const dispatchedQty = item.previouslyDispatched || 0;
+                        const maxDispatch = item.orderedQuantity - dispatchedQty;
+                        const currentDispatch = parseFloat(item.dispatchQuantity || 0);
+                        const totalAfterThis = dispatchedQty + currentDispatch;
+                        const progress = ((totalAfterThis) / item.orderedQuantity * 100).toFixed(0);
 
-                        {/* Warehouse */}
-                        <div className="col-span-2">
-                          {item.warehouses && item.warehouses.length > 0 ? (
-                            <div className="text-xs space-y-1">
-                              {item.warehouses.map((whData, idx) => (
-                                <div key={idx} className="flex flex-col">
-                                  <div className="flex items-center text-purple-600 font-medium">
-                                    <span className="mr-1">📍</span>
-                                    <span>{getWarehouseName(whData.warehouse)}</span>
+                        return (
+                          <div key={originalIndex} className="px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
+                            <div className="grid grid-cols-12 gap-4 items-center">
+                              {/* Product / Sub Product */}
+                              <div className="col-span-2">
+                                {item.subProductName ? (
+                                  <div className="text-sm font-semibold text-green-700">{item.productName} X {item.subProductName}</div>
+                                ) : (
+                                  <div className="text-xs text-gray-400">-</div>
+                                )}
+                                {item.notes && (
+                                  <div className="text-xs text-blue-600 italic mt-1 bg-blue-50 px-2 py-1 rounded inline-block">
+                                    📝 {item.notes}
                                   </div>
-                                  <div className="text-xs text-gray-500 ml-4">
-                                    Stock: {whData.availableQuantity} {item.unit}
+                                )}
+                              </div>
+
+                              {/* Warehouse */}
+                              <div className="col-span-2">
+                                {item.warehouses && item.warehouses.length > 0 ? (
+                                  <div className="text-xs space-y-1">
+                                    {item.warehouses.map((whData, idx) => (
+                                      <div key={idx} className="flex flex-col">
+                                        <div className="flex items-center text-purple-600 font-medium">
+                                          <span className="mr-1">📍</span>
+                                          <span>{getWarehouseName(whData.warehouse)}</span>
+                                        </div>
+                                        <div className="text-xs text-gray-500 ml-4">
+                                          Stock: {whData.availableQuantity} {item.unit}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-gray-400">No stock</div>
+                                )}
+                              </div>
+
+                              {/* Ordered */}
+                              <div className="col-span-2 text-center">
+                                <div className="text-sm font-medium text-gray-900">{item.orderedQuantity} {item.unit}</div>
+                                <div className="text-xs text-gray-500">{parseFloat(item.totalSOWeight || item.weight || 0).toFixed(2)} kg</div>
+                              </div>
+
+                              {/* Previously Dispatched */}
+                              <div className="col-span-1 text-center">
+                                <div className="text-sm font-medium text-blue-600">{dispatchedQty}</div>
+                                <div className="text-xs text-gray-500">Max: {maxDispatch}</div>
+                              </div>
+
+                              {/* Dispatching Now */}
+                              <div className="col-span-2">
+                                <div className="flex gap-2">
+                                  <div className="relative flex-1">
+                                    <input
+                                      type="number"
+                                      value={item.dispatchQuantity}
+                                      onChange={(e) => handleItemChange(originalIndex, 'dispatchQuantity', e.target.value)}
+                                      required
+                                      min="0.01"
+                                      max={maxDispatch}
+                                      step="0.01"
+                                      className="w-full px-2 py-1.5 pr-12 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                      placeholder="0"
+                                    />
+                                    <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
+                                      {item.unit}
+                                    </span>
                                   </div>
                                 </div>
-                              ))}
+                                {/* Weight Input */}
+                                <div className="relative mt-1">
+                                  <input
+                                    type="number"
+                                    value={parseFloat(item.weight || 0).toFixed(2)}
+                                    onChange={(e) => handleItemChange(originalIndex, 'weight', e.target.value)}
+                                    min="0"
+                                    step="0.01"
+                                    className={`w-full px-2 py-1.5 pr-8 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 ${item.subProduct ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                    placeholder="Weight"
+                                    disabled={!!item.subProduct}
+                                    readOnly={!!item.subProduct}
+                                  />
+                                  <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
+                                    kg
+                                  </span>
+                                  {item.subProduct && (
+                                    <span className="text-xs text-green-600 block mt-0.5">Auto-calculated</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Pending */}
+                              <div className="col-span-2 text-center">
+                                <div className="text-sm font-medium text-orange-600">
+                                  {(item.orderedQuantity - dispatchedQty - parseFloat(item.dispatchQuantity || 0)).toFixed(2)} {item.unit}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {((item.orderedQuantity - dispatchedQty - parseFloat(item.dispatchQuantity || 0)) * (item.weight / item.orderedQuantity)).toFixed(2)} kg
+                                </div>
+                              </div>
+
+                              {/* Mark Complete Checkbox */}
+                              <div className="col-span-1 flex flex-col items-center justify-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={item.markAsComplete || false}
+                                  onChange={(e) => {
+                                    const updatedItems = [...formData.items];
+                                    updatedItems[originalIndex].markAsComplete = e.target.checked;
+                                    setFormData(prev => ({ ...prev, items: updatedItems }));
+                                  }}
+                                  disabled={maxDispatch <= 0}
+                                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={maxDispatch <= 0 ? 'Already fully dispatched' : 'Mark this item as complete even if quantity doesn\'t match (e.g., due to losses)'}
+                                />
+                                {item.markAsComplete && (
+                                  <span className="text-xs text-green-600 font-medium">Final</span>
+                                )}
+                              </div>
                             </div>
-                          ) : (
-                            <div className="text-xs text-gray-400">No stock</div>
-                          )}
-                        </div>
 
-                        {/* Ordered */}
-                        <div className="col-span-2 text-center">
-                          <div className="text-sm font-medium text-gray-900">{item.orderedQuantity} {item.unit}</div>
-                          <div className="text-xs text-gray-500">{parseFloat(item.totalSOWeight || item.weight || 0).toFixed(2)} kg</div>
-                        </div>
-
-                        {/* Previously Dispatched */}
-                        <div className="col-span-1 text-center">
-                          <div className="text-sm font-medium text-blue-600">{dispatchedQty}</div>
-                          <div className="text-xs text-gray-500">Max: {maxDispatch}</div>
-                        </div>
-
-                        {/* Dispatching Now */}
-                        <div className="col-span-2">
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <input
-                                type="number"
-                                value={item.dispatchQuantity}
-                                onChange={(e) => handleItemChange(index, 'dispatchQuantity', e.target.value)}
-                                required
-                                min="0.01"
-                                max={maxDispatch}
-                                step="0.01"
-                                className="w-full px-2 py-1.5 pr-12 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                                placeholder="0"
-                              />
-                              <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
-                                {item.unit}
-                              </span>
-                            </div>
+                            {/* Per-unit weight inputs for sub-products */}
+                            {item.subProduct && item.dispatchQuantity > 0 && (
+                              <div className="col-span-12 mt-3">
+                                <SubProductSelector
+                                  productId={item.product}
+                                  selectedSubProduct={item.subProduct}
+                                  selectedSubProductName={item.subProductName}
+                                  quantity={item.dispatchQuantity}
+                                  weights={item.subProductWeights}
+                                  categoryHasSubProducts={true}
+                                  onSelectSubProduct={() => {}}
+                                  onWeightsChange={(weights) => handleSubProductWeightsChange(originalIndex, weights)}
+                                  disableSelection={true}
+                                  allowAddNew={false}
+                                  compact
+                                />
+                              </div>
+                            )}
                           </div>
-                          {/* Weight Input */}
-                          <div className="relative mt-1">
-                            <input
-                              type="number"
-                              value={parseFloat(item.weight || 0).toFixed(2)}
-                              onChange={(e) => handleItemChange(index, 'weight', e.target.value)}
-                              min="0"
-                              step="0.01"
-                              className="w-full px-2 py-1.5 pr-8 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
-                              placeholder="Weight"
-                            />
-                            <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
-                              kg
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Pending */}
-                        <div className="col-span-2 text-center">
-                          <div className="text-sm font-medium text-orange-600">
-                            {(item.orderedQuantity - dispatchedQty - parseFloat(item.dispatchQuantity || 0)).toFixed(2)} {item.unit}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {((item.orderedQuantity - dispatchedQty - parseFloat(item.dispatchQuantity || 0)) * (item.weight / item.orderedQuantity)).toFixed(2)} kg
-                          </div>
-                        </div>
-
-                        {/* Mark Complete Checkbox */}
-                        <div className="col-span-1 flex flex-col items-center justify-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={item.markAsComplete || false}
-                            onChange={(e) => {
-                              const updatedItems = [...formData.items];
-                              updatedItems[index].markAsComplete = e.target.checked;
-                              setFormData(prev => ({ ...prev, items: updatedItems }));
-                            }}
-                            disabled={maxDispatch <= 0}
-                            className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={maxDispatch <= 0 ? 'Already fully dispatched' : 'Mark this item as complete even if quantity doesn\'t match (e.g., due to losses)'}
-                          />
-                          {item.markAsComplete && (
-                            <span className="text-xs text-green-600 font-medium">Final</span>
-                          )}
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
-                    );
-                  })}
+                  ))}
                 </div>
               </div>
             ) : (

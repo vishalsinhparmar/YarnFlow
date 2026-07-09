@@ -33,6 +33,28 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
     });
   };
 
+  const getProductGroups = () => {
+    const groups = [];
+    const seen = new Map();
+    (order.items || []).forEach((item, index) => {
+      const key = item.product || `__empty__${index}`;
+      if (!seen.has(key)) {
+        seen.set(key, {
+          product: item.product,
+          productName: item.productName,
+          productCode: item.productCode,
+          unit: item.unit,
+          indices: [],
+          items: []
+        });
+        groups.push(seen.get(key));
+      }
+      seen.get(key).indices.push(index);
+      seen.get(key).items.push(item);
+    });
+    return groups;
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -132,7 +154,7 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
           <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 shadow-sm border border-gray-100">
             <div className="flex items-center mb-6">
               <Package className="h-6 w-6 text-blue-600 mr-3" />
-              <h3 className="text-xl font-semibold text-gray-900">Order Items ({order.items?.length || 0})</h3>
+              <h3 className="text-xl font-semibold text-gray-900">Order Items ({order.items?.length || 0} across {getProductGroups().length} product{getProductGroups().length !== 1 ? 's' : ''})</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -146,80 +168,105 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {order.items?.map((item, index) => {
-                    const dispatched = item.deliveredQuantity || item.shippedQuantity || 0;
-                    const pending = calculatePendingQty(item);
-                    const completion = calculateItemCompletion(item);
-                    const manuallyCompleted = item.manuallyCompleted || false;
-                    
-                    let itemStatus = 'Pending';
-                    if (manuallyCompleted || dispatched >= item.quantity) {
-                      itemStatus = 'Complete';
-                    } else if (dispatched > 0) {
-                      itemStatus = 'Partial';
-                    }
-                    
-                    return (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-900">{item.productName || 'N/A'}</div>
-                          <div className="text-sm text-gray-500">{item.productCode || ''}</div>
-                          {item.notes && (
-                            <div className="text-xs text-blue-600 italic bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
-                              📝 {item.notes}
+                  {getProductGroups().map((group, groupIndex) => (
+                    <React.Fragment key={groupIndex}>
+                      <tr className="bg-blue-50">
+                        <td className="px-6 py-2" colSpan="5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-bold text-gray-900">{group.productName || 'N/A'}</span>
+                              {group.productCode && (
+                                <span className="text-xs text-gray-500 ml-2">({group.productCode})</span>
+                              )}
                             </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-base text-gray-900">{item.quantity} {item.unit || 'Bags'}</div>
-                          {dispatched > 0 && (
-                            <p className="text-sm text-green-600">Dispatched: {dispatched} {item.unit || 'Bags'}</p>
-                          )}
-                          {!manuallyCompleted && pending > 0 && (
-                            <p className="text-sm text-orange-600">Pending: {pending} {item.unit || 'Bags'}</p>
-                          )}
-                          {manuallyCompleted && (
-                            <p className="text-sm text-green-600 font-medium">✓ Manually Completed</p>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-base text-gray-900">{item.weight ? `${item.weight.toFixed(2)} Kg` : 'N/A'}</div>
-                          {item.dispatchedWeight > 0 && (
-                            <p className="text-sm text-green-600">Dispatched: {item.dispatchedWeight.toFixed(2)} Kg</p>
-                          )}
-                          {!manuallyCompleted && pending > 0 && item.weight && (
-                            <p className="text-sm text-orange-600">Pending: {((pending / item.quantity) * item.weight).toFixed(2)} Kg</p>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
-                              <div 
-                                className={`h-2 rounded-full ${
-                                  completion === 100 ? 'bg-green-600' :
-                                  completion > 0 ? 'bg-yellow-600' :
-                                  'bg-gray-400'
-                                }`}
-                                style={{ width: `${Math.min(completion, 100)}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-sm font-medium text-gray-700 min-w-[45px]">
-                              {completion}%
-                            </span>
+                            <span className="text-xs text-blue-700 font-medium">Unit: {group.unit || 'Bags'}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            itemStatus === 'Complete' ? 'bg-green-100 text-green-800' :
-                            itemStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {itemStatus}
-                          </span>
-                        </td>
                       </tr>
-                    );
-                  })}
+                      {group.items.map((item, rowIndex) => {
+                        const dispatched = item.deliveredQuantity || item.shippedQuantity || 0;
+                        const pending = calculatePendingQty(item);
+                        const completion = calculateItemCompletion(item);
+                        const manuallyCompleted = item.manuallyCompleted || false;
+
+                        let itemStatus = 'Pending';
+                        if (manuallyCompleted || dispatched >= item.quantity) {
+                          itemStatus = 'Complete';
+                        } else if (dispatched > 0) {
+                          itemStatus = 'Partial';
+                        }
+
+                        return (
+                          <tr key={rowIndex} className="hover:bg-gray-50">
+                            <td className="px-6 py-4">
+                              {item.subProductName && (
+                                <div className="text-sm font-semibold text-green-700">
+                                  {item.productName} X {item.subProductName}
+                                </div>
+                              )}
+                              {Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0 && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Per-unit weights: {item.subProductWeights.map(w => Number(w).toFixed(2)).join(', ')} kg
+                                </div>
+                              )}
+                              {item.notes && (
+                                <div className="text-xs text-blue-600 italic bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
+                                  📝 {item.notes}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-base text-gray-900">{item.quantity} {item.unit || 'Bags'}</div>
+                              {dispatched > 0 && (
+                                <p className="text-sm text-green-600">Dispatched: {dispatched} {item.unit || 'Bags'}</p>
+                              )}
+                              {!manuallyCompleted && pending > 0 && (
+                                <p className="text-sm text-orange-600">Pending: {pending} {item.unit || 'Bags'}</p>
+                              )}
+                              {manuallyCompleted && (
+                                <p className="text-sm text-green-600 font-medium">✓ Manually Completed</p>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-base text-gray-900">{item.weight ? `${item.weight.toFixed(2)} Kg` : 'N/A'}</div>
+                              {item.dispatchedWeight > 0 && (
+                                <p className="text-sm text-green-600">Dispatched: {item.dispatchedWeight.toFixed(2)} Kg</p>
+                              )}
+                              {!manuallyCompleted && pending > 0 && item.weight && (
+                                <p className="text-sm text-orange-600">Pending: {((pending / item.quantity) * item.weight).toFixed(2)} Kg</p>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
+                                  <div
+                                    className={`h-2 rounded-full ${
+                                      completion === 100 ? 'bg-green-600' :
+                                      completion > 0 ? 'bg-yellow-600' :
+                                      'bg-gray-400'
+                                    }`}
+                                    style={{ width: `${Math.min(completion, 100)}%` }}
+                                  ></div>
+                                </div>
+                                <span className="text-sm font-medium text-gray-700 min-w-[45px]">
+                                  {completion}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                itemStatus === 'Complete' ? 'bg-green-100 text-green-800' :
+                                itemStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {itemStatus}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>

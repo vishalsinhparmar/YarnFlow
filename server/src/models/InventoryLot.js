@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import Counter from './Counter.js';
 
 // ============ INVENTORY LOT SCHEMA ============
 // Tracks inventory from GRN (Stock In) and Sales Challan (Stock Out)
@@ -43,6 +44,20 @@ const inventoryLotSchema = new mongoose.Schema({
   productName: {
     type: String,
     required: true
+  },
+  // Sub-product tracking (optional)
+  subProduct: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubProduct',
+    default: null
+  },
+  subProductName: {
+    type: String,
+    default: null
+  },
+  subProductWeights: {
+    type: [Number],
+    default: []
   },
   category: {
     type: mongoose.Schema.Types.ObjectId,
@@ -154,27 +169,33 @@ const inventoryLotSchema = new mongoose.Schema({
 // ===== PRE-SAVE HOOKS =====
 
 // Auto-generate lot number before saving
-inventoryLotSchema.pre('save', async function(next) {
-  if (!this.lotNumber) {
+inventoryLotSchema.pre("save", async function(next) {
     try {
-      const currentYear = new Date().getFullYear();
-      const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
-      
-      // Count lots for current month
-      const count = await mongoose.model('InventoryLot').countDocuments({
-        createdAt: {
-          $gte: new Date(currentYear, new Date().getMonth(), 1),
-          $lt: new Date(currentYear, new Date().getMonth() + 1, 1)
+
+        if (!this.lotNumber) {
+
+            const year = new Date().getFullYear();
+            const month = String(new Date().getMonth() + 1).padStart(2,"0");
+
+            const counter = await Counter.findByIdAndUpdate(
+                `LOT-${year}${month}`,
+                { $inc: { seq: 1 } },
+                {
+                    new: true,
+                    upsert: true
+                }
+            );
+
+            this.lotNumber =
+            `LOT${year}${month}${String(counter.seq).padStart(4,"0")}`;
+
         }
-      });
-      
-      this.lotNumber = `LOT${currentYear}${currentMonth}${String(count + 1).padStart(4, '0')}`;
-    } catch (error) {
-      return next(error);
+
+        next();
+
+    } catch(err){
+        next(err);
     }
-  }
-  
-  next();
 });
 
 // Calculate available quantity and update status before saving
@@ -194,8 +215,7 @@ inventoryLotSchema.pre('save', function(next) {
   next();
 });
 
-// ===== INDEXES =====
-inventoryLotSchema.index({ lotNumber: 1 });
+// ===== INDEXES ===== (lotNumber index is created by unique:true)
 inventoryLotSchema.index({ product: 1 });
 inventoryLotSchema.index({ supplier: 1 });
 inventoryLotSchema.index({ grn: 1 });

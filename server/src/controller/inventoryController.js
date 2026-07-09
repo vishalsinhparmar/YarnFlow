@@ -17,8 +17,9 @@ export const getInventoryProducts = async (req, res) => {
       limit = 20,
       search,
       category,
-      sortBy = 'latestReceiptDate',
-      sortOrder = 'desc'
+      sortBy = 'productName',
+      sortOrder = 'asc',
+      flat = 'false'
     } = req.query;
     console.log('search field',search);
     console.log('📊 Fetching inventory products:', { page, limit, search, category, sortBy, sortOrder });
@@ -40,20 +41,24 @@ export const getInventoryProducts = async (req, res) => {
     console.log('invetory lots',inventoryLots);
     console.log(`📦 Found ${inventoryLots.length} inventory lots`);
 
-    // Aggregate by product
+    // Aggregate by product only (not per sub-product)
+    // Each product appears once in the list; sub-product breakdown is inside subProducts[]
     const productAggregation = {};
     
     inventoryLots.forEach(lot => {
       if (!lot.product || !lot.product._id) return;
       
       const productKey = lot.product._id.toString();
+      const subProductId = lot.subProduct ? lot.subProduct.toString() : null;
       
       if (!productAggregation[productKey]) {
         productAggregation[productKey] = {
           productId: lot.product._id,
           productName: lot.product.productName || 'Unknown Product',
+          displayName: lot.product.productName || 'Unknown Product',
           categoryName: lot.product.category?.categoryName || 'Uncategorized',
           categoryId: lot.product.category?._id,
+          productCode: lot.product.productCode || '',
           unit: lot.unit || 'Units',
           currentStock: 0,
           receivedStock: 0,
@@ -61,47 +66,50 @@ export const getInventoryProducts = async (req, res) => {
           currentWeight: 0,
           receivedWeight: 0,
           issuedWeight: 0,
+          hasSubProducts: false,
+          subProductCount: 0,
           suppliers: new Set(),
           lots: [],
           latestReceiptDate: null
         };
       }
       
+      const agg = productAggregation[productKey];
+      
       // Aggregate quantities
-      productAggregation[productKey].currentStock += lot.currentQuantity || 0;
-      productAggregation[productKey].receivedStock += lot.receivedQuantity || 0;
+      agg.currentStock += lot.currentQuantity || 0;
+      agg.receivedStock += lot.receivedQuantity || 0;
       
       // Aggregate weights
       const lotReceivedWeight = lot.totalWeight || 0;
-      productAggregation[productKey].receivedWeight += lotReceivedWeight;
+      agg.receivedWeight += lotReceivedWeight;
       
       // Calculate issued quantity and weight from movements
       const issuedQty = lot.movements
         ?.filter(m => m.type === 'Issued')
         .reduce((sum, m) => sum + (m.quantity || 0), 0) || 0;
-      productAggregation[productKey].issuedStock += issuedQty;
+      agg.issuedStock += issuedQty;
       
       const issuedWeight = lot.movements
         ?.filter(m => m.type === 'Issued')
         .reduce((sum, m) => sum + (m.weight || 0), 0) || 0;
-      productAggregation[productKey].issuedWeight += issuedWeight;
-      
-      // Debug logging for weight tracking
-      if (issuedWeight > 0) {
-        console.log(`📊 Product ${lot.productName}: Issued weight from movements: ${issuedWeight.toFixed(2)} kg`);
-      }
+      agg.issuedWeight += issuedWeight;
       
       // Current weight = Received weight - Issued weight
-      productAggregation[productKey].currentWeight = 
-        productAggregation[productKey].receivedWeight - productAggregation[productKey].issuedWeight;
+      agg.currentWeight = agg.receivedWeight - agg.issuedWeight;
+      
+      // Track whether this product has any sub-products
+      if (subProductId) {
+        agg.hasSubProducts = true;
+      }
       
       // Track supplier
       if (lot.supplier?.companyName) {
-        productAggregation[productKey].suppliers.add(lot.supplier.companyName);
+        agg.suppliers.add(lot.supplier.companyName);
       }
       
       // Add lot detail
-      productAggregation[productKey].lots.push({
+      agg.lots.push({
         lotNumber: lot.lotNumber,
         lotId: lot._id,
         grnNumber: lot.grnNumber,
@@ -111,17 +119,28 @@ export const getInventoryProducts = async (req, res) => {
         status: lot.status,
         receivedDate: lot.receivedDate,
         supplierName: lot.supplierName || 'Unknown',
-        warehouse: lot.warehouse, // Include warehouse location
+        warehouse: lot.warehouse,
+        subProductId: lot.subProduct || null,
+        subProductName: lot.subProductName || null,
+        subProductWeights: lot.subProductWeights || [],
         movements: lot.movements || []
       });
       
       // Track latest receipt date
       if (lot.receivedDate) {
-        if (!productAggregation[productKey].latestReceiptDate || 
-            new Date(lot.receivedDate) > new Date(productAggregation[productKey].latestReceiptDate)) {
-          productAggregation[productKey].latestReceiptDate = lot.receivedDate;
+        if (!agg.latestReceiptDate || 
+            new Date(lot.receivedDate) > new Date(agg.latestReceiptDate)) {
+          agg.latestReceiptDate = lot.receivedDate;
         }
       }
+    });
+
+    // Compute distinct sub-product count per product
+    Object.values(productAggregation).forEach(agg => {
+      const subProductIds = new Set(
+        agg.lots.filter(l => l.subProductId).map(l => l.subProductId.toString())
+      );
+      agg.subProductCount = subProductIds.size;
     });
 
 
@@ -133,17 +152,21 @@ export const getInventoryProducts = async (req, res) => {
       return {
         productId: product.productId,
         productName: product.productName,
+        displayName: product.displayName,
         categoryName: product.categoryName,
         categoryId: product.categoryId,
+        productCode: product.productCode,
         unit: product.unit,
         currentStock: product.currentStock,
         receivedStock: product.receivedStock,
         issuedStock: product.issuedStock,
-        totalStock: product.currentStock, // Alias for backward compatibility
+        totalStock: product.currentStock,
         currentWeight: product.currentWeight,
         receivedWeight: product.receivedWeight,
         issuedWeight: product.issuedWeight,
-        totalWeight: product.currentWeight, // Alias for backward compatibility
+        totalWeight: product.currentWeight,
+        hasSubProducts: product.hasSubProducts,
+        subProductCount: product.subProductCount,
         suppliers: supplierList,
         supplierNames: supplierList.join(', '),
         lotCount: product.lots.length,
@@ -169,11 +192,15 @@ export const getInventoryProducts = async (req, res) => {
       products = products.filter(p => p.categoryId?.toString() === category);
     }
 
-    // Sort products by latest receipt date
+    // Sort products alphabetically by default (or by explicit sort parameter)
+    const order = sortOrder === 'desc' ? -1 : 1;
     products.sort((a, b) => {
-      const dateA = a.latestReceiptDate ? new Date(a.latestReceiptDate) : new Date(0);
-      const dateB = b.latestReceiptDate ? new Date(b.latestReceiptDate) : new Date(0);
-      return dateB - dateA; // Latest first
+      if (sortBy === 'latestReceiptDate') {
+        const dateA = a.latestReceiptDate ? new Date(a.latestReceiptDate) : new Date(0);
+        const dateB = b.latestReceiptDate ? new Date(b.latestReceiptDate) : new Date(0);
+        return (dateB - dateA) * order;
+      }
+      return a.productName?.localeCompare(b.productName || '') * order;
     });
 
     // Group products by category
@@ -211,10 +238,29 @@ export const getInventoryProducts = async (req, res) => {
     const totalProducts = products.length;
     const totalCategories = categorizedProducts.length;
 
-    // Apply pagination to categories (not individual products)
+    const isFlat = flat === 'true';
     const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    if (isFlat) {
+      // Return a flat paginated product list (useful for dropdowns)
+      const paginatedProducts = products.slice(skip, skip + parseInt(limit));
+      res.json({
+        success: true,
+        data: paginatedProducts,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(totalProducts / parseInt(limit)),
+          total: totalProducts,
+          totalProducts,
+          limit: parseInt(limit)
+        }
+      });
+      return;
+    }
+
+    // Apply pagination to categories (not individual products)
     const paginatedCategories = categorizedProducts.slice(skip, skip + parseInt(limit));
-    
+
     console.log('paginatedCategorized',paginatedCategories);
     res.json({
       success: true,
@@ -247,6 +293,7 @@ export const getAllInventoryLots = async (req, res) => {
       search,
       status,
       product,
+      subProduct,
       supplier,
       warehouse,
       qualityStatus,
@@ -273,6 +320,7 @@ export const getAllInventoryLots = async (req, res) => {
     // Apply filters
     if (status) filter.status = status;
     if (product) filter.product = product;
+    if (subProduct) filter.subProduct = subProduct;
     if (supplier) filter.supplier = supplier;
     if (warehouse) filter.warehouse = { $regex: warehouse, $options: 'i' };
     if (qualityStatus) filter.qualityStatus = qualityStatus;
@@ -848,11 +896,130 @@ export const getMovementHistory = async (req, res) => {
   }
 };
 
+// Get detailed inventory view for a single product, broken down by sub-product
+export const getProductInventoryDetail = async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const lots = await InventoryLot.find({
+      product: productId,
+      status: { $in: ['Active', 'Consumed'] }
+    })
+      .populate('product', 'productName productCode category')
+      .populate('supplier', 'companyName')
+      .populate({
+        path: 'product',
+        populate: { path: 'category', select: 'categoryName' }
+      })
+      .lean();
+
+    const subProductMap = {};
+    let totalCurrentStock = 0;
+    let totalReceivedStock = 0;
+    let totalIssuedStock = 0;
+    let totalReceivedWeight = 0;
+    let totalIssuedWeight = 0;
+
+    lots.forEach(lot => {
+      const key = lot.subProduct ? lot.subProduct.toString() : '__none__';
+      if (!subProductMap[key]) {
+        subProductMap[key] = {
+          subProductId: lot.subProduct || null,
+          subProductName: lot.subProductName || null,
+          currentStock: 0,
+          receivedStock: 0,
+          issuedStock: 0,
+          currentWeight: 0,
+          receivedWeight: 0,
+          issuedWeight: 0,
+          lots: []
+        };
+      }
+      const sp = subProductMap[key];
+      const issuedQty = lot.movements
+        ?.filter(m => m.type === 'Issued')
+        .reduce((sum, m) => sum + (m.quantity || 0), 0) || 0;
+      const issuedWeight = lot.movements
+        ?.filter(m => m.type === 'Issued')
+        .reduce((sum, m) => sum + (m.weight || 0), 0) || 0;
+      const receivedWeight = lot.totalWeight || 0;
+
+      sp.currentStock += lot.currentQuantity || 0;
+      sp.receivedStock += lot.receivedQuantity || 0;
+      sp.issuedStock += issuedQty;
+      sp.receivedWeight += receivedWeight;
+      sp.issuedWeight += issuedWeight;
+      sp.currentWeight = sp.receivedWeight - sp.issuedWeight;
+
+      totalCurrentStock += lot.currentQuantity || 0;
+      totalReceivedStock += lot.receivedQuantity || 0;
+      totalIssuedStock += issuedQty;
+      totalReceivedWeight += receivedWeight;
+      totalIssuedWeight += issuedWeight;
+
+      sp.lots.push({
+        lotNumber: lot.lotNumber,
+        lotId: lot._id,
+        grnNumber: lot.grnNumber,
+        receivedQuantity: lot.receivedQuantity,
+        currentQuantity: lot.currentQuantity,
+        issuedQuantity: issuedQty,
+        subProductWeights: lot.subProductWeights || [],
+        status: lot.status,
+        receivedDate: lot.receivedDate,
+        supplierName: lot.supplierName || 'Unknown',
+        warehouse: lot.warehouse,
+        movements: lot.movements || []
+      });
+    });
+
+    const productInfo = lots.length > 0 ? {
+      productId: lots[0].product._id,
+      productName: lots[0].product.productName,
+      productCode: lots[0].product.productCode,
+      categoryName: lots[0].product.category?.categoryName || 'Uncategorized',
+      unit: lots[0].unit || 'Units'
+    } : null;
+
+    const subProductBreakdown = Object.values(subProductMap).map(sp => ({
+      ...sp,
+      displayName: sp.subProductName && productInfo
+        ? `${productInfo.productName} X ${sp.subProductName}`
+        : (productInfo?.productName || 'Unknown')
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        product: productInfo,
+        totals: {
+          currentStock: totalCurrentStock,
+          receivedStock: totalReceivedStock,
+          issuedStock: totalIssuedStock,
+          currentWeight: totalReceivedWeight - totalIssuedWeight,
+          receivedWeight: totalReceivedWeight,
+          issuedWeight: totalIssuedWeight
+        },
+        subProductBreakdown,
+        lotsCount: lots.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching product inventory detail:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch product inventory detail',
+      error: error.message
+    });
+  }
+};
+
 export default {
   getInventoryProducts,
   getAllInventoryLots,
   getInventoryStats,
   getInventoryLotById,
+  getProductInventoryDetail,
   updateInventoryLot,
   stockMovement,
   transferStock,

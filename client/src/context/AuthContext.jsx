@@ -31,8 +31,6 @@ export const AuthProvider = ({ children }) => {
           console.error('Token verification failed:', error);
           localStorage.removeItem('token');
           localStorage.removeItem('user');
-          localStorage.removeItem('rememberedEmail');
-          localStorage.removeItem('rememberedPassword');
           setToken(null);
           setUser(null);
         }
@@ -54,14 +52,13 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', response.token);
       localStorage.setItem('user', JSON.stringify(response.data));
       
-      // Handle remember me functionality
+      // Handle remember me — store email only, NEVER the password
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', email);
-        localStorage.setItem('rememberedPassword', password);
       } else {
         localStorage.removeItem('rememberedEmail');
-        localStorage.removeItem('rememberedPassword');
       }
+      localStorage.removeItem('rememberedPassword');
       
       toast.success('Login successful!');
       return response;
@@ -94,6 +91,7 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('rememberedEmail');
     toast.success('Logged out successfully');
   };
 

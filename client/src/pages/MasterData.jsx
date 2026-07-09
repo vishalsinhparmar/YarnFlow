@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMasterData } from '../hooks/useMasterData';
-import ImportModal from '../components/ImportModal';
+import ExcelImportButton from '../components/common/ExcelImportButton';
+
+const CUSTOMER_SAMPLE_HEADERS = ['companyName', 'gstNumber', 'panNumber', 'city', 'notes'];
+const CUSTOMER_SAMPLE_DATA = [
+  { companyName: 'ABC Textiles Pvt Ltd', gstNumber: '27AABCU9603R1ZM', panNumber: 'AABCU9603R', city: 'Surat', notes: 'Key customer' },
+];
+const SUPPLIER_SAMPLE_HEADERS = ['companyName', 'gstNumber', 'panNumber', 'city', 'notes'];
+const SUPPLIER_SAMPLE_DATA = [
+  { companyName: 'Ramesh Yarn Traders', gstNumber: '24AABCR1234A1Z9', panNumber: 'AABCR1234A', city: 'Surat', notes: 'Primary supplier' },
+];
+const PRODUCT_SAMPLE_HEADERS = ['productName', 'category', 'description', 'subProducts'];
+const PRODUCT_SAMPLE_DATA = [
+  { productName: '600 Gaze', category: 'LD Category', description: 'LD plastic product', subProducts: '6,8,10,12,14' },
+];
+const CATEGORY_SAMPLE_HEADERS = ['categoryName', 'description', 'hasSubProducts'];
+const CATEGORY_SAMPLE_DATA = [
+  { categoryName: 'LD Category', description: 'Plastic LD products with size variants', hasSubProducts: 'true' },
+];
 
 const MasterData = () => {
   const navigate = useNavigate();
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedImportType, setSelectedImportType] = useState('customers');
   const {
     stats,
     customers,
@@ -20,15 +35,9 @@ const MasterData = () => {
   } = useMasterData();
 
   const handleImportSuccess = () => {
-    // Refresh all data after successful import
     fetchStats();
     fetchCustomers();
     fetchSuppliers();
-  };
-
-  const openImportModal = (type) => {
-    setSelectedImportType(type);
-    setShowImportModal(true);
   };
 
   if (loading && !stats) {
@@ -65,15 +74,9 @@ const MasterData = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Master Data Management</h1>
             <p className="text-gray-600">Manage customers, suppliers, products, and categories</p>
           </div>
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            Import Excel
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/master-data/customers')} className="text-sm text-gray-500 hover:text-gray-700 font-medium">Manage →</button>
+          </div>
         </div>
       </div>
 
@@ -90,7 +93,7 @@ const MasterData = () => {
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Customers</h3>
           <p className="text-sm text-gray-600 mb-3">
-            {stats?.customers?.active || 0} active customers
+            Total customers count
           </p>
           <div className="space-y-2">
             <button 
@@ -99,15 +102,14 @@ const MasterData = () => {
             >
               Manage Customers
             </button>
-            <button 
-              onClick={() => openImportModal('customers')}
-              className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-blue-200 flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              Import Excel
-            </button>
+            <ExcelImportButton
+              type="customers"
+              accentColor="blue"
+              fullWidth
+              sampleHeaders={CUSTOMER_SAMPLE_HEADERS}
+              sampleData={CUSTOMER_SAMPLE_DATA}
+              onImportSuccess={handleImportSuccess}
+            />
           </div>
         </div>
 
@@ -131,15 +133,14 @@ const MasterData = () => {
             >
               Manage Suppliers
             </button>
-            <button 
-              onClick={() => openImportModal('suppliers')}
-              className="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-purple-200 flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              Import Excel
-            </button>
+            <ExcelImportButton
+              type="suppliers"
+              accentColor="purple"
+              fullWidth
+              sampleHeaders={SUPPLIER_SAMPLE_HEADERS}
+              sampleData={SUPPLIER_SAMPLE_DATA}
+              onImportSuccess={handleImportSuccess}
+            />
           </div>
         </div>
 
@@ -163,15 +164,14 @@ const MasterData = () => {
             >
               Manage Products
             </button>
-            <button 
-              onClick={() => openImportModal('products')}
-              className="w-full bg-green-50 hover:bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-green-200 flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              Import Excel
-            </button>
+            <ExcelImportButton
+              type="products"
+              accentColor="green"
+              fullWidth
+              sampleHeaders={PRODUCT_SAMPLE_HEADERS}
+              sampleData={PRODUCT_SAMPLE_DATA}
+              onImportSuccess={handleImportSuccess}
+            />
           </div>
         </div>
 
@@ -193,15 +193,14 @@ const MasterData = () => {
             >
               Manage Categories
             </button>
-            <button 
-              onClick={() => openImportModal('categories')}
-              className="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-orange-200 flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              Import Excel
-            </button>
+            <ExcelImportButton
+              type="categories"
+              accentColor="orange"
+              fullWidth
+              sampleHeaders={CATEGORY_SAMPLE_HEADERS}
+              sampleData={CATEGORY_SAMPLE_DATA}
+              onImportSuccess={handleImportSuccess}
+            />
           </div>
         </div>
       </div>
@@ -241,12 +240,6 @@ const MasterData = () => {
                         </p>
                       </div>
                     </div>
-                    <span className={`text-xs font-medium ${
-                      customer.status === 'Active' ? 'text-green-600' : 
-                      customer.status === 'Inactive' ? 'text-gray-400' : 'text-red-600'
-                    }`}>
-                      {customer.status}
-                    </span>
                   </div>
                 );
               })
@@ -403,13 +396,6 @@ const MasterData = () => {
         </div>
       </div>
 
-      {/* Import Modal */}
-      <ImportModal 
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onSuccess={handleImportSuccess}
-        defaultType={selectedImportType}
-      />
     </div>
   );
 };

@@ -5,8 +5,7 @@ const salesOrderSchema = new mongoose.Schema({
   // Order Identification
   soNumber: {
     type: String,
-    unique: true,
-    index: true
+    unique: true
   },
   
   // Customer Information
@@ -47,6 +46,19 @@ const salesOrderSchema = new mongoose.Schema({
       required: true
     },
     productName: { type: String, required: true },
+    subProduct: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SubProduct',
+      default: null
+    },
+    subProductName: {
+      type: String,
+      default: null
+    },
+    subProductWeights: {
+      type: [Number],
+      default: []
+    },
     
     // Quantities
     quantity: { type: Number, required: true, min: 0 },
@@ -70,8 +82,7 @@ const salesOrderSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['Draft', 'Pending', 'Processing', 'Delivered', 'Cancelled'],
-    default: 'Draft',
-    index: true
+    default: 'Draft'
   },
   
   // Audit
@@ -83,8 +94,7 @@ const salesOrderSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes for better performance
-salesOrderSchema.index({ soNumber: 1 });
+// Indexes for better performance (soNumber index is created by unique:true)
 salesOrderSchema.index({ customer: 1 });
 salesOrderSchema.index({ status: 1 });
 salesOrderSchema.index({ orderDate: -1 });

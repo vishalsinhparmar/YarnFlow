@@ -21,6 +21,11 @@ export const inventoryAPI = {
     return apiRequest(`/inventory${queryString ? `?${queryString}` : ''}`);
   },
 
+  // Get product-level inventory detail with sub-product breakdown
+  getProductDetail: async (productId) => {
+    return apiRequest(`/inventory/product/${productId}`);
+  },
+
   // Note: All inventory operations are now handled through GRN-based endpoints
   // Legacy methods have been removed as inventory is the single source of truth from GRNs
 };

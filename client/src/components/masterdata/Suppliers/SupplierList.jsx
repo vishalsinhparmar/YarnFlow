@@ -152,9 +152,6 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
                   City
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -188,17 +185,6 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
                         {supplier.city || supplier.address?.city || 'N/A'}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        supplier.status === 'Active' 
-                          ? 'bg-green-100 text-green-800' 
-                          : supplier.status === 'Inactive'
-                          ? 'bg-gray-100 text-gray-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {supplier.status || 'Active'}
-                      </span>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-3">
                         <button
@@ -223,7 +209,7 @@ const SupplierList = ({ onEdit, onRefresh, refreshTrigger }) => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
                     No suppliers found
                   </td>
                 </tr>

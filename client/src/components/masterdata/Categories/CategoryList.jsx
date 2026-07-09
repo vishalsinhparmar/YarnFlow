@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Edit2, Trash2, Loader2, Search, FolderOpen } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Edit2, Trash2, Loader2, Search, Layers, ArrowRight } from 'lucide-react';
 import { categoryAPI, handleAPIError } from '../../../services/masterDataAPI';
 import Pagination from '../../common/Pagination';
 import SimpleDeleteModal from '../../common/SimpleDeleteModal';
 import useToast from '../../../hooks/useToast';
 
 const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
+  const navigate = useNavigate();
   const { categoryToasts } = useToast();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -144,30 +146,41 @@ const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
                       {category.categoryName}
                     </h3>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ${
-                    category.status === 'Active' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {category.status}
-                  </span>
                 </div>
 
                 {/* Description */}
-                <div className="mb-4">
+                <div className="mb-3">
                   <p className="text-sm text-gray-600 line-clamp-3">
                     {category.description || 'No description available'}
                   </p>
                 </div>
 
+                {/* Sub Products Badge */}
+                {category.hasSubProducts && (
+                  <div className="mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                      <Layers className="w-3 h-3" />
+                      Has Sub Products
+                    </span>
+                  </div>
+                )}
+
                 {/* Action Buttons */}
-                <div className="flex justify-end space-x-2 pt-3 border-t">
+                <div className="flex items-center justify-between pt-3 border-t gap-2">
+                  <button
+                    onClick={() => navigate(`/master-data/products?category=${category._id}`)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors flex-1 justify-center"
+                    title="View products in this category"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    View Products
+                  </button>
                   <button
                     onClick={() => onEdit(category)}
                     className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-50 rounded-lg hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors"
                     title="Edit category"
                   >
-                    <Edit2 className="w-4 h-4 mr-1.5" />
+                    <Edit2 className="w-3.5 h-3.5 mr-1" />
                     Edit
                   </button>
                   <button
@@ -175,7 +188,7 @@ const CategoryList = ({ onEdit, onRefresh, refreshTrigger }) => {
                     className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
                     title="Delete category"
                   >
-                    <Trash2 className="w-4 h-4 mr-1.5" />
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
                     Delete
                   </button>
                 </div>

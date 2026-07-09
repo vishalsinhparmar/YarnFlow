@@ -1,5 +1,6 @@
 import PurchaseOrder from '../models/PurchaseOrder.js';
 import Product from '../models/Product.js';
+import SubProduct from '../models/SubProduct.js';
 import Supplier from '../models/Supplier.js';
 import Category from '../models/Category.js';
 
@@ -16,7 +17,9 @@ export const getAllPurchaseOrders = async (req, res) => {
       status, 
       dateFrom,
       dateTo,
-      overdue 
+      overdue,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
     } = req.query;
     
     let query = {};
@@ -52,13 +55,17 @@ export const getAllPurchaseOrders = async (req, res) => {
       query.status = { $nin: ['Fully_Received', 'Cancelled', 'Closed'] };
     }
     
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
     const purchaseOrders = await PurchaseOrder.find(query)
       .populate('supplier', 'companyName gstNumber')
       .populate('category', 'categoryName')
       .populate('items.product', 'productName')
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+      .populate('items.subProduct', 'name')
+      .sort(sortOptions)
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit));
     
     const total = await PurchaseOrder.countDocuments(query);
     
@@ -90,7 +97,8 @@ export const getPurchaseOrderById = async (req, res) => {
     const purchaseOrder = await PurchaseOrder.findById(id)
       .populate('supplier', 'companyName gstNumber')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName');
+      .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name');
     
     if (!purchaseOrder) {
       return res.status(404).json({
@@ -163,13 +171,40 @@ export const createPurchaseOrder = async (req, res) => {
           message: `Product "${product.productName}" does not belong to the selected category`
         });
       }
-      
+
+      // Validate sub-product if provided
+      let subProduct = null;
+      let subProductName = null;
+      if (item.subProduct) {
+        subProduct = await SubProduct.findById(item.subProduct);
+        if (!subProduct || subProduct.product.toString() !== product._id.toString()) {
+          return res.status(400).json({
+            success: false,
+            message: `Sub-product not found or does not belong to "${product.productName}"`
+          });
+        }
+        subProductName = subProduct.name;
+      }
+
+      // Per-unit weights for sub-product items
+      const subProductWeights = Array.isArray(item.subProductWeights)
+        ? item.subProductWeights.slice(0, item.quantity)
+        : [];
+
+      // If sub-product weights are provided, total weight is their sum
+      const totalWeight = subProductWeights.length > 0
+        ? subProductWeights.reduce((sum, w) => sum + (Number(w) || 0), 0)
+        : (Number(item.weight) || 0);
+
       const populatedItem = {
         product: product._id,
         productName: product.productName,
         productCode: product.productCode,
+        subProduct: subProduct?._id || null,
+        subProductName: subProductName || item.subProductName || null,
+        subProductWeights,
         quantity: item.quantity,
-        weight: item.weight || 0,
+        weight: totalWeight,
         unit: item.unit || 'Bags',
         notes: item.notes || ''
       };
@@ -198,7 +233,8 @@ export const createPurchaseOrder = async (req, res) => {
     const populatedPO = await PurchaseOrder.findById(purchaseOrder._id)
       .populate('supplier', 'companyName gstNumber')
       .populate('category', 'categoryName')
-      .populate('items.product', 'productName');
+      .populate('items.product', 'productName')
+      .populate('items.subProduct', 'name');
     
     res.status(201).json({
       success: true,
@@ -257,13 +293,24 @@ export const updatePurchaseOrder = async (req, res) => {
             });
           }
           
+          // Per-unit weights for sub-product items
+          const subProductWeights = Array.isArray(item.subProductWeights)
+            ? item.subProductWeights.slice(0, item.quantity)
+            : [];
+          const totalWeight = subProductWeights.length > 0
+            ? subProductWeights.reduce((sum, w) => sum + (Number(w) || 0), 0)
+            : (Number(item.weight) || 0);
+
           // Populate item with product details
           populatedItems.push({
             product: product._id,
             productName: product.productName,
             productCode: product.productCode,
+            subProduct: item.subProduct || null,
+            subProductName: item.subProductName || null,
+            subProductWeights,
             quantity: item.quantity,
-            weight: item.weight || 0,
+            weight: totalWeight,
             unit: item.unit || 'Bags',
             notes: item.notes || '',
             // Preserve existing receipt data if any
@@ -285,7 +332,8 @@ export const updatePurchaseOrder = async (req, res) => {
       { new: true, runValidators: true }
     )
     .populate('supplier', 'companyName gstNumber')
-    .populate('items.product', 'productName');
+    .populate('items.product', 'productName')
+    .populate('items.subProduct', 'name');
     
     res.status(200).json({
       success: true,

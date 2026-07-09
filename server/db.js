@@ -6,11 +6,7 @@ const connectDB = async () => {
         // Use environment variable for database URI, fallback to local MongoDB
         const dbURI = process.env.MONGODB_URI || process.env.DATABASE_URL || "mongodb://localhost:27017/";
         
-        await mongoose.connect(dbURI, {
-            // Modern MongoDB connection options
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
+        await mongoose.connect(dbURI);
         
         logger.info(`✅ Database connected successfully to: ${mongoose.connection.host}`);
         console.log(`✅ Database connected successfully to: ${mongoose.connection.host}`);

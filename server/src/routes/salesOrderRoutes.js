@@ -12,8 +12,10 @@ import {
   recalculateAllSOStatuses
 } from '../controller/salesOrderController.js';
 import { validateSalesOrder, validateSalesOrderUpdate } from '../validators/salesOrderValidator.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(authMiddleware);
 
 // Statistics
 router.get('/stats', getSalesOrderStats);

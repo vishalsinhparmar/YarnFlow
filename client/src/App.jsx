@@ -17,6 +17,11 @@ import CustomersPage from "./pages/CustomersPage";
 import SuppliersPage from "./pages/SuppliersPage";
 import ProductsPage from "./pages/ProductsPage";
 import CategoriesPage from "./pages/CategoriesPage";
+import SubProductsPage from "./pages/SubProductsPage";
+import CompanyProfilePage from "./pages/CompanyProfilePage";
+import WarehouseLocationsPage from "./pages/WarehouseLocationsPage";
+import UsersPage from "./pages/UsersPage";
+import ReportsPage from "./pages/ReportsPage";
 
 const App = () => {
   return (
@@ -50,6 +55,11 @@ const App = () => {
             <Route path="master-data/suppliers" element={<SuppliersPage />} />
             <Route path="master-data/products" element={<ProductsPage />} />
             <Route path="master-data/categories" element={<CategoriesPage />} />
+            <Route path="master-data/sub-products" element={<SubProductsPage />} />
+            <Route path="company-profile" element={<CompanyProfilePage />} />
+            <Route path="configuration/warehouses" element={<WarehouseLocationsPage />} />
+            <Route path="configuration/users" element={<UsersPage />} />
+            <Route path="reports" element={<ReportsPage />} />
           </Route>
 
           {/* Test route outside main layout */}

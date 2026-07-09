@@ -14,6 +14,28 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
 
   const completionPercentage = poUtils.calculateCompletion(purchaseOrder.items);
 
+  const getProductGroups = () => {
+    const groups = [];
+    const seen = new Map();
+    (purchaseOrder.items || []).forEach((item, index) => {
+      const key = item.product || `__empty__${index}`;
+      if (!seen.has(key)) {
+        seen.set(key, {
+          product: item.product,
+          productName: item.productName,
+          productCode: item.productCode,
+          unit: item.unit,
+          indices: [],
+          items: []
+        });
+        groups.push(seen.get(key));
+      }
+      seen.get(key).indices.push(index);
+      seen.get(key).items.push(item);
+    });
+    return groups;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -108,64 +130,89 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose }) => {
         <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center">
             <Package className="w-5 h-5 mr-2 text-orange-600" />
-            Items ({purchaseOrder.items?.length || 0})
+            Items ({purchaseOrder.items?.length || 0} across {getProductGroups().length} product{getProductGroups().length !== 1 ? 's' : ''})
           </h3>
         </div>
-        
+
         <div className="divide-y divide-gray-200">
-          {purchaseOrder.items?.map((item, index) => (
-            <div key={index} className="p-6 hover:bg-orange-50 transition-colors">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Product</label>
-                  <p className="text-base font-semibold text-gray-900">{item.productName}</p>
-                  <p className="text-sm text-gray-500">{item.productCode}</p>
-                  {item.notes && (
-                    <div className="text-xs text-blue-600 mt-1 italic bg-blue-50 px-2 py-1 rounded inline-flex items-center gap-1">
-                      <FileText className="w-3 h-3" />
-                      {item.notes}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Quantity</label>
-                  <p className="text-base font-medium text-gray-900">{item.quantity} {item.unit}</p>
-                  {item.receivedQuantity > 0 && (
-                    <p className="text-sm text-green-600 font-medium flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Received: {item.receivedQuantity} {item.unit}
-                    </p>
-                  )}
-                  {item.receivedQuantity > 0 && !item.manuallyCompleted && item.receivedQuantity < item.quantity && (
-                    <p className="text-sm text-orange-600 font-medium flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Pending: {item.quantity - item.receivedQuantity} {item.unit}
-                    </p>
-                  )}
-                  {item.manuallyCompleted && (
-                    <p className="text-sm text-green-600 font-semibold flex items-center gap-1">
-                      <CheckCircle className="w-4 h-4" />
-                      Manually Completed
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weight</label>
-                  <p className="text-base font-medium text-gray-900">{(item.weight || item.specifications?.weight || 0)} Kg</p>
-                  {item.receivedWeight > 0 && (
-                    <p className="text-sm text-green-600 font-medium flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Received: {item.receivedWeight.toFixed(2)} Kg
-                    </p>
-                  )}
-                  {item.receivedWeight > 0 && !item.manuallyCompleted && item.receivedWeight < (item.weight || 0) && (
-                    <p className="text-sm text-orange-600 font-medium flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Pending: {((item.weight || 0) - item.receivedWeight).toFixed(2)} Kg
-                    </p>
-                  )}
+          {getProductGroups().map((group, groupIndex) => (
+            <div key={groupIndex} className="p-6 hover:bg-orange-50 transition-colors">
+              <div className="mb-4 pb-3 border-b border-orange-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Product</label>
+                    <p className="text-lg font-semibold text-gray-900">{group.productName}</p>
+                    <p className="text-sm text-gray-500">{group.productCode}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-gray-500 uppercase tracking-wide">Unit</span>
+                    <p className="text-sm font-medium text-gray-700">{group.unit}</p>
+                  </div>
                 </div>
               </div>
+
+              {group.items.map((item, rowIndex) => (
+                <div key={rowIndex} className={`${rowIndex > 0 ? 'mt-4 pt-4 border-t border-gray-100' : ''}`}>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="md:col-span-2">
+                      {item.subProductName && (
+                        <p className="text-base font-semibold text-green-700">
+                          {item.productName} X {item.subProductName}
+                        </p>
+                      )}
+                      {Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Per-unit weights: {item.subProductWeights.map(w => Number(w).toFixed(2)).join(', ')} kg
+                        </p>
+                      )}
+                      {item.notes && (
+                        <div className="text-xs text-blue-600 mt-1 italic bg-blue-50 px-2 py-1 rounded inline-flex items-center gap-1">
+                          <FileText className="w-3 h-3" />
+                          {item.notes}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Quantity</label>
+                      <p className="text-base font-medium text-gray-900">{item.quantity} {item.unit}</p>
+                      {item.receivedQuantity > 0 && (
+                        <p className="text-sm text-green-600 font-medium flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Received: {item.receivedQuantity} {item.unit}
+                        </p>
+                      )}
+                      {item.receivedQuantity > 0 && !item.manuallyCompleted && item.receivedQuantity < item.quantity && (
+                        <p className="text-sm text-orange-600 font-medium flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Pending: {item.quantity - item.receivedQuantity} {item.unit}
+                        </p>
+                      )}
+                      {item.manuallyCompleted && (
+                        <p className="text-sm text-green-600 font-semibold flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4" />
+                          Manually Completed
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weight</label>
+                      <p className="text-base font-medium text-gray-900">{(item.weight || item.specifications?.weight || 0)} Kg</p>
+                      {item.receivedWeight > 0 && (
+                        <p className="text-sm text-green-600 font-medium flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Received: {item.receivedWeight.toFixed(2)} Kg
+                        </p>
+                      )}
+                      {item.receivedWeight > 0 && !item.manuallyCompleted && item.receivedWeight < (item.weight || 0) && (
+                        <p className="text-sm text-orange-600 font-medium flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Pending: {((item.weight || 0) - item.receivedWeight).toFixed(2)} Kg
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>

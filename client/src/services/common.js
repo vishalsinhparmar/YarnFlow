@@ -20,9 +20,11 @@ console.log(`🔗 API URL: ${API_BASE_URL}`);
 
 export const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
+  const token = localStorage.getItem('token');
 
   const defaultHeaders = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
   const config = {
@@ -37,6 +39,13 @@ export const apiRequest = async (endpoint, options = {}) => {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 401) {
+      // Token missing or expired — clear session and redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      throw new Error('Session expired. Please log in again.');
+    }
     const message = data?.message || `HTTP error! status: ${response.status}`;
     throw new Error(message);
   }

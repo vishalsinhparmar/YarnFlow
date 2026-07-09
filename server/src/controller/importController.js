@@ -2,6 +2,7 @@ import xlsx from 'xlsx';
 import Customer from '../models/Customer.js';
 import Supplier from '../models/Supplier.js';
 import Product from '../models/Product.js';
+import SubProduct from '../models/SubProduct.js';
 import Category from '../models/Category.js';
 import logger from '../utils/logger.js';
 
@@ -29,8 +30,7 @@ const mapCustomerData = (row) => {
     address: {
       city: cleaned.city || cleaned.City || cleaned['address.city']
     },
-    notes: cleaned.notes || cleaned.Notes,
-    status: cleaned.status || cleaned.Status || 'Active'
+    notes: cleaned.notes || cleaned.Notes
   };
 };
 
@@ -42,18 +42,18 @@ const mapSupplierData = (row) => {
     gstNumber: cleaned.gstNumber || cleaned.GSTNumber || cleaned['GST Number'],
     panNumber: cleaned.panNumber || cleaned.PANNumber || cleaned['PAN Number'],
     city: cleaned.city || cleaned.City,
-    notes: cleaned.notes || cleaned.Notes,
-    status: cleaned.status || cleaned.Status || 'Active'
+    notes: cleaned.notes || cleaned.Notes
   };
 };
 
 // Map Excel columns to Category schema
 const mapCategoryData = (row) => {
   const cleaned = cleanExcelData(row);
+  const hasSubProductsRaw = cleaned.hasSubProducts || cleaned.HasSubProducts || cleaned['Has Sub Products'];
   return {
     categoryName: cleaned.categoryName || cleaned.CategoryName || cleaned['Category Name'],
     description: cleaned.description || cleaned.Description,
-    status: cleaned.status || cleaned.Status || 'Active'
+    hasSubProducts: hasSubProductsRaw === true || String(hasSubProductsRaw).toLowerCase() === 'true'
   };
 };
 
@@ -74,11 +74,15 @@ const mapProductData = async (row) => {
     }
   }
   
+  // Parse subProducts — comma-separated string like "6,8,10,14"
+  const rawSub = cleaned.subProducts || cleaned.SubProducts || cleaned['Sub Products'] || '';
+  const subProducts = String(rawSub).split(',').map(s => s.trim()).filter(Boolean);
+
   return {
     productName: cleaned.productName || cleaned.ProductName || cleaned['Product Name'],
     description: cleaned.description || cleaned.Description,
     category: categoryId,
-    status: cleaned.status || cleaned.Status || 'Active'
+    _subProductNames: subProducts
   };
 };
 
@@ -316,13 +320,28 @@ const processProducts = async (jsonData) => {
         productName: { $regex: new RegExp(`^${productData.productName}$`, 'i') } 
       });
       
+      const { _subProductNames, ...productCoreData } = productData;
+
+      let productId;
       if (existingProduct) {
-        await Product.findByIdAndUpdate(existingProduct._id, productData);
+        await Product.findByIdAndUpdate(existingProduct._id, productCoreData);
+        productId = existingProduct._id;
         results.updated++;
       } else {
-        const product = new Product(productData);
+        const product = new Product(productCoreData);
         await product.save();
+        productId = product._id;
         results.inserted++;
+      }
+
+      if (_subProductNames && _subProductNames.length > 0) {
+        for (const name of _subProductNames) {
+          await SubProduct.findOneAndUpdate(
+            { product: productId, name },
+            { product: productId, name },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+        }
       }
       
     } catch (error) {

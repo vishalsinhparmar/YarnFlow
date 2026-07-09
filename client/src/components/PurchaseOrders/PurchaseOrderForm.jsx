@@ -1,21 +1,61 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, X, Loader2, Settings } from 'lucide-react';
-import { useDropdownOptions } from '../../hooks/useMasterData';
-import masterDataAPI, { unitAPI } from '../../services/masterDataAPI';
+import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
+import masterDataAPI, { subProductAPI, unitAPI } from '../../services/masterDataAPI';
 import SearchableSelect from '../common/SearchableSelect';
+import SubProductSelector from '../common/SubProductSelector';
 import UnitManagement from '../common/UnitManagement';
 
 const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
-  const { options, loading: optionsLoading } = useDropdownOptions();
-  const [suppliers, setSuppliers] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
-  const [loadingCategories, setLoadingCategories] = useState(false);
-  const [loadingProducts, setLoadingProducts] = useState(false);
-  
+
+  const [formData, setFormData] = useState({
+    supplier: '',
+    expectedDeliveryDate: '',
+    category: '',
+    items: [{
+      product: '',
+      subProduct: '',
+      subProductName: '',
+      subProductWeights: [],
+      quantity: 1,
+      weight: 0,
+      unit: 'Bags',
+      notes: ''
+    }]
+  });
+
+  // Paginated dropdowns
+  const {
+    items: suppliers,
+    setItems: setSuppliers,
+    loading: loadingSuppliers,
+    loadingMore: loadingMoreSuppliers,
+    hasMore: hasMoreSuppliers,
+    total: totalSuppliers,
+    handleSearch: handleSupplierSearch,
+    handleLoadMore: loadMoreSuppliers,
+    refresh: refreshSuppliers
+  } = usePaginatedSearch(masterDataAPI.suppliers.getAll, { limit: 50 });
+
+  const {
+    items: categories,
+    setItems: setCategories,
+    loading: loadingCategories,
+    loadingMore: loadingMoreCategories,
+    hasMore: hasMoreCategories,
+    total: totalCategories,
+    handleSearch: handleCategorySearch,
+    handleLoadMore: loadMoreCategories,
+    refresh: refreshCategories
+  } = usePaginatedSearch(masterDataAPI.categories.getAll, { limit: 50 });
+
+  const productSearch = usePaginatedSearch(
+    masterDataAPI.products.getAll,
+    { limit: 50, enabled: !!formData.category, extraParams: formData.category ? { category: formData.category } : {} }
+  );
+
   // Modal states for quick-add
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -36,63 +76,11 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   ];
   const [units, setUnits] = useState(defaultUnits);
   const [loadingUnits, setLoadingUnits] = useState(false);
+  const [newSubProductNames, setNewSubProductNames] = useState({});
+  const [loadingAddSubProduct, setLoadingAddSubProduct] = useState({});
 
-  const [formData, setFormData] = useState({
-    supplier: '',
-    expectedDeliveryDate: '',
-    category: '',
-    items: [{
-      product: '',
-      quantity: 1,
-      weight: 0,
-      unit: 'Bags',
-      notes: ''
-    }]
-  });
-
-  // Use useCallback to memoize fetch functions and prevent infinite loops
-  const fetchSuppliers = useCallback(async (search = '') => {
-    try {
-      setLoadingSuppliers(true);
-      const params = { limit: 100 };
-      if (search) params.search = search;
-      const response = await masterDataAPI.suppliers.getAll(params);
-      setSuppliers(response.data || []);
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-    } finally {
-      setLoadingSuppliers(false);
-    }
-  }, []);
-
-  const fetchCategories = useCallback(async (search = '') => {
-    try {
-      setLoadingCategories(true);
-      const params = { limit: 100 };
-      if (search) params.search = search;
-      const response = await masterDataAPI.categories.getAll(params);
-      setCategories(response.data || []);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    } finally {
-      setLoadingCategories(false);
-    }
-  }, []);
-
-  const fetchProducts = useCallback(async (search = '') => {
-    try {
-      setLoadingProducts(true);
-      const params = { limit: 100 };
-      if (search) params.search = search;
-      if (formData.category) params.category = formData.category;
-      const response = await masterDataAPI.products.getAll(params);
-      setProducts(response.data || []);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-    } finally {
-      setLoadingProducts(false);
-    }
-  }, [formData.category]);
+  const selectedCategory = categories.find(c => c._id === formData.category);
+  const categoryHasSubProducts = selectedCategory?.hasSubProducts || false;
 
   // Fetch units from backend (optional - we already have defaults)
   const fetchUnits = useCallback(async () => {
@@ -111,14 +99,20 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }
   }, []);
 
-  // Fetch suppliers, products, categories, and units with pagination support
-  // Only fetch on initial mount to populate dropdowns
+  // Fetch units on mount (paginated dropdowns load via their hooks)
   useEffect(() => {
-    fetchSuppliers();
-    fetchCategories();
-    fetchProducts();
     fetchUnits();
-  }, [fetchSuppliers, fetchCategories, fetchProducts, fetchUnits]);
+  }, [fetchUnits]);
+
+  // When category changes, reset and reload products via the hook
+  useEffect(() => {
+    if (formData.category) {
+      productSearch.refresh();
+    } else {
+      productSearch.setItems([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.category]);
 
   // Populate form if editing, reset if null
   useEffect(() => {
@@ -130,12 +124,18 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
         category: purchaseOrder.category?._id || purchaseOrder.category || '',
         items: purchaseOrder.items?.map(item => ({
           product: item.product?._id || item.product || '',
+          subProduct: item.subProduct?._id || item.subProduct || '',
+          subProductName: item.subProductName || '',
+          subProductWeights: Array.isArray(item.subProductWeights) ? item.subProductWeights : [],
           quantity: item.quantity || 1,
           weight: item.weight || item.specifications?.weight || 0,
           unit: item.unit || 'Bags',
           notes: item.notes || ''
         })) || [{
           product: '',
+          subProduct: '',
+          subProductName: '',
+          subProductWeights: [],
           quantity: 1,
           weight: 0,
           unit: 'Bags',
@@ -150,6 +150,9 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
         category: '',
         items: [{
           product: '',
+          subProduct: '',
+          subProductName: '',
+          subProductWeights: [],
           quantity: 1,
           weight: 0,
           unit: 'Bags',
@@ -186,6 +189,9 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       category: value,
       items: [{
         product: '',
+        subProduct: '',
+        subProductName: '',
+        subProductWeights: [],
         quantity: 1,
         weight: 0,
         unit: 'Bags',
@@ -202,23 +208,60 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }
   };
 
-  // Filter products by selected category
+  // Filter products by selected category (already filtered by API, but keep client-side guard)
   const getFilteredProducts = () => {
     if (!formData.category) {
       return [];
     }
-    return products.filter(product => 
+    return productSearch.items.filter(product =>
       product.category?._id === formData.category || product.category === formData.category
     );
   };
 
+  const getSelectedProduct = (productId) => {
+    return productSearch.items.find(p => p._id === productId);
+  };
+
   const handleItemChange = (index, field, value) => {
     const updatedItems = [...formData.items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      [field]: value
-    };
-    
+    const item = { ...updatedItems[index] };
+
+    if (field === 'product') {
+      item.product = value;
+      item.subProduct = '';
+      item.subProductName = '';
+      item.subProductWeights = [];
+      // Keep weight if switching away from sub-product, otherwise reset to 0
+      const prod = getSelectedProduct(value);
+      if (categoryHasSubProducts && prod?.subProducts?.length > 0) {
+        item.weight = 0;
+      }
+    } else if (field === 'quantity') {
+      item.quantity = value;
+      if (categoryHasSubProducts && item.subProduct) {
+        const qty = Math.max(1, Number(value) || 1);
+        const currentWeights = Array.isArray(item.subProductWeights) ? item.subProductWeights : [];
+        const nextWeights = [];
+        for (let i = 0; i < qty; i++) {
+          nextWeights.push(i < currentWeights.length ? currentWeights[i] : 0);
+        }
+        item.subProductWeights = nextWeights;
+        item.weight = nextWeights.reduce((sum, w) => sum + (Number(w) || 0), 0);
+      }
+    } else if (field === 'weight') {
+      item.weight = value;
+      // If user edits total weight while sub-product is selected, spread evenly across units
+      if (categoryHasSubProducts && item.subProduct) {
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        const total = Number(value) || 0;
+        const perUnit = total / qty;
+        item.subProductWeights = Array.from({ length: qty }, () => perUnit);
+      }
+    } else {
+      item[field] = value;
+    }
+
+    updatedItems[index] = item;
     setFormData(prev => ({
       ...prev,
       items: updatedItems
@@ -234,13 +277,65 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }
   };
 
-  const addItem = () => {
+  const handleSubProductWeightsChange = (index, weights) => {
+    const updatedItems = [...formData.items];
+    updatedItems[index] = {
+      ...updatedItems[index],
+      subProductWeights: weights,
+      weight: weights.reduce((sum, w) => sum + (Number(w) || 0), 0)
+    };
+    setFormData(prev => ({ ...prev, items: updatedItems }));
+  };
+
+  const handleSubProductSelect = (index, subProductId, subProductName) => {
+    const updatedItems = [...formData.items];
+    const item = { ...updatedItems[index] };
+    item.subProduct = subProductId;
+    item.subProductName = subProductName;
+    // Initialize weights when selecting a sub-product
+    const qty = Math.max(1, Number(item.quantity) || 1);
+    if (!Array.isArray(item.subProductWeights) || item.subProductWeights.length !== qty) {
+      item.subProductWeights = Array.from({ length: qty }, () => 0);
+    }
+    item.weight = item.subProductWeights.reduce((sum, w) => sum + (Number(w) || 0), 0);
+    updatedItems[index] = item;
+    setFormData(prev => ({ ...prev, items: updatedItems }));
+  };
+
+  // Group flat items by product so one product card can contain multiple sub-product rows
+  const getProductGroups = () => {
+    const groups = [];
+    const seen = new Map();
+    formData.items.forEach((item, index) => {
+      const key = item.product || `__empty__${index}`;
+      if (!seen.has(key)) {
+        const group = {
+          product: item.product,
+          productName: item.productName,
+          productCode: item.productCode,
+          unit: item.unit,
+          indices: [],
+          items: []
+        };
+        seen.set(key, group);
+        groups.push(group);
+      }
+      seen.get(key).indices.push(index);
+      seen.get(key).items.push(item);
+    });
+    return groups;
+  };
+
+  const addProductGroup = () => {
     setFormData(prev => ({
       ...prev,
       items: [
         ...prev.items,
         {
           product: '',
+          subProduct: '',
+          subProductName: '',
+          subProductWeights: [],
           quantity: 1,
           weight: 0,
           unit: 'Bags',
@@ -250,11 +345,105 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }));
   };
 
-  const removeItem = (index) => {
+  const removeProductGroup = (group) => {
+    const remaining = formData.items.filter((_, i) => !group.indices.includes(i));
+    if (remaining.length === 0) {
+      setFormData(prev => ({
+        ...prev,
+        items: [{
+          product: '',
+          subProduct: '',
+          subProductName: '',
+          subProductWeights: [],
+          quantity: 1,
+          weight: 0,
+          unit: 'Bags',
+          notes: ''
+        }]
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, items: remaining }));
+    }
+  };
+
+  const updateGroupProduct = (group, newProductId) => {
+    const prod = getSelectedProduct(newProductId);
+    const updatedItems = formData.items.map((item, i) => {
+      if (!group.indices.includes(i)) return item;
+      return {
+        ...item,
+        product: newProductId,
+        productName: prod?.productName || '',
+        productCode: prod?.productCode || '',
+        subProduct: '',
+        subProductName: '',
+        subProductWeights: [],
+        weight: categoryHasSubProducts && prod?.subProducts?.length > 0 ? 0 : item.weight
+      };
+    });
+    setFormData(prev => ({ ...prev, items: updatedItems }));
+  };
+
+  const updateGroupUnit = (group, newUnit) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) =>
+        group.indices.includes(i) ? { ...item, unit: newUnit } : item
+      )
+    }));
+  };
+
+  const addSubProductRow = (group) => {
+    const lastIndex = Math.max(...group.indices);
+    const template = formData.items[group.indices[0]] || {
+      product: '',
+      subProduct: '',
+      subProductName: '',
+      subProductWeights: [],
+      quantity: 1,
+      weight: 0,
+      unit: 'Bags',
+      notes: ''
+    };
+    const newRow = {
+      ...template,
+      subProduct: '',
+      subProductName: '',
+      subProductWeights: [],
+      quantity: 1,
+      weight: 0,
+      notes: ''
+    };
+    setFormData(prev => ({
+      ...prev,
+      items: [
+        ...prev.items.slice(0, lastIndex + 1),
+        newRow,
+        ...prev.items.slice(lastIndex + 1)
+      ]
+    }));
+  };
+
+  const removeSubProductRow = (index) => {
     if (formData.items.length > 1) {
       setFormData(prev => ({
         ...prev,
         items: prev.items.filter((_, i) => i !== index)
+      }));
+    } else {
+      // Reset the only remaining row
+      setFormData(prev => ({
+        ...prev,
+        items: [{
+          product: '',
+          subProduct: '',
+          subProductName: '',
+          subProductWeights: [],
+          quantity: 1,
+          weight: 0,
+          unit: 'Bags',
+          notes: ''
+        }]
       }));
     }
   };
@@ -342,7 +531,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
         category: formData.category
       });
       if (response.success) {
-        setProducts(prev => [...prev, response.data]);
+        productSearch.setItems(prev => [...prev, response.data]);
         setShowProductModal(false);
       }
     } catch (error) {
@@ -367,6 +556,28 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       throw error;
     } finally {
       setModalLoading(false);
+    }
+  };
+
+  const handleAddSubProductForProduct = async (productId) => {
+    const name = (newSubProductNames[productId] || '').trim();
+    if (!name || !productId) return;
+    setLoadingAddSubProduct(prev => ({ ...prev, [productId]: true }));
+    try {
+      const response = await subProductAPI.bulkAdd(productId, [name]);
+      if (response.success) {
+        const created = Array.isArray(response.data) ? response.data : [];
+        productSearch.setItems(prev => prev.map(p => {
+          if (p._id !== productId) return p;
+          const existing = Array.isArray(p.subProducts) ? p.subProducts : [];
+          return { ...p, subProducts: [...existing, ...created] };
+        }));
+        setNewSubProductNames(prev => ({ ...prev, [productId]: '' }));
+      }
+    } catch (error) {
+      console.error('Error adding sub-product:', error);
+    } finally {
+      setLoadingAddSubProduct(prev => ({ ...prev, [productId]: false }));
     }
   };
 
@@ -404,7 +615,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }
   };
 
-  if (optionsLoading) {
+  if (loadingSuppliers || loadingCategories) {
     return (
       <div className="p-8 text-center">
         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -448,8 +659,12 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
               searchPlaceholder="Search suppliers..."
               getOptionLabel={(supplier) => supplier.companyName}
               getOptionValue={(supplier) => supplier._id}
-              onSearch={fetchSuppliers}
+              onSearch={handleSupplierSearch}
               loading={loadingSuppliers}
+              loadingMore={loadingMoreSuppliers}
+              hasMore={hasMoreSuppliers}
+              onLoadMore={loadMoreSuppliers}
+              total={totalSuppliers}
               error={errors.supplier}
               onAddNew={() => setShowSupplierModal(true)}
               addNewLabel="Add Supplier"
@@ -504,8 +719,12 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
               searchPlaceholder="Search categories..."
               getOptionLabel={(category) => category.categoryName}
               getOptionValue={(category) => category._id}
-              onSearch={fetchCategories}
+              onSearch={handleCategorySearch}
               loading={loadingCategories}
+              loadingMore={loadingMoreCategories}
+              hasMore={hasMoreCategories}
+              onLoadMore={loadMoreCategories}
+              total={totalCategories}
               error={errors.category}
               onAddNew={() => setShowCategoryModal(true)}
               addNewLabel="Add Category"
@@ -552,105 +771,78 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
           </div>
           <button
             type="button"
-            onClick={addItem}
+            onClick={addProductGroup}
             className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-lg transition-all flex items-center gap-2"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add Item
+            Add Product
           </button>
         </div>
 
         <div className="space-y-5">
-          {formData.items.map((item, index) => (
-            <div key={index} className="bg-white border-2 border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+          {getProductGroups().map((group, groupIndex) => (
+            <div key={groupIndex} className="bg-white border-2 border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <div className="bg-blue-100 text-blue-700 font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
-                    {index + 1}
+                    {groupIndex + 1}
                   </div>
-                  <h4 className="font-semibold text-gray-900 text-lg">Item #{index + 1}</h4>
+                  <h4 className="font-semibold text-gray-900 text-lg">Product Section</h4>
                 </div>
-                {formData.items.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeItem(index)}
-                    className="px-3 py-1.5 text-red-600 hover:bg-red-50 border border-red-300 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Remove
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => removeProductGroup(group)}
+                  className="px-3 py-1.5 text-red-600 hover:bg-red-50 border border-red-300 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Remove Product
+                </button>
               </div>
 
               <div className="space-y-4">
-                {/* Product - Full Width */}
-                <div>
-                  <SearchableSelect
-                    label="Product"
-                    required
-                    options={getFilteredProducts()}
-                    value={item.product}
-                    onChange={(value) => handleItemChange(index, 'product', value)}
-                    placeholder={!formData.category ? '⚠️ Select Category First' : 'Select Product'}
-                    searchPlaceholder="Search products..."
-                    getOptionLabel={(product) => product.productName}
-                    getOptionValue={(product) => product._id}
-                    onSearch={fetchProducts}
-                    loading={loadingProducts}
-                    disabled={!formData.category}
-                    error={errors[`items.${index}.product`]}
-                    onAddNew={formData.category ? () => setShowProductModal(true) : undefined}
-                    addNewLabel="Add Product"
-                    emptyMessage={!formData.category ? 'Please select a category first' : 'No products found'}
-                    renderOption={(product, isSelected) => (
-                      <div className="flex flex-col">
-                        <span className="font-medium">{product.productName}</span>
-                        {product.description && (
-                          <span className="text-xs text-gray-500 truncate">{product.description}</span>
-                        )}
-                      </div>
-                    )}
-                  />
-                  {!formData.category && (
-                    <p className="text-xs text-amber-600 mt-1 flex items-center">
-                      <svg className="h-3.5 w-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                      Please select a category first
-                    </p>
-                  )}
-                </div>
-
-                {/* Quantity, Unit, Weight - Three Columns */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Product + Unit selection for the whole group */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                      <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                      </svg>
-                      Quantity *
-                    </label>
-                    <input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                      className={`w-full px-4 py-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                        errors[`items.${index}.quantity`] ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
-                      }`}
-                      min="1"
-                      step="1"
-                      placeholder="Enter quantity"
+                    <SearchableSelect
+                      label="Product"
+                      required
+                      options={getFilteredProducts()}
+                      value={group.product}
+                      onChange={(value) => updateGroupProduct(group, value)}
+                      placeholder={!formData.category ? '⚠️ Select Category First' : 'Select Product'}
+                      searchPlaceholder="Search products..."
+                      getOptionLabel={(product) => product.productName}
+                      getOptionValue={(product) => product._id}
+                      onSearch={productSearch.handleSearch}
+                      loading={productSearch.loading}
+                      loadingMore={productSearch.loadingMore}
+                      hasMore={productSearch.hasMore}
+                      onLoadMore={productSearch.handleLoadMore}
+                      total={productSearch.total}
+                      disabled={!formData.category}
+                      error={errors[`items.${group.indices[0]}.product`]}
+                      onAddNew={formData.category ? () => setShowProductModal(true) : undefined}
+                      addNewLabel="Add Product"
+                      emptyMessage={!formData.category ? 'Please select a category first' : 'No products found'}
+                      renderOption={(product, isSelected) => (
+                        <div className="flex flex-col">
+                          <span className="font-medium">{product.productName}</span>
+                          {product.description && (
+                            <span className="text-xs text-gray-500 truncate">{product.description}</span>
+                          )}
+                        </div>
+                      )}
                     />
-                    {errors[`items.${index}.quantity`] && (
-                      <p className="text-red-600 text-xs mt-1.5 flex items-center">
-                        <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    {!formData.category && (
+                      <p className="text-xs text-amber-600 mt-1 flex items-center">
+                        <svg className="h-3.5 w-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                         </svg>
-                        {errors[`items.${index}.quantity`]}
+                        Please select a category first
                       </p>
                     )}
                   </div>
@@ -666,8 +858,8 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <select
-                          value={item.unit}
-                          onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
+                          value={group.unit}
+                          onChange={(e) => updateGroupUnit(group, e.target.value)}
                           className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 appearance-none transition-all"
                         >
                           {units.map(unit => (
@@ -696,52 +888,220 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                       Click "Manage" to add/edit units
                     </p>
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                      <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                      </svg>
-                      Weight (Kg) *
-                    </label>
-                    <input
-                      type="number"
-                      value={item.weight}
-                      onChange={(e) => handleItemChange(index, 'weight', e.target.value)}
-                      className={`w-full px-4 py-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                        errors[`items.${index}.weight`] ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
-                      }`}
-                      min="0"
-                      step="0.01"
-                      placeholder="Enter weight in kg"
-                    />
-                    {errors[`items.${index}.weight`] && (
-                      <p className="text-red-600 text-xs mt-1.5 flex items-center">
-                        <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        {errors[`items.${index}.weight`]}
-                      </p>
+                {/* Inline sub-product creation for this product */}
+                {categoryHasSubProducts && group.product && (
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sub-products</span>
+                      <span className="text-xs text-gray-400">Add new to this product</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newSubProductNames[group.product] || ''}
+                        onChange={(e) => setNewSubProductNames(prev => ({ ...prev, [group.product]: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSubProductForProduct(group.product))}
+                        placeholder="e.g., 5"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddSubProductForProduct(group.product)}
+                        disabled={loadingAddSubProduct[group.product] || !newSubProductNames[group.product]?.trim()}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {loadingAddSubProduct[group.product] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-product rows */}
+                {group.product && (
+                  <div className="space-y-3">
+                    {/* Column headers */}
+                    {categoryHasSubProducts ? (
+                      <div className="hidden md:grid grid-cols-12 gap-3 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <div className="col-span-4">Sub Product</div>
+                        <div className="col-span-2">Qty</div>
+                        <div className="col-span-2">Weight (Kg)</div>
+                        <div className="col-span-3">Notes</div>
+                        <div className="col-span-1"></div>
+                      </div>
+                    ) : (
+                      <div className="hidden md:grid grid-cols-8 gap-3 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <div className="col-span-2">Qty</div>
+                        <div className="col-span-2">Weight (Kg)</div>
+                        <div className="col-span-3">Notes</div>
+                        <div className="col-span-1"></div>
+                      </div>
+                    )}
+                    {group.items.map((item, rowIndex) => {
+                      const globalIndex = group.indices[rowIndex];
+                      return categoryHasSubProducts ? (
+                        <div key={globalIndex} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start bg-gray-50 rounded-lg p-3 border border-gray-100">
+                          <div className="col-span-1 md:col-span-4">
+                            <SubProductSelector
+                              productId={group.product}
+                              subProducts={getSelectedProduct(group.product)?.subProducts}
+                              selectedSubProduct={item.subProduct}
+                              selectedSubProductName={item.subProductName}
+                              quantity={item.quantity}
+                              weights={item.subProductWeights}
+                              categoryHasSubProducts={categoryHasSubProducts}
+                              onSelectSubProduct={(id, name) => handleSubProductSelect(globalIndex, id, name)}
+                              onWeightsChange={(weights) => handleSubProductWeightsChange(globalIndex, weights)}
+                              onSubProductsUpdated={(updated) => {
+                                const prod = getSelectedProduct(group.product);
+                                if (prod) prod.subProducts = updated;
+                              }}
+                              allowAddNew={false}
+                              compact
+                            />
+                          </div>
+                          <div className="col-span-1 md:col-span-2">
+                            <label className="sr-only">Quantity</label>
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => handleItemChange(globalIndex, 'quantity', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                errors[`items.${globalIndex}.quantity`] ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
+                              }`}
+                              min="1"
+                              step="1"
+                              placeholder="Qty"
+                            />
+                            {errors[`items.${globalIndex}.quantity`] && (
+                              <p className="text-red-600 text-xs mt-1 flex items-center">
+                                <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                {errors[`items.${globalIndex}.quantity`]}
+                              </p>
+                            )}
+                          </div>
+                          <div className="col-span-1 md:col-span-2">
+                            <label className="sr-only">Weight</label>
+                            <input
+                              type="number"
+                              value={item.weight}
+                              onChange={(e) => handleItemChange(globalIndex, 'weight', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                errors[`items.${globalIndex}.weight`] ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
+                              } ${item.subProduct ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                              min="0"
+                              step="0.01"
+                              placeholder="Kg"
+                              disabled={!!item.subProduct}
+                              readOnly={!!item.subProduct}
+                            />
+                            {errors[`items.${globalIndex}.weight`] && (
+                              <p className="text-red-600 text-xs mt-1 flex items-center">
+                                <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                {errors[`items.${globalIndex}.weight`]}
+                              </p>
+                            )}
+                          </div>
+                          <div className="col-span-1 md:col-span-3">
+                            <label className="sr-only">Notes</label>
+                            <textarea
+                              value={item.notes}
+                              onChange={(e) => handleItemChange(globalIndex, 'notes', e.target.value)}
+                              rows="1"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all resize-none"
+                              placeholder="Notes"
+                            />
+                          </div>
+                          <div className="col-span-1 md:col-span-1 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => removeSubProductRow(globalIndex)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Remove sub-product row"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* No sub-products: compact row — Qty | Weight | Notes | Remove */
+                        <div key={globalIndex} className="grid grid-cols-1 md:grid-cols-8 gap-3 items-start bg-gray-50 rounded-lg p-3 border border-gray-100">
+                          <div className="col-span-1 md:col-span-2">
+                            <label className="sr-only">Quantity</label>
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => handleItemChange(globalIndex, 'quantity', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                errors[`items.${globalIndex}.quantity`] ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
+                              }`}
+                              min="1"
+                              step="1"
+                              placeholder="Qty"
+                            />
+                            {errors[`items.${globalIndex}.quantity`] && (
+                              <p className="text-red-600 text-xs mt-1">{errors[`items.${globalIndex}.quantity`]}</p>
+                            )}
+                          </div>
+                          <div className="col-span-1 md:col-span-2">
+                            <label className="sr-only">Weight</label>
+                            <input
+                              type="number"
+                              value={item.weight}
+                              onChange={(e) => handleItemChange(globalIndex, 'weight', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                                errors[`items.${globalIndex}.weight`] ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
+                              }`}
+                              min="0"
+                              step="0.01"
+                              placeholder="Kg"
+                            />
+                            {errors[`items.${globalIndex}.weight`] && (
+                              <p className="text-red-600 text-xs mt-1">{errors[`items.${globalIndex}.weight`]}</p>
+                            )}
+                          </div>
+                          <div className="col-span-1 md:col-span-3">
+                            <label className="sr-only">Notes</label>
+                            <textarea
+                              value={item.notes}
+                              onChange={(e) => handleItemChange(globalIndex, 'notes', e.target.value)}
+                              rows="1"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all resize-none"
+                              placeholder="Notes"
+                            />
+                          </div>
+                          <div className="col-span-1 md:col-span-1 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => removeSubProductRow(globalIndex)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Remove row"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {categoryHasSubProducts && (
+                      <button
+                        type="button"
+                        onClick={() => addSubProductRow(group)}
+                        className="mt-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Sub Product
+                      </button>
                     )}
                   </div>
-                </div>
-
-                {/* Item Notes - Full Width */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                    <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                    </svg>
-                    Item Notes
-                  </label>
-                  <textarea
-                    value={item.notes}
-                    onChange={(e) => handleItemChange(index, 'notes', e.target.value)}
-                    rows="2"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all resize-none"
-                    placeholder="Add special instructions or notes for this item..."
-                  />
-                </div>
+                )}
               </div>
             </div>
           ))}
