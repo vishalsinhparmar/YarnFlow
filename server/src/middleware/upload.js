@@ -5,6 +5,7 @@ const storage = multer.memoryStorage();
 
 // File filter to accept only Excel files
 const fileFilter = (req, file, cb) => {
+   console.log('file',file);
   const allowedMimes = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
     'application/vnd.ms-excel', // .xls
@@ -21,6 +22,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+console.log('fileFilter',fileFilter);
 // Create multer upload instance
 const upload = multer({
   storage: storage,
@@ -29,5 +31,7 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024 // 5MB limit
   }
 });
+
+console.log('uploads',upload)
 
 export default upload;

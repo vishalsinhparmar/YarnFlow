@@ -5,15 +5,20 @@ import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
 import masterDataAPI from '../../services/masterDataAPI';
 import PurchaseOrderForm from '../PurchaseOrders/PurchaseOrderForm';
 import SearchableSelect from '../common/SearchableSelect';
-import { WAREHOUSE_LOCATIONS, getWarehouseName } from '../../constants/warehouseLocations';
+import SubProductSelector from '../common/SubProductSelector';
+import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
+import warehouseAPI from '../../services/warehouseAPI';
 
 const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) => {
-  const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [selectedPO, setSelectedPO] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [loadingPOs, setLoadingPOs] = useState(true);
   const [errors, setErrors] = useState({});
   const [showPOModal, setShowPOModal] = useState(false);
+  const [warehouseLocations, setWarehouseLocations] = useState([]);
+
+  useEffect(() => {
+    warehouseAPI.getAll().then(res => setWarehouseLocations(res.data || [])).catch(() => {});
+  }, []);
 
   const [formData, setFormData] = useState({
     purchaseOrder: '',
@@ -24,42 +29,36 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
     items: []
   });
 
-  // Fetch purchase orders function (memoized for SearchableSelect)
-  const fetchPurchaseOrders = useCallback(async (search = '') => {
-    try {
-      setLoadingPOs(true);
-      console.log('Fetching purchase orders...', search ? `with search: ${search}` : '');
-      
-      const params = { limit: 100 };
-      if (search) params.search = search;
-      
-      const response = await purchaseOrderAPI.getAll(params);
-      console.log('Purchase Orders Response:', response);
-      
-      if (response && response.data) {
-        // Filter out completed POs (Fully_Received status)
-        const incompletePOs = response.data.filter(po => 
-          po.status !== 'Fully_Received' && po.status !== 'Complete'
-        );
-        setPurchaseOrders(incompletePOs);
-        console.log(`Purchase Orders loaded: ${incompletePOs.length} incomplete out of ${response.data.length} total`);
-      } else {
-        console.log('No purchase orders found in response');
-        setPurchaseOrders([]);
-      }
-    } catch (error) {
-      console.error('Error fetching purchase orders:', error);
-      setPurchaseOrders([]);
-      if (!search) setErrors(prev => ({ ...prev, purchaseOrders: 'Failed to load purchase orders' }));
-    } finally {
-      setLoadingPOs(false);
+  // Paginated purchase orders with client-side status filter
+  const fetchPurchaseOrders = useCallback(async (params) => {
+    const response = await purchaseOrderAPI.getAll(params);
+    if (response && response.data) {
+      const incompletePOs = response.data.filter(po =>
+        po.status !== 'Fully_Received' && po.status !== 'Complete'
+      );
+      return { ...response, data: incompletePOs };
     }
+    return response;
   }, []);
 
-  // Initial fetch on mount
+  const {
+    items: purchaseOrders,
+    loading: loadingPOs,
+    loadingMore: loadingMorePOs,
+    hasMore: hasMorePOs,
+    total: totalPOs,
+    handleSearch: handlePOSearch,
+    handleLoadMore: loadMorePOs,
+    setItems: setPurchaseOrders,
+    refresh: refreshPOs
+  } = usePaginatedSearch(fetchPurchaseOrders, { limit: 50, extraParams: { sortBy: 'createdAt', sortOrder: 'desc' } });
+
+  // Show error when POs are empty after loading
   useEffect(() => {
-    fetchPurchaseOrders();
-  }, [fetchPurchaseOrders]);
+    if (!loadingPOs && purchaseOrders.length === 0 && !formData.purchaseOrder) {
+      setErrors(prev => ({ ...prev, purchaseOrders: 'No purchase orders available. Please create a purchase order first.' }));
+    }
+  }, [loadingPOs, purchaseOrders.length, formData.purchaseOrder]);
 
   // Handle pre-selected PO (when clicking "+ Add GRN" from PO section)
   useEffect(() => {
@@ -146,10 +145,24 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
         const pendingQty = item.quantity - receivedQty;
         const pendingWt = orderedWeight - receivedWt;
         
+        // Default received per-unit weights from PO ordered weights
+        const orderedSubProductWeights = item.subProductWeights || [];
+        const receiveQty = pendingQty > 0 ? pendingQty : 0;
+        const defaultReceivedWeights = orderedSubProductWeights.length > 0
+          ? orderedSubProductWeights.slice(0, receiveQty)
+          : [];
+
         return {
           purchaseOrderItem: item._id,
           productName: item.productName,
           productCode: item.productCode,
+          product: item.product?._id || item.product,
+          
+          // Sub-product tracking
+          subProduct: item.subProduct?._id || item.subProduct || null,
+          subProductName: item.subProductName || null,
+          orderedSubProductWeights: orderedSubProductWeights,
+          receivedSubProductWeights: defaultReceivedWeights,
           
           // Ordered
           orderedQuantity: item.quantity,
@@ -160,7 +173,7 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
           previousWeight: receivedWt,
           
           // Receiving now (pre-fill with pending qty)
-          receivedQuantity: pendingQty > 0 ? pendingQty : 0,
+          receivedQuantity: receiveQty,
           receivedWeight: pendingWt > 0 ? pendingWt : 0,
           
           // Pending (auto-calculated)
@@ -190,13 +203,71 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
     }
   };
 
+  const normalizeWeights = (weights, length) => {
+    const w = Array.isArray(weights) ? weights : [];
+    const result = [];
+    for (let i = 0; i < length; i++) {
+      result.push(i < w.length ? (Number(w[i]) || 0) : 0);
+    }
+    return result;
+  };
+
+  // Group GRN items by product so one card can contain multiple sub-product rows
+  const getProductGroups = () => {
+    const groups = [];
+    const seen = new Map();
+    formData.items.forEach((item, index) => {
+      const key = item.product || `__empty__${index}`;
+      if (!seen.has(key)) {
+        const group = {
+          product: item.product,
+          productName: item.productName,
+          productCode: item.productCode,
+          unit: item.unit,
+          indices: [],
+          items: []
+        };
+        seen.set(key, group);
+        groups.push(group);
+      }
+      seen.get(key).indices.push(index);
+      seen.get(key).items.push(item);
+    });
+    return groups;
+  };
+
   const handleItemChange = (index, field, value) => {
     const updatedItems = [...formData.items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      [field]: value
-    };
-    
+    const item = { ...updatedItems[index] };
+    item[field] = value;
+
+    if (field === 'receivedQuantity') {
+      const qty = Math.max(0, Number(value) || 0);
+      const maxAllowed = item.orderedQuantity - item.previouslyReceived;
+      const validQty = Math.min(qty, maxAllowed);
+      item.receivedQuantity = validQty;
+      if (item.subProduct) {
+        const orderedWeights = item.orderedSubProductWeights || [];
+        item.receivedSubProductWeights = normalizeWeights(orderedWeights, validQty);
+        item.receivedWeight = item.receivedSubProductWeights.reduce((sum, w) => sum + w, 0);
+      } else if (item.orderedQuantity > 0 && item.orderedWeight > 0) {
+        const weightPerUnit = item.orderedWeight / item.orderedQuantity;
+        item.receivedWeight = validQty * weightPerUnit;
+      }
+      item.pendingQuantity = Math.max(0, item.orderedQuantity - item.previouslyReceived - validQty);
+      item.pendingWeight = Math.max(0, item.orderedWeight - item.previousWeight - item.receivedWeight);
+    } else if (field === 'receivedWeight') {
+      const weight = Math.max(0, Number(value) || 0);
+      item.receivedWeight = weight;
+      if (item.subProduct) {
+        const qty = Math.max(1, Number(item.receivedQuantity) || 1);
+        const perUnit = weight / qty;
+        item.receivedSubProductWeights = Array.from({ length: qty }, () => perUnit);
+      }
+      item.pendingWeight = Math.max(0, item.orderedWeight - item.previousWeight - weight);
+    }
+
+    updatedItems[index] = item;
     setFormData(prev => ({
       ...prev,
       items: updatedItems
@@ -210,6 +281,16 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
         [errorKey]: ''
       }));
     }
+  };
+
+  const handleReceivedSubProductWeightsChange = (index, weights) => {
+    const updatedItems = [...formData.items];
+    const item = { ...updatedItems[index] };
+    item.receivedSubProductWeights = weights;
+    item.receivedWeight = weights.reduce((sum, w) => sum + (Number(w) || 0), 0);
+    item.pendingWeight = Math.max(0, item.orderedWeight - item.previousWeight - item.receivedWeight);
+    updatedItems[index] = item;
+    setFormData(prev => ({ ...prev, items: updatedItems }));
   };
 
   const validateForm = () => {
@@ -329,8 +410,12 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
               searchPlaceholder="Search by PO number or supplier..."
               getOptionLabel={(po) => `${po.poNumber} - ${po.supplierDetails?.companyName || po.supplier?.companyName || 'Unknown Supplier'}`}
               getOptionValue={(po) => po._id}
-              onSearch={fetchPurchaseOrders}
+              onSearch={handlePOSearch}
               loading={loadingPOs}
+              loadingMore={loadingMorePOs}
+              hasMore={hasMorePOs}
+              onLoadMore={loadMorePOs}
+              total={totalPOs}
               disabled={!!grn}
               onAddNew={() => setShowPOModal(true)}
               addNewLabel="Add PO"
@@ -418,8 +503,8 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
                 required
               >
                 <option value="">Select Warehouse Location</option>
-                {WAREHOUSE_LOCATIONS.map(warehouse => (
-                  <option key={warehouse.id} value={warehouse.id}>
+                {warehouseLocations.map(warehouse => (
+                  <option key={warehouse._id} value={warehouse._id}>
                     {warehouse.name}
                   </option>
                 ))}
@@ -469,251 +554,218 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
             <h3 className="text-xl font-semibold text-gray-900">Items Received</h3>
           </div>
           
-          <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                <tr>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Product
-                  </th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Ordered
-                  </th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-blue-700 uppercase tracking-wider bg-blue-50">
-                    Prev. Received
-                  </th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-green-700 uppercase tracking-wider bg-green-50">
-                    Receiving Now *
-                  </th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-orange-700 uppercase tracking-wider bg-orange-50">
-                    Pending
-                  </th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Progress
-                  </th>
-                  <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Mark Complete
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {formData.items.map((item, index) => {
-                  const completionPercentage = item.orderedQuantity > 0 
-                    ? Math.round(((item.previouslyReceived + Number(item.receivedQuantity || 0)) / item.orderedQuantity) * 100)
-                    : 0;
-                  
-                  return (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-4">
-                        <div className="text-sm font-medium text-gray-900">{item.productName}</div>
-                        <div className="text-sm text-gray-500">{item.productCode}</div>
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {item.orderedQuantity} {item.unit}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {item.orderedWeight > 0 ? item.orderedWeight + ' kg' : '-'}
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4 bg-blue-50">
-                        <div className="text-sm font-medium text-blue-700">
-                          {item.previouslyReceived || 0} {item.unit}
-                        </div>
-                        <div className="text-xs text-blue-600">
-                          {(item.previousWeight || 0).toFixed(2)} kg
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4 bg-green-50">
-                        <div className="space-y-2">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const maxAllowed = item.orderedQuantity - item.previouslyReceived;
-                                  const newQty = Math.max(0, Number(item.receivedQuantity) - 1);
-                                  
-                                  const updatedItems = [...formData.items];
-                                  updatedItems[index].receivedQuantity = newQty;
-                                  
-                                  if (item.orderedQuantity > 0 && item.orderedWeight > 0) {
-                                    const weightPerUnit = item.orderedWeight / item.orderedQuantity;
-                                    updatedItems[index].receivedWeight = newQty * weightPerUnit;
-                                    updatedItems[index].pendingQuantity = item.orderedQuantity - item.previouslyReceived - newQty;
-                                    updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - (newQty * weightPerUnit);
-                                  }
-                                  
-                                  setFormData(prev => ({ ...prev, items: updatedItems }));
-                                }}
-                                className="p-1 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                                disabled={item.receivedQuantity <= 0}
-                              >
-                                <Minus className="w-3.5 h-3.5 text-gray-600" />
-                              </button>
-                              <input
-                                type="number"
-                                value={item.receivedQuantity}
-                                onChange={(e) => {
-                                  const qty = Number(e.target.value) || 0;
-                                  const maxAllowed = item.orderedQuantity - item.previouslyReceived;
-                                  
-                                  // Enforce max validation
-                                  const validQty = Math.min(Math.max(0, qty), maxAllowed);
-                                  
-                                  const updatedItems = [...formData.items];
-                                  updatedItems[index].receivedQuantity = validQty;
-                                  
-                                  if (item.orderedQuantity > 0 && item.orderedWeight > 0) {
-                                    const weightPerUnit = item.orderedWeight / item.orderedQuantity;
-                                    updatedItems[index].receivedWeight = validQty * weightPerUnit;
-                                    updatedItems[index].pendingQuantity = item.orderedQuantity - item.previouslyReceived - validQty;
-                                    updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - (validQty * weightPerUnit);
-                                  }
-                                  
-                                  setFormData(prev => ({ ...prev, items: updatedItems }));
-                                }}
-                                className="w-20 px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                                min="0"
-                                max={item.orderedQuantity - item.previouslyReceived}
-                                step="1"
-                                placeholder="0"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const maxAllowed = item.orderedQuantity - item.previouslyReceived;
-                                  const newQty = Math.min(maxAllowed, Number(item.receivedQuantity) + 1);
-                                  
-                                  const updatedItems = [...formData.items];
-                                  updatedItems[index].receivedQuantity = newQty;
-                                  
-                                  if (item.orderedQuantity > 0 && item.orderedWeight > 0) {
-                                    const weightPerUnit = item.orderedWeight / item.orderedQuantity;
-                                    updatedItems[index].receivedWeight = newQty * weightPerUnit;
-                                    updatedItems[index].pendingQuantity = item.orderedQuantity - item.previouslyReceived - newQty;
-                                    updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - (newQty * weightPerUnit);
-                                  }
-                                  
-                                  setFormData(prev => ({ ...prev, items: updatedItems }));
-                                }}
-                                className="p-1 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                                disabled={item.receivedQuantity >= (item.orderedQuantity - item.previouslyReceived)}
-                              >
-                                <Plus className="w-3.5 h-3.5 text-gray-600" />
-                              </button>
-                              <span className="text-sm text-gray-600">{item.unit}</span>
-                            </div>
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              Max: {item.orderedQuantity - item.previouslyReceived} {item.unit}
-                            </div>
-                            {item.receivedQuantity > (item.orderedQuantity - item.previouslyReceived) && (
-                              <div className="text-xs text-red-600 mt-1">
-                                Cannot receive more than pending ({item.orderedQuantity - item.previouslyReceived} {item.unit})
+          <div className="space-y-5">
+            {getProductGroups().map((group, groupIndex) => (
+              <div key={groupIndex} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-gradient-to-r from-orange-100 to-amber-100 px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-gray-900">{group.productName}</div>
+                    <div className="text-xs text-gray-500">{group.productCode} • Unit: {group.unit}</div>
+                  </div>
+                  <div className="text-xs font-semibold text-orange-700 bg-white px-2 py-1 rounded border border-orange-200">
+                    {group.items.length} sub-product{group.items.length > 1 ? 's' : ''}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Sub Product
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Ordered
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-blue-700 uppercase tracking-wider bg-blue-50/50">
+                          Prev. Received
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-green-700 uppercase tracking-wider bg-green-50/50">
+                          Receiving Now *
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-orange-700 uppercase tracking-wider bg-orange-50/50">
+                          Pending
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Progress
+                        </th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Mark Complete
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {group.items.map((item, rowIndex) => {
+                        const globalIndex = group.indices[rowIndex];
+                        const completionPercentage = item.orderedQuantity > 0
+                          ? Math.round(((item.previouslyReceived + Number(item.receivedQuantity || 0)) / item.orderedQuantity) * 100)
+                          : 0;
+                        return (
+                          <tr key={globalIndex} className="hover:bg-gray-50">
+                            <td className="px-4 py-4">
+                              <div className="text-sm font-semibold text-green-700">
+                                {item.subProductName ? `${item.productName} X ${item.subProductName}` : <span className="text-gray-400">-</span>}
                               </div>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const weight = Math.max(0, Number(item.receivedWeight || 0) - 1);
-                                const updatedItems = [...formData.items];
-                                updatedItems[index].receivedWeight = weight;
-                                updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - weight;
-                                setFormData(prev => ({ ...prev, items: updatedItems }));
-                              }}
-                              className="p-0.5 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                              disabled={item.receivedWeight <= 0}
-                            >
-                              <Minus className="w-3 h-3 text-gray-600" />
-                            </button>
-                            <input
-                              type="number"
-                              value={item.receivedWeight || 0}
-                              onChange={(e) => {
-                                const weight = Math.max(0, Number(e.target.value) || 0);
-                                const updatedItems = [...formData.items];
-                                updatedItems[index].receivedWeight = weight;
-                                updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - weight;
-                                setFormData(prev => ({ ...prev, items: updatedItems }));
-                              }}
-                              className="w-20 px-2 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                              min="0"
-                              step="1"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const maxWeight = item.orderedWeight - item.previousWeight;
-                                const weight = Math.min(maxWeight, Number(item.receivedWeight || 0) + 1);
-                                const updatedItems = [...formData.items];
-                                updatedItems[index].receivedWeight = weight;
-                                updatedItems[index].pendingWeight = item.orderedWeight - item.previousWeight - weight;
-                                setFormData(prev => ({ ...prev, items: updatedItems }));
-                              }}
-                              className="p-0.5 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                              disabled={item.receivedWeight >= (item.orderedWeight - item.previousWeight)}
-                            >
-                              <Plus className="w-3 h-3 text-gray-600" />
-                            </button>
-                            <span className="text-xs text-gray-600">kg</span>
-                          </div>
-                          
-                          {errors['items.' + index + '.receivedQuantity'] && (
-                            <p className="text-red-500 text-xs">{errors['items.' + index + '.receivedQuantity']}</p>
-                          )}
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4 bg-orange-50">
-                        <div className="text-sm font-medium text-orange-700">
-                          {Math.max(0, item.pendingQuantity || 0)} {item.unit}
-                        </div>
-                        <div className="text-xs text-orange-600">
-                          {Math.max(0, item.pendingWeight || 0).toFixed(2)} kg
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4">
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div 
-                            className={'h-2.5 rounded-full transition-all ' + (completionPercentage === 100 ? 'bg-green-600' : completionPercentage > 0 ? 'bg-blue-600' : 'bg-gray-400')}
-                            style={{ width: completionPercentage + '%' }}
-                          />
-                        </div>
-                        <div className="text-xs text-center text-gray-600 mt-1">
-                          {completionPercentage}%
-                        </div>
-                      </td>
-                      
-                      <td className="px-4 py-4 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={item.markAsComplete || false}
-                            onChange={(e) => {
-                              const updatedItems = [...formData.items];
-                              updatedItems[index].markAsComplete = e.target.checked;
-                              setFormData(prev => ({ ...prev, items: updatedItems }));
-                            }}
-                            className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-                            title="Mark this item as complete even if quantity doesn't match (e.g., due to losses)"
-                          />
-                          {item.markAsComplete && (
-                            <span className="text-xs text-green-600 font-medium">Final</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="text-sm font-medium text-gray-900">{item.orderedQuantity} {item.unit}</div>
+                              <div className="text-xs text-gray-500">{item.orderedWeight > 0 ? item.orderedWeight + ' kg' : '-'}</div>
+                            </td>
+                            <td className="px-4 py-4 bg-blue-50/30">
+                              <div className="text-sm font-medium text-blue-700">{item.previouslyReceived || 0} {item.unit}</div>
+                              <div className="text-xs text-blue-600">{(item.previousWeight || 0).toFixed(2)} kg</div>
+                            </td>
+                            <td className="px-4 py-4 bg-green-50/30">
+                              <div className="space-y-3">
+                                <div>
+                                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Quantity</div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newQty = Math.max(0, Number(item.receivedQuantity) - 1);
+                                        handleItemChange(globalIndex, 'receivedQuantity', newQty);
+                                      }}
+                                      className="p-1 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
+                                      disabled={item.receivedQuantity <= 0}
+                                    >
+                                      <Minus className="w-3.5 h-3.5 text-gray-600" />
+                                    </button>
+                                    <input
+                                      type="number"
+                                      value={item.receivedQuantity}
+                                      onChange={(e) => handleItemChange(globalIndex, 'receivedQuantity', e.target.value)}
+                                      className="w-20 px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                                      min="0"
+                                      max={item.orderedQuantity - item.previouslyReceived}
+                                      step="1"
+                                      placeholder="0"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const maxAllowed = item.orderedQuantity - item.previouslyReceived;
+                                        const newQty = Math.min(maxAllowed, Number(item.receivedQuantity) + 1);
+                                        handleItemChange(globalIndex, 'receivedQuantity', newQty);
+                                      }}
+                                      className="p-1 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
+                                      disabled={item.receivedQuantity >= (item.orderedQuantity - item.previouslyReceived)}
+                                    >
+                                      <Plus className="w-3.5 h-3.5 text-gray-600" />
+                                    </button>
+                                    <span className="text-sm text-gray-600">{item.unit}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Max: {item.orderedQuantity - item.previouslyReceived} {item.unit}
+                                  </div>
+                                  {item.receivedQuantity > (item.orderedQuantity - item.previouslyReceived) && (
+                                    <div className="text-xs text-red-600 mt-1">
+                                      Cannot receive more than pending ({item.orderedQuantity - item.previouslyReceived} {item.unit})
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weight</div>
+                                  {item.subProduct ? (
+                                    <div>
+                                      <div className="text-sm font-semibold text-green-700">Total: {(Number(item.receivedWeight) || 0).toFixed(2)} kg</div>
+                                      <div className="text-xs text-green-600 mt-0.5">Auto-calculated from per-unit weights</div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const weight = Math.max(0, Number(item.receivedWeight || 0) - 1);
+                                          handleItemChange(globalIndex, 'receivedWeight', weight);
+                                        }}
+                                        className="p-0.5 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
+                                        disabled={item.receivedWeight <= 0}
+                                      >
+                                        <Minus className="w-3 h-3 text-gray-600" />
+                                      </button>
+                                      <input
+                                        type="number"
+                                        value={item.receivedWeight || 0}
+                                        onChange={(e) => handleItemChange(globalIndex, 'receivedWeight', e.target.value)}
+                                        className="w-20 px-2 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        min="0"
+                                        step="0.01"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const maxWeight = item.orderedWeight - item.previousWeight;
+                                          const weight = Math.min(maxWeight, Number(item.receivedWeight || 0) + 1);
+                                          handleItemChange(globalIndex, 'receivedWeight', weight);
+                                        }}
+                                        className="p-0.5 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
+                                        disabled={item.receivedWeight >= (item.orderedWeight - item.previousWeight)}
+                                      >
+                                        <Plus className="w-3 h-3 text-gray-600" />
+                                      </button>
+                                      <span className="text-xs text-gray-600">kg</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {item.subProduct && (
+                                  <SubProductSelector
+                                    productId={item.product}
+                                    selectedSubProduct={item.subProduct}
+                                    selectedSubProductName={item.subProductName}
+                                    quantity={item.receivedQuantity}
+                                    weights={item.receivedSubProductWeights}
+                                    categoryHasSubProducts={true}
+                                    onSelectSubProduct={() => {}}
+                                    onWeightsChange={(weights) => handleReceivedSubProductWeightsChange(globalIndex, weights)}
+                                    disableSelection={true}
+                                    allowAddNew={false}
+                                    compact
+                                  />
+                                )}
+                                {errors['items.' + globalIndex + '.receivedQuantity'] && (
+                                  <p className="text-red-500 text-xs">{errors['items.' + globalIndex + '.receivedQuantity']}</p>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 bg-orange-50/30">
+                              <div className="text-sm font-medium text-orange-700">{Math.max(0, item.pendingQuantity || 0)} {item.unit}</div>
+                              <div className="text-xs text-orange-600">{Math.max(0, item.pendingWeight || 0).toFixed(2)} kg</div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                <div
+                                  className={'h-2.5 rounded-full transition-all ' + (completionPercentage === 100 ? 'bg-green-600' : completionPercentage > 0 ? 'bg-blue-600' : 'bg-gray-400')}
+                                  style={{ width: completionPercentage + '%' }}
+                                />
+                              </div>
+                              <div className="text-xs text-center text-gray-600 mt-1">{completionPercentage}%</div>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={item.markAsComplete || false}
+                                  onChange={(e) => {
+                                    const updatedItems = [...formData.items];
+                                    updatedItems[globalIndex].markAsComplete = e.target.checked;
+                                    setFormData(prev => ({ ...prev, items: updatedItems }));
+                                  }}
+                                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                  title="Mark this item as complete even if quantity doesn't match (e.g., due to losses)"
+                                />
+                                {item.markAsComplete && (
+                                  <span className="text-xs text-green-600 font-medium">Final</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -816,21 +868,13 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
                   // Close modal
                   setShowPOModal(false);
                   
-                  // Refresh PO list (filter out completed POs)
-                  const posResponse = await purchaseOrderAPI.getAll({ limit: 100 });
-                  if (posResponse && posResponse.data) {
-                    const incompletePOs = posResponse.data.filter(po => 
-                      po.status !== 'Fully_Received' && po.status !== 'Complete'
-                    );
-                    console.log(`Refreshed PO list: ${incompletePOs.length} incomplete out of ${posResponse.data.length} total`);
-                    setPurchaseOrders(incompletePOs);
-                    
-                    // Auto-select the newly created PO
-                    console.log('Auto-selecting new PO:', newPOId);
-                    await handlePOSelection(newPOId);
-                    
-                    alert('✅ Purchase Order created and selected successfully!');
-                  }
+                  // Optimistically add the new PO and refresh the list
+                  if (response.data) setPurchaseOrders(prev => [response.data, ...prev]);
+                  await refreshPOs();
+
+                  // Auto-select the newly created PO
+                  await handlePOSelection(newPOId);
+                  alert('✅ Purchase Order created and selected successfully!');
                 } catch (error) {
                   console.error('Error creating PO:', error);
                   alert('❌ Failed to create Purchase Order: ' + (error.message || 'Unknown error'));

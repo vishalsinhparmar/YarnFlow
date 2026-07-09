@@ -12,8 +12,10 @@ import {
   recalculateAllSOStatuses
 } from '../controller/salesOrderController.js';
 import { validateSalesOrder, validateSalesOrderUpdate } from '../validators/salesOrderValidator.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(authMiddleware);
 
 // Statistics
 router.get('/stats', getSalesOrderStats);
@@ -24,7 +26,7 @@ router.post('/recalculate-statuses', recalculateAllSOStatuses);
 // CRUD Operations
 router.get('/', getAllSalesOrders);
 router.get('/:id', getSalesOrderById);
-router.post('/', validateSalesOrder, createSalesOrder);
+router.post('/', createSalesOrder);
 router.put('/:id', validateSalesOrderUpdate, updateSalesOrder);
 router.delete('/:id', deleteSalesOrder);
 

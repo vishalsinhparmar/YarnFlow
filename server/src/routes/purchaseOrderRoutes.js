@@ -15,8 +15,10 @@ import {
   validatePurchaseOrderUpdate,
   validateStatusUpdate
 } from '../validators/purchaseOrderValidator.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(authMiddleware);
 
 // ============ PURCHASE ORDER ROUTES ============
 

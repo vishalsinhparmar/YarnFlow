@@ -18,8 +18,10 @@ import {
   validateStatusUpdate,
   validateApproval
 } from '../validators/grnValidator.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(authMiddleware);
 
 // ============ GRN ROUTES ============
 

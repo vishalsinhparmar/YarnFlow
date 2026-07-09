@@ -14,6 +14,10 @@ const categorySchema = new mongoose.Schema({
     type: String,
     enum: ['Active', 'Inactive'],
     default: 'Active'
+  },
+  hasSubProducts: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

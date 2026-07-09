@@ -1,6 +1,7 @@
 import Customer from '../models/Customer.js';
 import Supplier from '../models/Supplier.js';
 import Product from '../models/Product.js';
+import SubProduct from '../models/SubProduct.js';
 import Category from '../models/Category.js';
 import logger from '../utils/logger.js';
 
@@ -32,7 +33,7 @@ export const getAllCustomers = async (req, res) => {
     const customers = await Customer.find(query)
       .limit(limit * 1)
       .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+      .sort({ companyName: 1 });
     
     const total = await Customer.countDocuments(query);
     
@@ -194,7 +195,7 @@ export const getAllSuppliers = async (req, res) => {
     const suppliers = await Supplier.find(query)
       .limit(limit * 1)
       .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+      .sort({ companyName: 1 });
     
     const total = await Supplier.countDocuments(query);
     
@@ -492,10 +493,11 @@ export const getAllProducts = async (req, res) => {
     }
     
     const products = await Product.find(query)
-      .populate('category', 'categoryName')
+      .populate('category', 'categoryName hasSubProducts')
+      .populate('subProducts')
       .limit(limit * 1)
       .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+      .sort({ productName: 1 });
     
     const total = await Product.countDocuments(query);
     
@@ -551,7 +553,8 @@ export const getProductById = async (req, res) => {
     const { id } = req.params;
     
     const product = await Product.findById(id)
-      .populate('category', 'categoryName');
+      .populate('category', 'categoryName hasSubProducts')
+      .populate('subProducts');
     
     if (!product) {
       return res.status(404).json({
@@ -583,7 +586,7 @@ export const updateProduct = async (req, res) => {
       id,
       req.body,
       { new: true, runValidators: true }
-    ).populate('category', 'categoryName');
+    ).populate('category', 'categoryName hasSubProducts').populate('subProducts');
     
     if (!product) {
       return res.status(404).json({
@@ -641,6 +644,89 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
+// ============ SUB-PRODUCT CONTROLLERS ============
+
+// Get all sub-products for a product
+export const getSubProducts = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const subProducts = await SubProduct.find({ product: productId }).sort({ name: 1 });
+    res.status(200).json({ success: true, data: subProducts });
+  } catch (error) {
+    logger.error('Error fetching sub-products:', error);
+    res.status(500).json({ success: false, message: 'Error fetching sub-products', error: error.message });
+  }
+};
+
+// Bulk add sub-products to a product (add multiple at once, skip duplicates)
+export const bulkAddSubProducts = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { names } = req.body; // array of strings e.g. ["3","5","6","9"]
+
+    if (!Array.isArray(names) || names.length === 0) {
+      return res.status(400).json({ success: false, message: 'names array is required' });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+    const results = [];
+    for (const rawName of names) {
+      const name = String(rawName).trim();
+      if (!name) continue;
+      const sp = await SubProduct.findOneAndUpdate(
+        { product: productId, name },
+        { product: productId, name },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      results.push(sp);
+    }
+
+    // Ensure category.hasSubProducts flag is set (upsert doesn't trigger post-save hook)
+    if (results.length > 0 && product.category) {
+      await Category.findByIdAndUpdate(product.category, { hasSubProducts: true });
+    }
+
+    logger.info(`Bulk added ${results.length} sub-products to product ${productId}`);
+    res.status(201).json({ success: true, data: results, message: `${results.length} sub-products saved` });
+  } catch (error) {
+    logger.error('Error bulk adding sub-products:', error);
+    res.status(400).json({ success: false, message: 'Error adding sub-products', error: error.message });
+  }
+};
+
+// Update a single sub-product
+export const updateSubProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+    const sp = await SubProduct.findByIdAndUpdate(
+      id,
+      { name, description },
+      { new: true, runValidators: true }
+    );
+    if (!sp) return res.status(404).json({ success: false, message: 'Sub-product not found' });
+    res.status(200).json({ success: true, data: sp, message: 'Sub-product updated' });
+  } catch (error) {
+    logger.error('Error updating sub-product:', error);
+    res.status(400).json({ success: false, message: 'Error updating sub-product', error: error.message });
+  }
+};
+
+// Delete a single sub-product
+export const deleteSubProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sp = await SubProduct.findByIdAndDelete(id);
+    if (!sp) return res.status(404).json({ success: false, message: 'Sub-product not found' });
+    res.status(200).json({ success: true, message: 'Sub-product deleted' });
+  } catch (error) {
+    logger.error('Error deleting sub-product:', error);
+    res.status(500).json({ success: false, message: 'Error deleting sub-product', error: error.message });
+  }
+};
+
 // ============ DASHBOARD STATS ============
 
 // Get master data statistics
@@ -651,6 +737,7 @@ export const getMasterDataStats = async (req, res) => {
       totalSuppliers,
       totalProducts,
       totalCategories,
+      totalSubProducts,
       activeCustomers,
       verifiedSuppliers,
       lowStockProducts
@@ -659,6 +746,7 @@ export const getMasterDataStats = async (req, res) => {
       Supplier.countDocuments(),
       Product.countDocuments(),
       Category.countDocuments(),
+      SubProduct.countDocuments(),
       Customer.countDocuments({ status: 'Active' }),
       Supplier.countDocuments(),
       Product.countDocuments({ 'inventory.availableStock': { $lte: 10 } })
@@ -681,6 +769,9 @@ export const getMasterDataStats = async (req, res) => {
         },
         categories: {
           total: totalCategories
+        },
+        subProducts: {
+          total: totalSubProducts
         }
       }
     });

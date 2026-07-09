@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
+import { generateDocumentNumber } from '../utils/generateDocumentNumber.js';
 
 const salesChallanSchema = new mongoose.Schema({
   // Basic Information
   challanNumber: {
     type: String,
-    unique: true,
-    index: true
+    unique: true
   },
   challanDate: {
     type: Date,
@@ -17,13 +17,11 @@ const salesChallanSchema = new mongoose.Schema({
   salesOrder: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'SalesOrder',
-    required: true,
-    index: true
+    required: true
   },
   soNumber: {
     type: String,
     required: false,  // Made optional temporarily
-    index: true
   },
   
   // Customer Information (cached from SO)
@@ -56,6 +54,18 @@ const salesChallanSchema = new mongoose.Schema({
     },
     productName: { type: String, required: true },
     
+    // Sub-product tracking
+    subProduct: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SubProduct',
+      default: null
+    },
+    subProductName: { type: String, default: null },
+    subProductWeights: {
+      type: [Number],
+      default: []
+    },
+    
     // Quantities
     orderedQuantity: { type: Number, required: true, min: 0 },
     dispatchQuantity: { type: Number, required: true, min: 0 },
@@ -77,8 +87,7 @@ const salesChallanSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['Prepared', 'Dispatched', 'Delivered', 'Cancelled'],
-    default: 'Prepared',
-    index: true
+    default: 'Prepared'
   },
   
   // Workflow History
@@ -109,16 +118,20 @@ salesChallanSchema.index({ expectedDeliveryDate: 1 });
 // Pre-save middleware to generate challan number and handle status history
 salesChallanSchema.pre('save', async function(next) {
   try {
-    // Generate challan number for new documents
+    /* ===============================
+       1️⃣ Generate Challan Number
+    ================================ */
     if (this.isNew && !this.challanNumber) {
-      // Count total challans to get next number
-      const count = await this.constructor.countDocuments({});
-      
-      // Generate challan number: PKRK/SC/01, PKRK/SC/02, etc.
-      this.challanNumber = `PKRK/SC/${String(count + 1).padStart(2, '0')}`;
+      this.challanNumber = await generateDocumentNumber({
+        type: 'SC',        // Sales Challan
+        prefix: 'PKRK',
+        pad: 3
+      });
     }
-    
-    // Add status history for status changes
+
+    /* ===============================
+       2️⃣ Status History Tracking
+    ================================ */
     if (this.isModified('status') && !this.isNew) {
       this.statusHistory.push({
         status: this.status,
@@ -127,12 +140,13 @@ salesChallanSchema.pre('save', async function(next) {
         notes: `Status changed to ${this.status}`
       });
     }
-    
+
     next();
   } catch (error) {
     next(error);
   }
 });
+
 
 // Static method to get statistics
 salesChallanSchema.statics.getStats = async function() {

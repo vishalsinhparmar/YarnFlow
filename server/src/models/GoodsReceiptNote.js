@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { generateDocumentNumber } from '../utils/generateDocumentNumber.js';
 
 // Individual item received in GRN
 const grnItemSchema = new mongoose.Schema({
@@ -14,6 +15,27 @@ const grnItemSchema = new mongoose.Schema({
   productName: {
     type: String,
     required: true // Store for historical reference
+  },
+  
+  // Sub-product tracking
+  subProduct: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubProduct',
+    default: null
+  },
+  subProductName: {
+    type: String,
+    default: null
+  },
+  // Per-unit weights ordered on the PO (for defaulting during receipt)
+  orderedSubProductWeights: {
+    type: [Number],
+    default: []
+  },
+  // Per-unit weights captured in this GRN
+  receivedSubProductWeights: {
+    type: [Number],
+    default: []
   },
   
   // Quantities
@@ -143,25 +165,24 @@ const grnSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Auto-generate GRN number before saving
+
+
 grnSchema.pre('save', async function(next) {
-  if (!this.grnNumber) {
-    try {
-      // Count total GRNs to get next number
-      const count = await mongoose.model('GoodsReceiptNote').countDocuments({});
-      
-      // Generate GRN number: PKRK/GRN/01, PKRK/GRN/02, etc.
-      this.grnNumber = `PKRK/GRN/${String(count + 1).padStart(2, '0')}`;
-    } catch (error) {
-      return next(error);
+  try {
+    if (!this.grnNumber) {
+      this.grnNumber = await generateDocumentNumber({
+        type: 'GRN',
+        prefix: 'PKRK',
+        pad: 3
+      });
     }
+    next();
+  } catch (err) {
+    next(err);
   }
-  
-  next();
 });
 
-// Indexes for better query performance
-grnSchema.index({ grnNumber: 1 });
+// Indexes for better query performance (grnNumber index is created by unique:true)
 grnSchema.index({ purchaseOrder: 1 });
 grnSchema.index({ supplier: 1 });
 grnSchema.index({ status: 1 });

@@ -26,7 +26,13 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
-  
+
+  // SubProduct controllers
+  getSubProducts,
+  bulkAddSubProducts,
+  updateSubProduct,
+  deleteSubProduct,
+
   // Stats controller
   getMasterDataStats
 } from '../controller/masterDataController.js';
@@ -47,8 +53,10 @@ import { validateCategory, validateSupplier, validateProduct } from '../validato
 
 // Import multer for file uploads
 import upload from '../middleware/upload.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(authMiddleware);
 
 // ============ MASTER DATA STATS ROUTES ============
 router.get('/stats', getMasterDataStats);
@@ -82,6 +90,12 @@ router.get('/products/:id', getProductById);
 router.post('/products', validateProduct, createProduct);
 router.put('/products/:id', validateProduct, updateProduct);
 router.delete('/products/:id', deleteProduct);
+
+// ============ SUB-PRODUCT ROUTES ============
+router.get('/products/:productId/sub-products', getSubProducts);
+router.post('/products/:productId/sub-products/bulk', bulkAddSubProducts);
+router.put('/sub-products/:id', updateSubProduct);
+router.delete('/sub-products/:id', deleteSubProduct);
 
 // ============ UNIT ROUTES ============
 router.get('/units', getAllUnits);

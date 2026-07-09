@@ -11,12 +11,23 @@ import {
   Users,
   Factory,
   Boxes,
-  FolderOpen
+  FolderOpen,
+  Layers,
+  Building2,
+  Settings,
+  MapPin,
+  BarChart3
 } from "lucide-react";
 
 const SideBarApp = () => {
   const location = useLocation();
   const [masterDataOpen, setMasterDataOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  const isConfigActive = location.pathname.startsWith('/configuration');
+
+  useEffect(() => {
+    if (isConfigActive) setConfigOpen(true);
+  }, [isConfigActive]);
 
   const menuItems = [
     {
@@ -76,6 +87,11 @@ const SideBarApp = () => {
       name: "Categories",
       path: "/master-data/categories",
       icon: FolderOpen
+    },
+    {
+      name: "Sub Products",
+      path: "/master-data/sub-products",
+      icon: Layers
     }
   ];
 
@@ -160,7 +176,7 @@ const SideBarApp = () => {
                 
                 {/* Enhanced Dropdown Menu */}
                 <div className={`overflow-hidden transition-all duration-300 ${
-                  masterDataOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+                  masterDataOpen ? "max-h-[28rem] opacity-100" : "max-h-0 opacity-0"
                 }`}>
                   <div className="px-2 pb-2">
                     <ul className="space-y-1">
@@ -212,9 +228,99 @@ const SideBarApp = () => {
                 </div>
               </div>
             </li>
+
+            {/* Company Profile */}
+            <li className="mt-2">
+              <Link
+                to="/company-profile"
+                className={`group flex items-center px-3 py-3 rounded-lg transition-all duration-200 ${
+                  location.pathname === '/company-profile'
+                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg transform scale-105'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <Building2 className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform duration-200" />
+                <span className="text-sm font-medium">Company Profile</span>
+                {location.pathname === '/company-profile' && (
+                  <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
+                )}
+              </Link>
+            </li>
+
+            {/* Configuration Dropdown */}
+            <li className="mt-2">
+              <div className="bg-gray-800/50 rounded-lg border border-gray-700">
+                <button
+                  onClick={() => setConfigOpen(!configOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${
+                    isConfigActive
+                      ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg'
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <Settings className="w-5 h-5 mr-3" />
+                    <span className="text-sm font-semibold">Configuration</span>
+                  </div>
+                  <svg className={`w-4 h-4 transition-transform duration-300 ${configOpen ? 'rotate-180' : ''}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <div className={`overflow-hidden transition-all duration-300 ${configOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="px-2 pb-2">
+                    <ul className="space-y-1">
+                      {[
+                        { name: 'Warehouses', path: '/configuration/warehouses', icon: MapPin },
+                        { name: 'Users',      path: '/configuration/users',      icon: Users  }
+                      ].map((item, index) => {
+                        const isActive = location.pathname === item.path;
+                        return (
+                          <li key={item.path}
+                            className={`transform transition-all duration-200 ${configOpen ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
+                            style={{ transitionDelay: `${index * 50}ms` }}>
+                            <Link
+                              to={item.path}
+                              className={`group flex items-center px-4 py-2.5 rounded-md transition-all duration-200 text-sm relative ${
+                                isActive
+                                  ? 'bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-md'
+                                  : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                              }`}
+                            >
+                              <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-600 group-hover:bg-orange-400 transition-colors"></div>
+                              <item.icon className="w-4 h-4 mr-3" />
+                              <span className="font-medium">{item.name}</span>
+                              {isActive && <div className="ml-auto w-1.5 h-1.5 bg-white rounded-full"></div>}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </li>
+
+            {/* Reports */}
+            <li className="mt-2">
+              <Link
+                to="/reports"
+                className={`group flex items-center px-3 py-3 rounded-lg transition-all duration-200 ${
+                  location.pathname === '/reports'
+                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg transform scale-105'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <BarChart3 className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform duration-200" />
+                <span className="text-sm font-medium">Reports</span>
+                {location.pathname === '/reports' && (
+                  <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
+                )}
+              </Link>
+            </li>
           </ul>
         </nav>
-        
+
         {/* Footer */}
         <div className="p-4 border-t border-gray-700 flex-shrink-0">
           <div className="text-xs text-gray-500 text-center">

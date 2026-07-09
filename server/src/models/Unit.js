@@ -11,8 +11,7 @@ const unitSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for faster queries
-unitSchema.index({ name: 1 });
+// name index is created by unique:true above
 
 const Unit = mongoose.model('Unit', unitSchema);
 

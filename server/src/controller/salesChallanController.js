@@ -1,8 +1,32 @@
+import mongoose from 'mongoose';
 import SalesChallan from '../models/SalesChallan.js';
 import SalesOrder from '../models/SalesOrder.js';
 import InventoryLot from '../models/InventoryLot.js';
 import Product from '../models/Product.js';
+import CompanyProfile from '../models/CompanyProfile.js';
 import { generateSalesChallanPDF, generateSalesOrderConsolidatedPDF } from '../utils/pdfGenerator.js';
+
+// ============ HELPER: fetch active company profile ============
+const getActiveCompanyProfile = async () => {
+  let profile = await CompanyProfile.findOne({ isActive: true }).lean();
+  console.log('[PDF] Company profile terms from DB:', JSON.stringify(profile?.challanTermsAndConditions));
+  if (!profile) {
+    // Return safe defaults if no profile configured yet
+    profile = {
+      companyName: process.env.COMPANY_NAME || 'Your Company Name',
+      headOfficeAddress: process.env.COMPANY_ADDRESS || '',
+      branchOfficeAddress: '',
+      phone: process.env.COMPANY_PHONE || '',
+      gstin: process.env.COMPANY_GSTIN || '',
+      msmeNo: '',
+      city: process.env.COMPANY_CITY || '',
+      challanTermsAndConditions: [],
+      challanFooterNote: 'Computer-generated delivery challan',
+      signatureLabel: 'For'
+    };
+  }
+  return profile;
+};
 
 // ============ HELPER FUNCTIONS ============
 
@@ -144,8 +168,13 @@ export const getSalesChallanById = async (req, res) => {
 };
 
 // Create sales challan from sales order
+// Uses MongoDB transactions for atomic operations ensuring data consistency
 export const createSalesChallan = async (req, res) => {
+  const session = await mongoose.startSession();
+  
   try {
+    session.startTransaction();
+    
     const {
       salesOrder,
       expectedDeliveryDate,
@@ -155,8 +184,9 @@ export const createSalesChallan = async (req, res) => {
       createdBy
     } = req.body;
     
-    // Validate required fields
+    // Validate required fields (before transaction work)
     if (!salesOrder) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Sales Order is required'
@@ -164,6 +194,7 @@ export const createSalesChallan = async (req, res) => {
     }
 
     if (!warehouseLocation) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Warehouse Location is required'
@@ -171,16 +202,18 @@ export const createSalesChallan = async (req, res) => {
     }
 
     if (!items || items.length === 0) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'At least one item is required'
       });
     }
     
-    // Get SO details
+    // Get SO details (within transaction)
     const so = await SalesOrder.findById(salesOrder)
       .populate('customer')
-      .populate('items.product');
+      .populate('items.product')
+      .session(session);
     
     console.log('Sales Order found:', {
       id: so?._id,
@@ -190,6 +223,7 @@ export const createSalesChallan = async (req, res) => {
     });
     
     if (!so) {
+      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: 'Sales order not found'
@@ -197,6 +231,7 @@ export const createSalesChallan = async (req, res) => {
     }
     
     if (!so.customer) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Sales order customer not found or not populated'
@@ -205,6 +240,7 @@ export const createSalesChallan = async (req, res) => {
     
     // Prevent challan creation for Delivered or Cancelled SOs
     if (['Delivered', 'Cancelled'].includes(so.status)) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: 'Cannot create challan for delivered or cancelled sales order'
@@ -215,6 +251,7 @@ export const createSalesChallan = async (req, res) => {
     for (const item of items) {
       const soItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
       if (!soItem) {
+        await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message: `Item not found in sales order`
@@ -222,6 +259,7 @@ export const createSalesChallan = async (req, res) => {
       }
 
       if (item.dispatchQuantity > soItem.quantity) {
+        await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message: `Dispatch quantity exceeds ordered quantity for ${item.productName}`
@@ -238,12 +276,15 @@ export const createSalesChallan = async (req, res) => {
       warehouseLocation,
       expectedDeliveryDate: expectedDeliveryDate || null,
       items: items.map(item => {
-        // Find corresponding SO item to get notes
+        // Find corresponding SO item to get notes and sub-product details
         const soItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
         return {
           salesOrderItem: item.salesOrderItem,
           product: item.product,
           productName: item.productName,
+          subProduct: soItem?.subProduct || item.subProduct || null,
+          subProductName: soItem?.subProductName || item.subProductName || null,
+          subProductWeights: soItem?.subProductWeights || item.subProductWeights || [],
           orderedQuantity: item.orderedQuantity,
           dispatchQuantity: item.dispatchQuantity,
           unit: item.unit,
@@ -259,11 +300,11 @@ export const createSalesChallan = async (req, res) => {
 
     console.log('Creating challan with data:', JSON.stringify(challanData, null, 2));
 
-    // Create challan
+    // Create challan (within transaction)
     const challan = new SalesChallan(challanData);
 
     try {
-      await challan.save();
+      await challan.save({ session });
       console.log('Challan saved successfully:', challan._id);
     } catch (saveError) {
       console.error('Challan save error:', saveError);
@@ -272,10 +313,10 @@ export const createSalesChallan = async (req, res) => {
     }
 
     // Update SO dispatch status (like GRN updates PO receipt status)
-    // Fetch all challans for this SO to calculate dispatch status
-    const allChallans = await SalesChallan.find({ salesOrder: so._id });
+    // Fetch all challans for this SO to calculate dispatch status (within transaction)
+    const allChallans = await SalesChallan.find({ salesOrder: so._id }).session(session);
     so.updateDispatchStatus(allChallans);
-    await so.save();
+    await so.save({ session });
 
     // Process Stock Out for inventory (following GRN pattern)
     // IMPORTANT: Only deduct stock when SO item is COMPLETE (like GRN only creates lots when PO item is complete)
@@ -284,170 +325,197 @@ export const createSalesChallan = async (req, res) => {
     // 2. Item is manually marked as complete
     console.log(`\n🔄 Starting stock out processing for ${items.length} item(s)...`);
     
-    try {
-      for (const item of items) {
-        console.log(`\n📦 Processing item: ${item.productName}`);
-        console.log(`   Product ID: ${item.product}`);
-        console.log(`   SO Item ID: ${item.salesOrderItem}`);
-        console.log(`   Dispatch Qty: ${item.dispatchQuantity}`);
-        console.log(`   Weight: ${item.weight}`);
-        
-        // Find the SO item to check completion status
-        const soItem = so.items.find(i => i._id.toString() === item.salesOrderItem.toString());
-        if (!soItem) {
-          console.warn(`⚠️ SO item not found for ${item.productName}`);
-          console.warn(`   Available SO items: ${so.items.map(i => i._id.toString()).join(', ')}`);
-          continue;
-        }
-        
-        console.log(`   SO Item found: ${soItem.productName}, Qty: ${soItem.quantity}`);
-        
-        // Calculate total dispatched for this SO item across all challans
-        const totalDispatched = allChallans.reduce((sum, ch) => {
-          const chItem = ch.items.find(i => i.salesOrderItem.toString() === item.salesOrderItem.toString());
-          return sum + (chItem ? chItem.dispatchQuantity : 0);
-        }, 0);
-        
-        // Check if this specific SO item is now complete
-        const isItemComplete = item.markAsComplete || totalDispatched >= soItem.quantity;
-        
-        console.log(`   Total dispatched across all challans: ${totalDispatched}`);
-        console.log(`   SO item quantity: ${soItem.quantity}`);
-        console.log(`   Mark as complete: ${item.markAsComplete || false}`);
-        console.log(`   Is item complete: ${isItemComplete}`);
-        
-        if (!isItemComplete) {
-          console.log(`⏳ SO item ${item.productName} not yet complete (${totalDispatched}/${soItem.quantity}). Stock will NOT be deducted yet.`);
-          continue; // Skip stock deduction for incomplete items
-        }
-        
-        console.log(`✅ SO item ${item.productName} is COMPLETE (${totalDispatched}/${soItem.quantity}). Processing stock out for ALL challans...`);
-        
-        // When item becomes complete, deduct stock for ALL challans (current + previous)
-        // This is similar to GRN creating lots for all previous partial GRNs when item completes
-        const challansForThisItem = allChallans.filter(ch => 
-          ch.items.some(i => i.salesOrderItem.toString() === item.salesOrderItem.toString())
-        ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); // Process in chronological order
-        
-        console.log(`📦 Found ${challansForThisItem.length} challan(s) for this item. Processing stock out...`);
-        console.log(`   Challan numbers: ${challansForThisItem.map(ch => ch.challanNumber).join(', ')}`);
-        
-        // Check if stock has already been deducted by looking for a movement with all these challan numbers
-        const challanNumbersStr = challansForThisItem.map(ch => ch.challanNumber).sort().join(', ');
-        console.log(`   Looking for existing movement with reference: "${challanNumbersStr}"`);
-        
-        const existingMovement = await InventoryLot.findOne({
-          product: item.product,
-          'movements': {
-            $elemMatch: {
-              type: 'Issued',
-              reference: challanNumbersStr
-            }
-          }
-        }).lean();
-        
-        if (existingMovement) {
-          console.log(`⏭️ Stock already deducted for this SO item (found movement with reference: ${challanNumbersStr})`);
-          continue;
-        }
-        
-        console.log(`   No existing movement found. Proceeding with stock deduction...`);
-        
-        let totalQtyToDeduct = 0;
-        let totalWeightToDeduct = 0;
-        
-        // Calculate total quantity and weight to deduct from all challans
-        for (const challanToProcess of challansForThisItem) {
-          const challanItem = challanToProcess.items.find(i => i.salesOrderItem.toString() === item.salesOrderItem.toString());
-          if (challanItem) {
-            totalQtyToDeduct += challanItem.dispatchQuantity;
-            totalWeightToDeduct += challanItem.weight || 0;
-          }
-        }
-        
-        console.log(`📊 Total to deduct: ${totalQtyToDeduct} ${item.unit}, ${totalWeightToDeduct.toFixed(2)} kg`);
-        
-        // Find available inventory lots for this product (FIFO - First In First Out)
-        const lots = await InventoryLot.find({
-          product: item.product,
-          status: 'Active',
-          currentQuantity: { $gt: 0 }
-        }).sort({ receivedDate: 1 }); // FIFO: oldest first
-
-        if (lots.length === 0) {
-          console.warn(`⚠️ No inventory lots found for ${item.productName}`);
-          continue;
-        }
-
-        let remainingQty = totalQtyToDeduct;
-        let remainingWeight = totalWeightToDeduct;
-        const lotsUpdated = [];
-
-        // Deduct from lots using FIFO (following GRN pattern)
-        for (const lot of lots) {
-          if (remainingQty <= 0) break;
-
-          const availableQty = lot.currentQuantity - lot.reservedQuantity;
-          if (availableQty <= 0) continue;
-
-          const qtyToDeduct = Math.min(remainingQty, availableQty);
-          
-          // Calculate proportional weight to deduct
-          const weightPerUnit = remainingWeight / remainingQty;
-          const weightToDeduct = qtyToDeduct * weightPerUnit;
-
-          // Update lot quantities (similar to GRN updating inventory)
-          lot.currentQuantity -= qtyToDeduct;
-
-          // Add movement record with weight for ALL challans (not just current one)
-          // Reference all challan numbers that contributed to this deduction
-          const challanRefs = challansForThisItem.map(ch => ch.challanNumber).join(', ');
-          lot.movements.push({
+    for (const item of items) {
+      console.log(`\n📦 Processing item: ${item.productName}`);
+      console.log(`   Product ID: ${item.product}`);
+      console.log(`   SO Item ID: ${item.salesOrderItem}`);
+      console.log(`   Dispatch Qty: ${item.dispatchQuantity}`);
+      console.log(`   Weight: ${item.weight}`);
+      
+      // Find the SO item to check completion status
+      const soItem = so.items.find(i => i._id.toString() === item.salesOrderItem.toString());
+      if (!soItem) {
+        console.warn(`⚠️ SO item not found for ${item.productName}`);
+        console.warn(`   Available SO items: ${so.items.map(i => i._id.toString()).join(', ')}`);
+        continue;
+      }
+      
+      console.log(`   SO Item found: ${soItem.productName}, Qty: ${soItem.quantity}`);
+      
+      // Calculate total dispatched for this SO item across all challans
+      const totalDispatched = allChallans.reduce((sum, ch) => {
+        const chItem = ch.items.find(i => i.salesOrderItem.toString() === item.salesOrderItem.toString());
+        return sum + (chItem ? chItem.dispatchQuantity : 0);
+      }, 0);
+      
+      // Check if this specific SO item is now complete
+      const isItemComplete = item.markAsComplete || totalDispatched >= soItem.quantity;
+      
+      console.log(`   Total dispatched across all challans: ${totalDispatched}`);
+      console.log(`   SO item quantity: ${soItem.quantity}`);
+      console.log(`   Mark as complete: ${item.markAsComplete || false}`);
+      console.log(`   Is item complete: ${isItemComplete}`);
+      
+      if (!isItemComplete) {
+        console.log(`⏳ SO item ${item.productName} not yet complete (${totalDispatched}/${soItem.quantity}). Stock will NOT be deducted yet.`);
+        continue; // Skip stock deduction for incomplete items
+      }
+      
+      console.log(`✅ SO item ${item.productName} is COMPLETE (${totalDispatched}/${soItem.quantity}). Processing stock out for ALL challans...`);
+      
+      // When item becomes complete, deduct stock for ALL challans (current + previous)
+      // This is similar to GRN creating lots for all previous partial GRNs when item completes
+      const challansForThisItem = allChallans.filter(ch => 
+        ch.items.some(i => i.salesOrderItem.toString() === item.salesOrderItem.toString())
+      ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); // Process in chronological order
+      
+      console.log(`📦 Found ${challansForThisItem.length} challan(s) for this item. Processing stock out...`);
+      console.log(`   Challan numbers: ${challansForThisItem.map(ch => ch.challanNumber).join(', ')}`);
+      
+      // Check if stock has already been deducted by looking for a movement with all these challan numbers
+      // Include the SO item id so multi-sub-product orders don't collide on the same product+challan reference
+      const challanNumbersStr = `${challansForThisItem.map(ch => ch.challanNumber).sort().join(', ')}|SOItem:${item.salesOrderItem}`;
+      console.log(`   Looking for existing movement with reference: "${challanNumbersStr}"`);
+      
+      const existingMovement = await InventoryLot.findOne({
+        product: item.product,
+        'movements': {
+          $elemMatch: {
             type: 'Issued',
-            quantity: qtyToDeduct,
-            weight: weightToDeduct,
-            date: new Date(),
-            reference: challanRefs,
-            notes: `Stock out for Sales Challan(s): ${challanRefs} (SO Item Completed)`,
-            performedBy: createdBy || 'Admin'
-          });
-
-          // Update status if fully consumed
-          if (lot.currentQuantity === 0) {
-            lot.status = 'Consumed';
+            reference: challanNumbersStr
           }
-
-          await lot.save();
-          lotsUpdated.push({ lotNumber: lot.lotNumber, quantity: qtyToDeduct, weight: weightToDeduct });
-          remainingQty -= qtyToDeduct;
-          remainingWeight -= weightToDeduct;
-
-          console.log(`📦 Deducted ${qtyToDeduct} ${item.unit} (${weightToDeduct.toFixed(2)} kg) of ${item.productName} from lot ${lot.lotNumber}`);
-          console.log(`⚖️  Weight saved in movement: ${weightToDeduct.toFixed(2)} kg`);
         }
-
-        // Update product inventory (following GRN pattern)
-        if (lotsUpdated.length > 0) {
-          const totalDeducted = lotsUpdated.reduce((sum, l) => sum + l.quantity, 0);
-          await Product.findByIdAndUpdate(
-            item.product,
-            { $inc: { 'inventory.currentStock': -totalDeducted } }
-          );
-        }
-
-        if (remainingQty > 0) {
-          console.warn(`⚠️ Insufficient stock for ${item.productName}. Short by ${remainingQty} ${item.unit}`);
+      }).session(session).lean();
+      
+      if (existingMovement) {
+        console.log(`⏭️ Stock already deducted for this SO item (found movement with reference: ${challanNumbersStr})`);
+        continue;
+      }
+      
+      console.log(`   No existing movement found. Proceeding with stock deduction...`);
+      
+      let totalQtyToDeduct = 0;
+      let totalWeightToDeduct = 0;
+      
+      // Calculate total quantity and weight to deduct from all challans
+      for (const challanToProcess of challansForThisItem) {
+        const challanItem = challanToProcess.items.find(i => i.salesOrderItem.toString() === item.salesOrderItem.toString());
+        if (challanItem) {
+          totalQtyToDeduct += challanItem.dispatchQuantity;
+          totalWeightToDeduct += challanItem.weight || 0;
         }
       }
+      
+      console.log(`📊 Total to deduct: ${totalQtyToDeduct} ${item.unit}, ${totalWeightToDeduct.toFixed(2)} kg`);
+      
+      // Find available inventory lots for this product (FIFO - First In First Out) - within transaction
+      // Restrict by sub-product if the sales order item specifies one
+      const currentSOItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
+      const lotFilter = {
+        product: item.product,
+        status: 'Active',
+        currentQuantity: { $gt: 0 }
+      };
+      if (currentSOItem?.subProduct) {
+        lotFilter.subProduct = currentSOItem.subProduct;
+      }
+      const lots = await InventoryLot.find(lotFilter).sort({ receivedDate: 1 }).session(session); // FIFO: oldest first
 
-      console.log(`✅ Stock out processed for challan ${challan.challanNumber}`);
-    } catch (stockError) {
-      console.error('⚠️ Error processing stock out:', stockError.message);
-      // Don't fail the challan creation if stock out fails
-      // Log error for manual intervention
+      if (lots.length === 0) {
+        console.warn(`⚠️ No inventory lots found for ${item.productName}`);
+        continue;
+      }
+
+      // Calculate available quantity and weight to enforce non-negative inventory
+      const availableQty = lots.reduce((sum, lot) => sum + (lot.currentQuantity - (lot.reservedQuantity || 0)), 0);
+      const availableWeight = lots.reduce((sum, lot) => {
+        const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
+        return sum + (lot.currentQuantity - (lot.reservedQuantity || 0)) * weightPerUnit;
+      }, 0);
+
+      if (totalQtyToDeduct > availableQty) {
+        const err = new Error(`Insufficient stock for ${item.productName}. Available: ${availableQty} ${item.unit}, Required: ${totalQtyToDeduct} ${item.unit}`);
+        err.statusCode = 400;
+        throw err;
+      }
+      if (totalWeightToDeduct > availableWeight) {
+        const err = new Error(`Insufficient weight for ${item.productName}. Available: ${availableWeight.toFixed(2)} kg, Required: ${totalWeightToDeduct.toFixed(2)} kg`);
+        err.statusCode = 400;
+        throw err;
+      }
+
+      let remainingQty = totalQtyToDeduct;
+      let remainingWeight = totalWeightToDeduct;
+      const lotsUpdated = [];
+
+      // Deduct from lots using FIFO (following GRN pattern) - within transaction
+      for (const lot of lots) {
+        if (remainingQty <= 0) break;
+
+        const lotAvailableQty = lot.currentQuantity - (lot.reservedQuantity || 0);
+        if (lotAvailableQty <= 0) continue;
+
+        const qtyToDeduct = Math.min(remainingQty, lotAvailableQty);
+        
+        // Calculate proportional weight to deduct
+        const weightPerUnit = remainingQty > 0 ? remainingWeight / remainingQty : 0;
+        const weightToDeduct = qtyToDeduct * weightPerUnit;
+
+        // Update lot quantities (similar to GRN updating inventory)
+        lot.currentQuantity -= qtyToDeduct;
+
+        // Add movement record with weight for ALL challans (not just current one)
+        // Reference all challan numbers that contributed to this deduction, scoped to the SO item
+        const challanRefs = challansForThisItem.map(ch => ch.challanNumber).join(', ');
+        lot.movements.push({
+          type: 'Issued',
+          quantity: qtyToDeduct,
+          weight: weightToDeduct,
+          date: new Date(),
+          reference: challanNumbersStr,
+          notes: `Stock out for Sales Challan(s): ${challanRefs} (SO Item Completed)`,
+          performedBy: createdBy || 'Admin'
+        });
+
+        // Update status if fully consumed
+        if (lot.currentQuantity === 0) {
+          lot.status = 'Consumed';
+        }
+
+        await lot.save({ session });
+        lotsUpdated.push({ lotNumber: lot.lotNumber, quantity: qtyToDeduct, weight: weightToDeduct });
+        remainingQty -= qtyToDeduct;
+        remainingWeight -= weightToDeduct;
+
+        console.log(`📦 Deducted ${qtyToDeduct} ${item.unit} (${weightToDeduct.toFixed(2)} kg) of ${item.productName} from lot ${lot.lotNumber}`);
+        console.log(`⚖️  Weight saved in movement: ${weightToDeduct.toFixed(2)} kg`);
+      }
+
+      // Update product inventory (following GRN pattern) - within transaction
+      if (lotsUpdated.length > 0) {
+        const totalDeducted = lotsUpdated.reduce((sum, l) => sum + l.quantity, 0);
+        await Product.findByIdAndUpdate(
+          item.product,
+          { $inc: { 'inventory.currentStock': -totalDeducted } },
+          { session }
+        );
+      }
+
+      if (remainingQty > 0) {
+        console.warn(`⚠️ Insufficient stock for ${item.productName}. Short by ${remainingQty} ${item.unit}`);
+        const err = new Error(`Insufficient stock for ${item.productName}. Short by ${remainingQty} ${item.unit}`);
+        err.statusCode = 400;
+        throw err;
+      }
     }
 
-    // Populate challan before returning
+    console.log(`✅ Stock out processed for challan ${challan.challanNumber}`);
+    
+    // Commit the transaction - all operations succeeded
+    await session.commitTransaction();
+    console.log('✅ Transaction committed successfully');
+
+    // Populate challan before returning (outside transaction)
     const populatedChallan = await SalesChallan.findById(challan._id)
       .populate('customer', 'companyName gstNumber address')
       .populate('salesOrder', 'soNumber orderDate status')
@@ -459,7 +527,9 @@ export const createSalesChallan = async (req, res) => {
       data: populatedChallan
     });
   } catch (error) {
-    console.error('Error creating sales challan:', error);
+    // Abort transaction on any error
+    await session.abortTransaction();
+    console.error('❌ Transaction aborted - Error creating sales challan:', error);
     
     // If it's a validation error, send detailed info
     if (error.name === 'ValidationError') {
@@ -476,11 +546,22 @@ export const createSalesChallan = async (req, res) => {
       });
     }
     
+    // Return 400 for client-side validation errors (insufficient stock/weight)
+    if (error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Failed to create sales challan',
       error: error.message
     });
+  } finally {
+    // Always end the session
+    session.endSession();
   }
 };
 
@@ -736,15 +817,8 @@ export const generateChallanPDF = async (req, res) => {
       });
     }
 
-    // Company information (your company - the sender)
-    const companyInfo = {
-      name: process.env.COMPANY_NAME || 'YarnFlow',
-      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
-      city: process.env.COMPANY_CITY || 'City, State - 000000',
-      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
-      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
-      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
-    };
+    // Fetch live company profile from DB
+    const companyInfo = await getActiveCompanyProfile();
 
     // Generate PDF buffer
     const pdfBuffer = await generateSalesChallanPDF(challan.toObject(), companyInfo);
@@ -805,15 +879,8 @@ export const generateSOConsolidatedPDF = async (req, res) => {
       });
     }
 
-    // Company information (your company - the sender)
-    const companyInfo = {
-      name: process.env.COMPANY_NAME || 'YarnFlow',
-      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
-      city: process.env.COMPANY_CITY || 'City, State - 000000',
-      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
-      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
-      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
-    };
+    // Fetch live company profile from DB
+    const companyInfo = await getActiveCompanyProfile();
 
     // Consolidate all challan data
     const consolidatedData = {
@@ -877,15 +944,8 @@ export const previewSOConsolidatedPDF = async (req, res) => {
       });
     }
 
-    // Company information
-    const companyInfo = {
-      name: process.env.COMPANY_NAME || 'YarnFlow',
-      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
-      city: process.env.COMPANY_CITY || 'City, State - 000000',
-      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
-      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
-      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
-    };
+    // Fetch live company profile from DB
+    const companyInfo = await getActiveCompanyProfile();
 
     // Consolidate data
     const consolidatedData = {
@@ -947,15 +1007,8 @@ export const previewChallanPDF = async (req, res) => {
       });
     }
 
-    // Company information (your company - the sender)
-    const companyInfo = {
-      name: process.env.COMPANY_NAME || 'YarnFlow',
-      address: process.env.COMPANY_ADDRESS || 'Business Address Line 1',
-      city: process.env.COMPANY_CITY || 'City, State - 000000',
-      phone: process.env.COMPANY_PHONE || '+91 00000 00000',
-      email: process.env.COMPANY_EMAIL || 'info@yarnflow.com',
-      gstin: process.env.COMPANY_GSTIN || 'GSTIN: 00XXXXX0000X0X0'
-    };
+    // Fetch live company profile from DB
+    const companyInfo = await getActiveCompanyProfile();
 
     // Generate PDF buffer
     const pdfBuffer = await generateSalesChallanPDF(challan.toObject(), companyInfo);

@@ -1,7 +1,9 @@
 import express from 'express';
 import inventoryController from '../controller/inventoryController.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(authMiddleware);
 
 // ============ INVENTORY ROUTES ============
 // Single source of truth for inventory data
@@ -21,6 +23,10 @@ router.get('/lots', inventoryController.getAllInventoryLots);
 // GET /api/inventory/stats - Get inventory statistics
 // Dashboard stats for inventory overview
 router.get('/stats', inventoryController.getInventoryStats);
+
+// GET /api/inventory/product/:productId - Get product inventory detail with sub-product breakdown
+// Aggregates all lots for a product grouped by sub-product
+router.get('/product/:productId', inventoryController.getProductInventoryDetail);
 
 // GET /api/inventory/lots/:id - Get single inventory lot details
 // Detailed view of a specific lot with full history

@@ -2,7 +2,11 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/user.model.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'yarnflow_dev_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET environment variable is not set');
+}
+const SECRET = JWT_SECRET || 'yarnflow_dev_secret_change_in_production';
 
 export const register = async (req, res) => {
   try {
@@ -20,7 +24,7 @@ export const register = async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ email, password: hash, role: role || undefined });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id, role: user.role }, SECRET, { expiresIn: '7d' });
 
     return res.status(201).json({
       success: true,
@@ -40,7 +44,12 @@ export const login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'email and password are required' });
     }
 
-    const user = await User.findOne({ email });
+    let user;
+    try {
+      user = await User.findOne({ email });
+    } catch (dbErr) {
+      return res.status(503).json({ success: false, message: 'Service temporarily unavailable' });
+    }
     if (!user) {
       return res.status(401).json({ success: false, message: 'invalid credentials' });
     }
@@ -50,7 +59,11 @@ export const login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'invalid credentials' });
     }
 
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    if (user.isActive === false) {
+      return res.status(403).json({ success: false, message: 'Account is disabled. Contact your administrator.' });
+    }
+
+    const token = jwt.sign({ id: user._id, role: user.role }, SECRET, { expiresIn: '7d' });
 
     return res.json({
       success: true,

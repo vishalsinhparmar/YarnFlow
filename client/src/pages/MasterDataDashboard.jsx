@@ -1,13 +1,18 @@
-import { useState } from 'react';
 import { useMasterData } from '../hooks/useMasterData';
 import { Link } from 'react-router-dom';
-import { Users, Factory, Boxes, FolderOpen, Upload, AlertTriangle, Loader2 } from 'lucide-react';
-import ImportModal from '../components/ImportModal';
+import { Users, Factory, Boxes, FolderOpen, GitBranch, AlertTriangle, Loader2 } from 'lucide-react';
+import ExcelImportButton from '../components/common/ExcelImportButton';
+
+const CUSTOMER_SAMPLE_HEADERS = ['companyName', 'gstNumber', 'panNumber', 'city', 'notes'];
+const CUSTOMER_SAMPLE_DATA = [{ companyName: 'ABC Textiles Pvt Ltd', gstNumber: '27AABCU9603R1ZM', panNumber: 'AABCU9603R', city: 'Surat', notes: 'Key customer' }];
+const SUPPLIER_SAMPLE_HEADERS = ['companyName', 'gstNumber', 'panNumber', 'city', 'notes'];
+const SUPPLIER_SAMPLE_DATA = [{ companyName: 'Ramesh Yarn Traders', gstNumber: '24AABCR1234A1Z9', panNumber: 'AABCR1234A', city: 'Surat', notes: 'Primary supplier' }];
+const PRODUCT_SAMPLE_HEADERS = ['productName', 'category', 'description', 'subProducts'];
+const PRODUCT_SAMPLE_DATA = [{ productName: '600 Gaze', category: 'LD Category', description: 'LD plastic product', subProducts: '6,8,10,12,14' }];
+const CATEGORY_SAMPLE_HEADERS = ['categoryName', 'description', 'hasSubProducts'];
+const CATEGORY_SAMPLE_DATA = [{ categoryName: 'LD Category', description: 'Plastic LD products with size variants', hasSubProducts: 'true' }];
 
 const MasterDataDashboard = () => {
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedImportType, setSelectedImportType] = useState('customers');
-  
   const {
     stats,
     customers,
@@ -24,11 +29,6 @@ const MasterDataDashboard = () => {
     fetchStats();
     fetchCustomers();
     fetchSuppliers();
-  };
-
-  const openImportModal = (type) => {
-    setSelectedImportType(type);
-    setShowImportModal(true);
   };
 
   if (loading && !stats) {
@@ -66,18 +66,11 @@ const MasterDataDashboard = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Master Data Management</h1>
             <p className="text-gray-600">Manage customers, suppliers, products, and categories</p>
           </div>
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Upload className="w-5 h-5" />
-            Import Excel
-          </button>
         </div>
       </div>
 
       {/* Master Data Categories */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -92,13 +85,7 @@ const MasterDataDashboard = () => {
             <Link to="/master-data/customers" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
               Manage Customers
             </Link>
-            <button
-              onClick={() => openImportModal('customers')}
-              className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-blue-200 flex items-center justify-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              Import Excel
-            </button>
+            <ExcelImportButton type="customers" accentColor="blue" fullWidth sampleHeaders={CUSTOMER_SAMPLE_HEADERS} sampleData={CUSTOMER_SAMPLE_DATA} onImportSuccess={handleImportSuccess} />
           </div>
         </div>
 
@@ -116,13 +103,7 @@ const MasterDataDashboard = () => {
             <Link to="/master-data/suppliers" className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
               Manage Suppliers
             </Link>
-            <button
-              onClick={() => openImportModal('suppliers')}
-              className="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-purple-200 flex items-center justify-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              Import Excel
-            </button>
+            <ExcelImportButton type="suppliers" accentColor="purple" fullWidth sampleHeaders={SUPPLIER_SAMPLE_HEADERS} sampleData={SUPPLIER_SAMPLE_DATA} onImportSuccess={handleImportSuccess} />
           </div>
         </div>
 
@@ -140,13 +121,7 @@ const MasterDataDashboard = () => {
             <Link to="/master-data/products" className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
               Manage Products
             </Link>
-            <button
-              onClick={() => openImportModal('products')}
-              className="w-full bg-green-50 hover:bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-green-200 flex items-center justify-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              Import Excel
-            </button>
+            <ExcelImportButton type="products" accentColor="green" fullWidth sampleHeaders={PRODUCT_SAMPLE_HEADERS} sampleData={PRODUCT_SAMPLE_DATA} onImportSuccess={handleImportSuccess} />
           </div>
         </div>
 
@@ -164,13 +139,24 @@ const MasterDataDashboard = () => {
             <Link to="/master-data/categories" className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
               Manage Categories
             </Link>
-            <button
-              onClick={() => openImportModal('categories')}
-              className="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-orange-200 flex items-center justify-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              Import Excel
-            </button>
+            <ExcelImportButton type="categories" accentColor="orange" fullWidth sampleHeaders={CATEGORY_SAMPLE_HEADERS} sampleData={CATEGORY_SAMPLE_DATA} onImportSuccess={handleImportSuccess} />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
+              <GitBranch className="text-pink-600 w-6 h-6" />
+            </div>
+            <span className="text-2xl font-bold text-gray-900">
+              {stats?.subProducts?.total || 0}
+            </span>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Sub-Products</h3>
+          <div className="space-y-2">
+            <Link to="/master-data/sub-products" className="w-full bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors text-center block">
+              Manage Sub-Products
+            </Link>
           </div>
         </div>
       </div>
@@ -210,12 +196,6 @@ const MasterDataDashboard = () => {
                         </p>
                       </div>
                     </div>
-                    <span className={`text-xs font-medium ${
-                      customer.status === 'Active' ? 'text-green-600' : 
-                      customer.status === 'Inactive' ? 'text-gray-400' : 'text-red-600'
-                    }`}>
-                      {customer.status}
-                    </span>
                   </div>
                 );
               })
@@ -250,26 +230,15 @@ const MasterDataDashboard = () => {
                   .substring(0, 2)
                   .toUpperCase();
                 
-                const statusColor = {
-                  'Verified': 'text-green-600',
-                  'Pending': 'text-yellow-600',
-                  'Rejected': 'text-red-600'
-                };
-                
                 return (
-                  <div key={supplier._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mr-3">
-                        <span className="text-purple-600 font-semibold text-xs">{initials}</span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{supplier.companyName}</p>
-                        <p className="text-xs text-gray-500">{supplier.supplierType}</p>
-                      </div>
+                  <div key={supplier._id} className="flex items-center p-3 bg-gray-50 rounded-lg">
+                    <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mr-3">
+                      <span className="text-purple-600 font-semibold text-xs">{initials}</span>
                     </div>
-                    <span className={`text-xs font-medium ${statusColor[supplier.verificationStatus] || 'text-gray-400'}`}>
-                      {supplier.verificationStatus}
-                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{supplier.companyName}</p>
+                      <p className="text-xs text-gray-500">{supplier.city || supplier.address?.city || ''}</p>
+                    </div>
                   </div>
                 );
               })
@@ -306,13 +275,9 @@ const MasterDataDashboard = () => {
                 <div key={category._id} className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-semibold text-gray-900">{category.categoryName}</h3>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      category.status === 'Active' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {category.status}
-                    </span>
+                    {category.hasSubProducts && (
+                      <span className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">Sub Products</span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-600">
                     {category.description || 'No description available'}
@@ -334,13 +299,6 @@ const MasterDataDashboard = () => {
         </div>
       </div>
 
-      {/* Import Modal */}
-      <ImportModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onSuccess={handleImportSuccess}
-        defaultType={selectedImportType}
-      />
     </div>
   );
 };

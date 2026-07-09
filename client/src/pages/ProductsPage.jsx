@@ -1,13 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Boxes } from 'lucide-react';
-import { productAPI, categoryAPI, supplierAPI, handleAPIError } from '../services/masterDataAPI';
+import { useSearchParams } from 'react-router-dom';
+import { Boxes, Plus } from 'lucide-react';
+import { productAPI, categoryAPI, supplierAPI, subProductAPI, handleAPIError } from '../services/masterDataAPI';
 import ProductForm from '../components/masterdata/Products/ProductForm';
 import ProductList from '../components/masterdata/Products/ProductList';
 import Modal from '../components/model/Modal';
 import useToast from '../hooks/useToast';
+import ExcelImportButton from '../components/common/ExcelImportButton';
+
+const PRODUCT_SAMPLE_HEADERS = ['productName', 'category', 'description', 'subProducts'];
+const PRODUCT_SAMPLE_DATA = [
+  { productName: '600 Gaze', category: 'LD Category', description: 'LD plastic product', subProducts: '6,8,10,12,14' },
+  { productName: '500 Gaze', category: 'LD Category', description: '', subProducts: '4,6,8' },
+  { productName: '2/40 VSF RMF', category: 'Viscose Yarn', description: 'Kgs.', subProducts: '' },
+];
 
 const ProductsPage = () => {
   const { productToasts } = useToast();
+  const [searchParams] = useSearchParams();
+  const initialCategoryId = searchParams.get('category') || '';
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
@@ -42,11 +53,16 @@ const ProductsPage = () => {
   const handleCreateProduct = async (productData) => {
     try {
       setFormLoading(true);
-      const response = await productAPI.create(productData);
+      const { _pendingSubProducts, ...coreData } = productData;
+      const response = await productAPI.create(coreData);
       
       if (response.success) {
+        const productId = response.data._id;
+        if (_pendingSubProducts && _pendingSubProducts.length > 0) {
+          await subProductAPI.bulkAdd(productId, _pendingSubProducts);
+        }
         setShowForm(false);
-        setRefreshTrigger(prev => prev + 1); // Trigger list refresh
+        setRefreshTrigger(prev => prev + 1);
         productToasts.createSuccess(productData.productName);
       }
     } catch (err) {
@@ -61,12 +77,16 @@ const ProductsPage = () => {
   const handleUpdateProduct = async (productData) => {
     try {
       setFormLoading(true);
-      const response = await productAPI.update(editingProduct._id, productData);
+      const { _pendingSubProducts, ...coreData } = productData;
+      const response = await productAPI.update(editingProduct._id, coreData);
       
       if (response.success) {
+        if (_pendingSubProducts && _pendingSubProducts.length > 0) {
+          await subProductAPI.bulkAdd(editingProduct._id, _pendingSubProducts);
+        }
         setShowForm(false);
         setEditingProduct(null);
-        setRefreshTrigger(prev => prev + 1); // Trigger list refresh
+        setRefreshTrigger(prev => prev + 1);
         productToasts.updateSuccess(productData.productName);
       }
     } catch (err) {
@@ -138,13 +158,22 @@ const ProductsPage = () => {
             Manage product catalog and inventory
           </div>
           
-          {/* Add Product Button */}
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            + Add Product
-          </button>
+          <div className="flex items-center gap-3">
+            <ExcelImportButton
+              type="products"
+              accentColor="green"
+              sampleHeaders={PRODUCT_SAMPLE_HEADERS}
+              sampleData={PRODUCT_SAMPLE_DATA}
+              onImportSuccess={handleRefresh}
+            />
+            <button
+              onClick={() => setShowForm(true)}
+              className="px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg shadow-md hover:shadow-lg font-semibold focus:outline-none focus:ring-2 focus:ring-green-500 transition-all flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Add Product
+            </button>
+          </div>
         </div>
 
         {/* Product List - Always Visible */}
@@ -152,6 +181,7 @@ const ProductsPage = () => {
           onEdit={handleEditProduct}
           onRefresh={handleRefresh}
           refreshTrigger={refreshTrigger}
+          initialCategoryFilter={initialCategoryId}
         />
       </div>
 

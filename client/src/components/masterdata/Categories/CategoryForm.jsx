@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Loader2, FolderOpen, FileText } from 'lucide-react';
+import { Loader2, FolderOpen, FileText, Layers } from 'lucide-react';
 
 const CategoryForm = ({ category, onSubmit, onCancel, loading }) => {
   const [formData, setFormData] = useState({
     categoryName: '',
-    description: ''
+    description: '',
+    hasSubProducts: false
   });
 
   const [errors, setErrors] = useState({});
@@ -14,25 +15,20 @@ const CategoryForm = ({ category, onSubmit, onCancel, loading }) => {
     if (category) {
       setFormData({
         categoryName: category.categoryName || '',
-        description: category.description || ''
+        description: category.description || '',
+        hasSubProducts: category.hasSubProducts || false
       });
     }
   }, [category]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
+    const newVal = type === 'checkbox' ? checked : value;
     
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: newVal }));
     
-    // Clear error when user starts typing
     if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
@@ -98,6 +94,30 @@ const CategoryForm = ({ category, onSubmit, onCancel, loading }) => {
           className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all resize-none"
           placeholder="Enter category description (optional)"
         />
+      </div>
+
+      {/* Has Sub Products Toggle */}
+      <div className="flex items-start gap-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+        <div className="flex items-center h-5 mt-0.5">
+          <input
+            type="checkbox"
+            id="hasSubProducts"
+            name="hasSubProducts"
+            checked={formData.hasSubProducts}
+            onChange={handleChange}
+            className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500 cursor-pointer"
+          />
+        </div>
+        <div>
+          <label htmlFor="hasSubProducts" className="flex items-center gap-2 text-sm font-semibold text-gray-800 cursor-pointer">
+            <Layers className="w-4 h-4 text-orange-600" />
+            Products in this category have Sub Products
+          </label>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Enable this if products under this category have size/inch variants (e.g. 6", 8", 10", 14").
+            When enabled, a sub product selector will appear on the product form.
+          </p>
+        </div>
       </div>
 
       {/* Form Actions */}

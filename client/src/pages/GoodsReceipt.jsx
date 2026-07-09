@@ -252,7 +252,8 @@ const GoodsReceipt = () => {
     try {
       await grnAPI.create(grnData);
       setShowCreateGRN(false);
-      fetchGRNs(currentPage, searchTerm, statusFilter);
+      setCurrentPOPage(1);
+      fetchGRNs(1, searchTerm, statusFilter);
       fetchStats();
     } catch (err) {
       console.error('Error creating GRN:', err);
@@ -319,79 +320,81 @@ const GoodsReceipt = () => {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl shadow-lg p-6">
-        <div className="flex items-center justify-between">
-          <div className="text-white">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
-                <ClipboardList className="w-6 h-6 text-white" />
+      {/* Compact Header with Stats */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <ClipboardList className="w-6 h-6 text-green-600" />
               </div>
-              <h1 className="text-2xl font-bold">Goods Receipt Note (GRN)</h1>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Goods Receipt Note (GRN)</h1>
+                <p className="text-sm text-gray-600">Track and manage incoming goods and materials</p>
+              </div>
             </div>
-            <p className="text-green-100 ml-[52px]">Track and manage incoming goods and materials</p>
+            <button 
+              onClick={() => setShowCreateGRN(true)}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New GRN
+            </button>
           </div>
-          <button 
-            onClick={() => setShowCreateGRN(true)}
-            className="bg-white text-green-600 hover:bg-green-50 px-6 py-3 rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            New GRN
-          </button>
+
+          {/* Compact Stats Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total GRNs</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{stats?.totalGRNs || 0}</p>
+                </div>
+                <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-green-600 uppercase tracking-wide">Completed</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">{stats?.completed || 0}</p>
+                </div>
+                <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">This Month</p>
+                  <p className="text-2xl font-bold text-blue-700 mt-1">{stats?.thisMonth || 0}</p>
+                </div>
+                <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl shadow-sm p-6 border border-orange-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-orange-600 uppercase tracking-wide">Total GRNs</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">{stats?.totalGRNs || 0}</p>
-            </div>
-            <div className="w-14 h-14 bg-orange-100 rounded-xl flex items-center justify-center shadow-inner">
-              <svg className="w-7 h-7 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-sm p-6 border border-green-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-green-600 uppercase tracking-wide">Completed</p>
-              <p className="text-3xl font-bold text-green-600 mt-1">{stats?.completed || 0}</p>
-            </div>
-            <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center shadow-inner">
-              <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm p-6 border border-blue-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">This Month</p>
-              <p className="text-3xl font-bold text-blue-600 mt-1">{stats?.thisMonth || 0}</p>
-            </div>
-            <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center shadow-inner">
-              <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters and Search */}
-      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-        <div className="flex flex-col sm:flex-row gap-4">
+      {/* Compact Search and Filter */}
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
           <div className="flex-1 relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
@@ -400,15 +403,15 @@ const GoodsReceipt = () => {
               placeholder="Search GRNs by number, PO reference, supplier..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-sm"
             />
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2">
             <button
               onClick={() => setStatusFilter('')}
-              className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${
+              className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
                 statusFilter === '' 
-                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md' 
+                  ? 'bg-green-600 text-white' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -416,9 +419,9 @@ const GoodsReceipt = () => {
             </button>
             <button
               onClick={() => setStatusFilter('Complete')}
-              className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${
+              className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
                 statusFilter === 'Complete' 
-                  ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md' 
+                  ? 'bg-green-600 text-white' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -426,9 +429,9 @@ const GoodsReceipt = () => {
             </button>
             <button
               onClick={() => setStatusFilter('Partial')}
-              className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${
+              className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
                 statusFilter === 'Partial' 
-                  ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white shadow-md' 
+                  ? 'bg-yellow-600 text-white' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -603,7 +606,9 @@ const GoodsReceipt = () => {
                               <td className="px-6 py-4">
                                 {grn.items?.map((item, idx) => (
                                   <div key={idx} className="text-sm mb-1 last:mb-0">
-                                    <span className="font-medium text-gray-900">{item.productName}</span>
+                                    <span className="font-medium text-gray-900">
+                                      {item.subProductName ? `${item.productName} X ${item.subProductName}` : item.productName}
+                                    </span>
                                   </div>
                                 ))}
                               </td>

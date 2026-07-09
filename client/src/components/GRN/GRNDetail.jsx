@@ -223,7 +223,9 @@ const GRNDetail = ({ grn, onClose }) => {
                 return (
                   <tr key={index}>
                     <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{item.productName}</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {item.subProductName ? `${item.productName} X ${item.subProductName}` : item.productName}
+                      </div>
                       <div className="text-sm text-gray-500">{item.productCode}</div>
                       {item.batchNumber && (
                         <div className="text-xs text-gray-400">Batch: {item.batchNumber}</div>
@@ -260,6 +262,11 @@ const GRNDetail = ({ grn, onClose }) => {
                       {item.rejectedQuantity > 0 && (
                         <div className="text-xs text-red-500 mt-1">
                           Rejected: {item.rejectedQuantity} {item.unit}
+                        </div>
+                      )}
+                      {Array.isArray(item.receivedSubProductWeights) && item.receivedSubProductWeights.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Per-unit weights: {item.receivedSubProductWeights.map(w => Number(w).toFixed(2)).join(', ')} kg
                         </div>
                       )}
                     </td>
