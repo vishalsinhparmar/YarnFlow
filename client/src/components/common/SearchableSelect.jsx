@@ -80,14 +80,9 @@ const SearchableSelect = ({
     }
   }, [isOpen]);
 
-  // Debounced search: only call onSearch when user types (non-empty term).
-  useEffect(() => {
-    if (!onSearch || !isOpen || searchTerm === '') return;
-    const timer = setTimeout(() => {
-      onSearch(searchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm, isOpen]);
+  // Search is delegated to onSearch (usePaginatedSearch) which owns the single
+  // source of debouncing. Do NOT debounce again here — a second debounce layer
+  // compounds delay and causes the list to appear to "double refresh".
 
   // Keyboard navigation
   useEffect(() => {
@@ -243,8 +238,8 @@ const SearchableSelect = ({
                 onChange={(e) => {
                   const val = e.target.value;
                   setSearchTerm(val);
-                  // If user clears the search box, immediately reload full list
-                  if (val === '' && onSearch) onSearch('');
+                  // usePaginatedSearch owns debouncing (immediate for '', debounced otherwise)
+                  if (onSearch) onSearch(val);
                 }}
                 placeholder={searchPlaceholder}
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -273,13 +268,20 @@ const SearchableSelect = ({
             className="max-h-60 overflow-y-auto overscroll-contain"
             style={{ scrollBehavior: 'smooth' }}
           >
-            {loading ? (
+            {loading && filteredOptions.length === 0 ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
                 <span className="ml-2 text-gray-600">Loading...</span>
               </div>
             ) : filteredOptions.length > 0 ? (
-              filteredOptions.map((option, index) => {
+              <>
+              {loading && (
+                <div className="px-4 py-1.5 bg-blue-50 border-b border-blue-100 flex items-center gap-2 text-xs text-blue-600 sticky top-0">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Searching...
+                </div>
+              )}
+              {filteredOptions.map((option, index) => {
                 const isSelected = getOptionValue(option) === value;
                 const isHighlighted = index === highlightedIndex;
 
@@ -308,7 +310,8 @@ const SearchableSelect = ({
                     )}
                   </button>
                 );
-              })
+              })}
+              </>
             ) : (
               <div className="px-4 py-8 text-center text-gray-500">
                 <p>{emptyMessage}</p>

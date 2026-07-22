@@ -168,7 +168,12 @@ export const createSalesOrder = async (req, res) => {
         unit: item.unit
       };
       grouped.totalQuantity += Number(item.quantity) || 0;
-      grouped.totalWeight += Number(item.weight) || 0;
+      // Use exact bag weight sum for sub-product items; plain weight otherwise
+      const itemSubProductWeights = Array.isArray(item.subProductWeights) ? item.subProductWeights : [];
+      const itemWeight = itemSubProductWeights.length > 0
+        ? itemSubProductWeights.reduce((s, w) => s + (Number(w) || 0), 0)
+        : (Number(item.weight) || 0);
+      grouped.totalWeight += itemWeight;
       groupedItems.set(key, grouped);
 
       validatedItems.push({
@@ -176,11 +181,11 @@ export const createSalesOrder = async (req, res) => {
         productName: product.productName,
         subProduct: item.subProduct || null,
         subProductName: item.subProductName || null,
-        subProductWeights: Array.isArray(item.subProductWeights) ? item.subProductWeights : [],
+        subProductWeights: itemSubProductWeights,
         quantity: item.quantity,
         unit: item.unit,
-        weight: item.weight || 0,
-        notes: item.notes || ''  // ✅ Include notes from request
+        weight: itemWeight,
+        notes: item.notes || ''
       });
     }
 
@@ -198,6 +203,11 @@ export const createSalesOrder = async (req, res) => {
 
       const totalAvailableQty = inventoryLots.reduce((sum, lot) => sum + (lot.currentQuantity || 0), 0);
       const totalAvailableWeight = inventoryLots.reduce((sum, lot) => {
+        // For sub-product lots with per-unit weights, sum them directly — no averaging needed.
+        // lot.totalWeight is mutable (decremented on stock-out) so avoid dividing it.
+        if (Array.isArray(lot.subProductWeights) && lot.subProductWeights.length > 0) {
+          return sum + lot.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0);
+        }
         const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
         return sum + (lot.currentQuantity || 0) * weightPerUnit;
       }, 0);

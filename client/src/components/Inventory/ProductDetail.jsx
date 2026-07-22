@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Package, ArrowDownToLine, ArrowUpFromLine, ClipboardList, Building2, MapPin, ArrowLeft, FileText, ChevronRight } from 'lucide-react';
-import { getWarehouseName } from '../../constants/warehouseLocations';
+import { Package, ArrowDownToLine, ClipboardList, Building2, ArrowLeft, FileText, ChevronRight } from 'lucide-react';
 
 /* ─────────────────────────────────────────────────────────────
    Helper: format date
@@ -72,19 +71,12 @@ const LotList = ({ lots, unit }) => {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-3 gap-3 text-sm">
                 <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
                   <Building2 className="w-4 h-4 text-gray-500 flex-shrink-0" />
                   <div>
                     <span className="text-gray-500 text-xs block">Supplier</span>
                     <span className="font-semibold text-gray-900">{lot.supplierName || '-'}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 bg-purple-50 rounded-lg p-3">
-                  <MapPin className="w-4 h-4 text-purple-500 flex-shrink-0" />
-                  <div>
-                    <span className="text-gray-500 text-xs block">Warehouse</span>
-                    <span className="font-semibold text-purple-600">{getWarehouseName(lot.warehouse) || '-'}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 bg-green-50 rounded-lg p-3">
@@ -104,7 +96,7 @@ const LotList = ({ lots, unit }) => {
               </div>
               {lot.issuedQuantity > 0 && (
                 <div className="mt-3 flex items-center gap-2 bg-red-50 rounded-lg p-3 w-fit">
-                  <ArrowUpFromLine className="w-4 h-4 text-red-500" />
+                  <ArrowDownToLine className="w-4 h-4 text-red-500 rotate-180" />
                   <div>
                     <span className="text-gray-500 text-xs">Issued</span>
                     <p className="font-bold text-red-600">-{lot.issuedQuantity} {unit}</p>
@@ -130,47 +122,6 @@ const LotList = ({ lots, unit }) => {
               <p className="text-sm font-semibold text-gray-900">{fmtDate(lot.receivedDate)}</p>
             </div>
           </div>
-          {lot.movements && lot.movements.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex items-center mb-3">
-                <ClipboardList className="w-4 h-4 text-gray-500 mr-2" />
-                <span className="text-sm font-bold text-gray-700">Movement History</span>
-              </div>
-              <div className="space-y-2">
-                {lot.movements.map((mv, mi) => (
-                  <div key={mi} className={`flex items-center justify-between p-3 rounded-xl ${mv.type === 'Received' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${mv.type === 'Received' ? 'bg-green-100' : 'bg-red-100'}`}>
-                        {mv.type === 'Received' ? <ArrowDownToLine className="w-4 h-4 text-green-600" /> : <ArrowUpFromLine className="w-4 h-4 text-red-600" />}
-                      </div>
-                      <div>
-                        <span className={`font-bold text-sm ${mv.type === 'Received' ? 'text-green-700' : 'text-red-700'}`}>
-                          {mv.type === 'Received' ? 'Stock In (GRN)' : 'Stock Out (Challan)'}
-                        </span>
-                        {mv.reference && (
-                          <span className="ml-2 text-xs text-gray-600 bg-white px-2 py-0.5 rounded">
-                            {mv.reference.includes(']') ? mv.reference.split(']')[0] : mv.reference}
-                          </span>
-                        )}
-                        {mv.notes && <p className="text-xs text-gray-500 mt-0.5">{mv.notes}</p>}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-lg font-bold ${mv.type === 'Received' ? 'text-green-600' : 'text-red-600'}`}>
-                        {mv.type === 'Received' ? '+' : '-'}{mv.quantity} {unit}
-                      </div>
-                      {mv.weight > 0 && (
-                        <div className={`text-xs font-semibold ${mv.type === 'Received' ? 'text-green-500' : 'text-red-500'}`}>
-                          {mv.type === 'Received' ? '+' : '-'}{mv.weight.toFixed(2)} kg
-                        </div>
-                      )}
-                      <div className="text-xs text-gray-400 mt-1">{fmtDate(mv.date)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       ))}
     </div>

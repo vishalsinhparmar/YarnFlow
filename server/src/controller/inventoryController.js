@@ -80,8 +80,12 @@ export const getInventoryProducts = async (req, res) => {
       agg.currentStock += lot.currentQuantity || 0;
       agg.receivedStock += lot.receivedQuantity || 0;
       
-      // Aggregate weights
-      const lotReceivedWeight = lot.totalWeight || 0;
+      // Aggregate weights — use movement history as source of truth.
+      // lot.totalWeight is mutable (decremented on stock-out) so it cannot be used for STOCK IN.
+      // The Received movements hold the original weight at time of GRN and are never modified.
+      const lotReceivedWeight = lot.movements
+        ?.filter(m => m.type === 'Received')
+        .reduce((sum, m) => sum + (m.weight || 0), 0) || lot.totalWeight || 0;
       agg.receivedWeight += lotReceivedWeight;
       
       // Calculate issued quantity and weight from movements
@@ -95,7 +99,7 @@ export const getInventoryProducts = async (req, res) => {
         .reduce((sum, m) => sum + (m.weight || 0), 0) || 0;
       agg.issuedWeight += issuedWeight;
       
-      // Current weight = Received weight - Issued weight
+      // Current weight = original received weight - issued weight
       agg.currentWeight = agg.receivedWeight - agg.issuedWeight;
       
       // Track whether this product has any sub-products
@@ -911,6 +915,7 @@ export const getProductInventoryDetail = async (req, res) => {
         path: 'product',
         populate: { path: 'category', select: 'categoryName' }
       })
+      .sort({ receivedDate: 1 }) // FIFO — must match the order challan stock-out deducts from
       .lean();
 
     const subProductMap = {};
@@ -942,7 +947,10 @@ export const getProductInventoryDetail = async (req, res) => {
       const issuedWeight = lot.movements
         ?.filter(m => m.type === 'Issued')
         .reduce((sum, m) => sum + (m.weight || 0), 0) || 0;
-      const receivedWeight = lot.totalWeight || 0;
+      // Use Received movement weight (immutable) — lot.totalWeight is decremented on stock-out
+      const receivedWeight = lot.movements
+        ?.filter(m => m.type === 'Received')
+        .reduce((sum, m) => sum + (m.weight || 0), 0) || lot.totalWeight || 0;
 
       sp.currentStock += lot.currentQuantity || 0;
       sp.receivedStock += lot.receivedQuantity || 0;

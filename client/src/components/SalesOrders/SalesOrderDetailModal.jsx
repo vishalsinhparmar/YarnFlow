@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, X, User, Calendar, Clock, Tag, Package, CheckCircle, Scale } from 'lucide-react';
+import { ShoppingCart, X, User, Calendar, Clock, Tag, Package, CheckCircle, Scale, StickyNote, Info } from 'lucide-react';
 import { salesOrderUtils } from '../../services/salesOrderAPI';
 
 const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
@@ -95,9 +95,9 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
           {/* Order Information */}
           <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center mb-6">
-              <ShoppingCart className="h-6 w-6 text-blue-600 mr-3" />
-              <h3 className="text-xl font-semibold text-gray-900">Order Information</h3>
+            <div className="flex items-center mb-6 gap-3">
+              <Info className="h-5 w-5 text-blue-600" />
+              <h3 className="text-base font-semibold text-gray-900">Order Information</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 hover:border-blue-200 transition-colors">
@@ -152,19 +152,20 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
 
           {/* Order Items */}
           <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center mb-6">
-              <Package className="h-6 w-6 text-blue-600 mr-3" />
-              <h3 className="text-xl font-semibold text-gray-900">Order Items ({order.items?.length || 0} across {getProductGroups().length} product{getProductGroups().length !== 1 ? 's' : ''})</h3>
+            <div className="flex items-center mb-6 gap-3">
+              <Package className="h-5 w-5 text-blue-600" />
+              <h3 className="text-base font-semibold text-gray-900">Order Items</h3>
+              <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">{getProductGroups().length} product{getProductGroups().length !== 1 ? 's' : ''}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-white">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completion</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Product / Variant</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Qty</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Weight</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Progress</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -179,7 +180,7 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                                 <span className="text-xs text-gray-500 ml-2">({group.productCode})</span>
                               )}
                             </div>
-                            <span className="text-xs text-blue-700 font-medium">Unit: {group.unit || 'Bags'}</span>
+                            <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded">{group.unit || 'Bags'}</span>
                           </div>
                         </td>
                       </tr>
@@ -210,30 +211,27 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
                                 </div>
                               )}
                               {item.notes && (
-                                <div className="text-xs text-blue-600 italic bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
-                                  📝 {item.notes}
+                                <div className="text-xs text-blue-600 italic mt-1 flex items-center gap-1">
+                                  <StickyNote className="w-3 h-3 flex-shrink-0" /> {item.notes}
                                 </div>
                               )}
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-base text-gray-900">{item.quantity} {item.unit || 'Bags'}</div>
                               {dispatched > 0 && (
-                                <p className="text-sm text-green-600">Dispatched: {dispatched} {item.unit || 'Bags'}</p>
+                                <p className="text-xs text-green-600 mt-0.5">Dispatched: {dispatched} {item.unit || 'Bags'}</p>
                               )}
                               {!manuallyCompleted && pending > 0 && (
-                                <p className="text-sm text-orange-600">Pending: {pending} {item.unit || 'Bags'}</p>
+                                <p className="text-xs text-orange-500 mt-0.5">Remaining: {pending}</p>
                               )}
                               {manuallyCompleted && (
-                                <p className="text-sm text-green-600 font-medium">✓ Manually Completed</p>
+                                <p className="text-xs text-green-600 font-medium mt-0.5 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Completed</p>
                               )}
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-base text-gray-900">{item.weight ? `${item.weight.toFixed(2)} Kg` : 'N/A'}</div>
                               {item.dispatchedWeight > 0 && (
-                                <p className="text-sm text-green-600">Dispatched: {item.dispatchedWeight.toFixed(2)} Kg</p>
-                              )}
-                              {!manuallyCompleted && pending > 0 && item.weight && (
-                                <p className="text-sm text-orange-600">Pending: {((pending / item.quantity) * item.weight).toFixed(2)} Kg</p>
+                                <p className="text-xs text-green-600 mt-0.5">Dispatched: {item.dispatchedWeight.toFixed(2)} kg</p>
                               )}
                             </td>
                             <td className="px-6 py-4">

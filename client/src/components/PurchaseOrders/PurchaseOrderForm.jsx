@@ -290,6 +290,39 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const handleSubProductSelect = (index, subProductId, subProductName) => {
     const updatedItems = [...formData.items];
     const item = { ...updatedItems[index] };
+
+    // Toggle off: clicking the same sub-product again clears the row
+    if (subProductId && subProductId === item.subProduct) {
+      item.subProduct = '';
+      item.subProductName = '';
+      item.subProductWeights = [];
+      item.weight = 0;
+      updatedItems[index] = item;
+      setFormData(prev => ({ ...prev, items: updatedItems }));
+      return;
+    }
+
+    // Duplicate check: find other rows with the same product that already use this sub-product
+    const productId = item.product;
+    const isDuplicate = subProductId && formData.items.some((other, i) =>
+      i !== index &&
+      other.product === productId &&
+      other.subProduct === subProductId
+    );
+    if (isDuplicate) {
+      setErrors(prev => ({
+        ...prev,
+        [`items.${index}.subProduct`]: `"${subProductName}" is already added in another row for this product.`
+      }));
+      return;
+    }
+    // Clear any prior duplicate error for this row
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next[`items.${index}.subProduct`];
+      return next;
+    });
+
     item.subProduct = subProductId;
     item.subProductName = subProductName;
     // Initialize weights when selecting a sub-product
@@ -615,18 +648,28 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }
   };
 
-  if (loadingSuppliers || loadingCategories) {
+  // Only block the ENTIRE form on the true initial load — when BOTH suppliers AND
+  // categories are simultaneously loading with no data yet. Using && prevents the
+  // form from blanking out when one field's search triggers a reload while the other
+  // already has data. SearchableSelect handles per-field inline spinners after that.
+  if (loadingSuppliers && suppliers.length === 0 && loadingCategories && categories.length === 0) {
     return (
-      <div className="p-8 text-center">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <p className="mt-2 text-gray-600">Loading form data...</p>
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="relative">
+          <div className="w-14 h-14 rounded-full border-4 border-blue-100"></div>
+          <div className="w-14 h-14 rounded-full border-4 border-blue-600 border-t-transparent animate-spin absolute inset-0"></div>
+        </div>
+        <div className="text-center">
+          <p className="text-base font-semibold text-gray-700">Loading form data</p>
+          <p className="text-sm text-gray-500 mt-1">Fetching suppliers &amp; categories...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <>
-    <form onSubmit={handleSubmit} className="space-y-8 bg-white">
+    <form onSubmit={handleSubmit} className="space-y-5 bg-white">
       {errors.submit && (
         <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
           <div className="flex items-center">
@@ -639,15 +682,15 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       )}
 
       {/* Basic Information */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-100">
-        <div className="flex items-center mb-6">
-          <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+        <div className="flex items-center mb-3 gap-2">
+          <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h3 className="text-xl font-semibold text-gray-900">Basic Information</h3>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Basic Information</h3>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <SearchableSelect
               label="Supplier"
@@ -680,8 +723,8 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-              <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
+              <svg className="h-3 w-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               Expected Delivery Date
@@ -691,7 +734,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
               name="expectedDeliveryDate"
               value={formData.expectedDeliveryDate}
               onChange={handleChange}
-              className={`w-full px-4 py-2.5 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+              className={`w-full px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
                 errors.expectedDeliveryDate ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white hover:border-blue-400'
               }`}
             />
@@ -761,13 +804,13 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       </div>
 
       {/* Items */}
-      <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 shadow-sm border border-gray-200">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center">
-            <svg className="h-6 w-6 text-gray-700 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg p-4 border border-gray-200">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <svg className="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <h3 className="text-xl font-semibold text-gray-900">Order Items</h3>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Order Items</h3>
           </div>
           <button
             type="button"
@@ -781,15 +824,15 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
           </button>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-3">
           {getProductGroups().map((group, groupIndex) => (
-            <div key={groupIndex} className="bg-white border-2 border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 text-blue-700 font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
+            <div key={groupIndex} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="bg-blue-100 text-blue-700 font-bold rounded-full h-6 w-6 flex items-center justify-center text-xs">
                     {groupIndex + 1}
                   </div>
-                  <h4 className="font-semibold text-gray-900 text-lg">Product Section</h4>
+                  <h4 className="font-semibold text-gray-800 text-sm">Product Section</h4>
                 </div>
                 <button
                   type="button"
@@ -961,6 +1004,14 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                               allowAddNew={false}
                               compact
                             />
+                            {errors[`items.${globalIndex}.subProduct`] && (
+                              <p className="text-red-600 text-xs mt-1 flex items-center">
+                                <svg className="h-3 w-3 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                {errors[`items.${globalIndex}.subProduct`]}
+                              </p>
+                            )}
                           </div>
                           <div className="col-span-1 md:col-span-2">
                             <label className="sr-only">Quantity</label>
@@ -1109,7 +1160,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       </div>
 
       {/* Form Actions */}
-      <div className="flex justify-end gap-4 pt-8 border-t-2 border-gray-200">
+      <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
         <button
           type="button"
           onClick={onCancel}

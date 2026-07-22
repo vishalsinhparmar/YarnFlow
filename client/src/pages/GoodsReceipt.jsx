@@ -727,8 +727,8 @@ const GoodsReceipt = () => {
             setShowCreateGRN(false);
             setSelectedPO(null);
           }}
-          title={selectedPO ? `Create New GRN for ${selectedPO.poNumber}` : "Create New GRN"}
-          size="xl"
+          title={selectedPO ? `Create New GRN — ${selectedPO.poNumber}` : "Create New GRN"}
+          size="drawer"
         >
           <GRNForm
             onSubmit={handleCreateGRN}

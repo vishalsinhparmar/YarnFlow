@@ -91,40 +91,17 @@ export const salesChallanAPI = {
     }
   },
 
-  // Preview PDF (open in new tab)
+  // Preview PDF — returns a blob URL for in-app modal embedding
   previewPDF: async (id) => {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3050/api';
     const url = `${API_BASE_URL}/sales-challans/${id}/pdf/preview`;
-    
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to preview PDF');
-      }
-
-      // Get the blob
-      const blob = await response.blob();
-      
-      // Create object URL and open in new tab
-      const pdfUrl = window.URL.createObjectURL(blob);
-      window.open(pdfUrl, '_blank');
-      
-      // Clean up after a delay
-      setTimeout(() => {
-        window.URL.revokeObjectURL(pdfUrl);
-      }, 100);
-
-      return { success: true, message: 'PDF preview opened' };
-    } catch (error) {
-      console.error('Error previewing PDF:', error);
-      throw error;
-    }
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+    });
+    if (!response.ok) throw new Error('Failed to preview PDF');
+    const blob = await response.blob();
+    return { success: true, blobUrl: window.URL.createObjectURL(blob) };
   },
 
   // Generate Consolidated PDF for SO (download)
@@ -175,40 +152,17 @@ export const salesChallanAPI = {
     }
   },
 
-  // Preview Consolidated PDF for SO (open in new tab)
+  // Preview Consolidated PDF for SO — returns a blob URL for in-app modal embedding
   previewConsolidatedPDF: async (soId) => {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3050/api';
     const url = `${API_BASE_URL}/sales-challans/so/${soId}/pdf/preview`;
-    
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to preview consolidated PDF');
-      }
-
-      // Get the blob
-      const blob = await response.blob();
-      
-      // Create object URL and open in new tab
-      const pdfUrl = window.URL.createObjectURL(blob);
-      window.open(pdfUrl, '_blank');
-      
-      // Clean up after a delay
-      setTimeout(() => {
-        window.URL.revokeObjectURL(pdfUrl);
-      }, 100);
-
-      return { success: true, message: 'Consolidated PDF preview opened' };
-    } catch (error) {
-      console.error('Error previewing consolidated PDF:', error);
-      throw error;
-    }
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+    });
+    if (!response.ok) throw new Error('Failed to preview consolidated PDF');
+    const blob = await response.blob();
+    return { success: true, blobUrl: window.URL.createObjectURL(blob) };
   }
 };
 

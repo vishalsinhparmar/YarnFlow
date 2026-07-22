@@ -1,19 +1,14 @@
 import { useEffect } from 'react';
 
 const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
-  // Handle escape key press
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+      if (e.key === 'Escape') onClose();
     };
-
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
     }
-
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
@@ -22,12 +17,40 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
 
   if (!isOpen) return null;
 
+  // Drawer: full-height right-side panel — standard ERP data-entry pattern.
+  // Large forms (PO, GRN) need full vertical space and easy scroll; a centred
+  // dialog with max-h crops the form and makes it feel cramped.
+  if (size === 'drawer') {
+    return (
+      <div className="fixed top-16 left-64 right-0 bottom-0 z-40 flex flex-col bg-white shadow-2xl overflow-hidden">
+        {/* No separate backdrop — panel fills the entire content area seamlessly */}
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 flex-shrink-0">
+            <h3 className="text-lg font-semibold text-white">{title}</h3>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 text-white hover:bg-white hover:bg-opacity-20 transition-colors"
+            >
+              <span className="sr-only">Close</span>
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto px-5 py-5">
+            {children}
+          </div>
+      </div>
+    );
+  }
+
   const sizeClasses = {
     sm: 'max-w-md',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
-    '3xl': 'max-w-3xl',  // 75% width for forms
+    '3xl': 'max-w-3xl',
     '4xl': 'max-w-5xl',
     full: 'max-w-7xl'
   };
@@ -35,11 +58,10 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={onClose}
       ></div>
-      
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div className={`relative w-full ${sizeClasses[size]} transform rounded-lg bg-white shadow-xl transition-all`}>
@@ -56,7 +78,6 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
               </svg>
             </button>
           </div>
-          
           {/* Content */}
           <div className="px-6 py-4">
             {children}

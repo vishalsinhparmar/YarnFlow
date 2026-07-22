@@ -107,19 +107,16 @@ export const usePaginatedSearch = (fetchFn, options = {}) => {
   }, [enabled]);
 
   // Debounced search: reset to page 1 when search term changes.
-  // Empty string fetches immediately (re-loads full list on clear/open).
+  // Short delay for empty (clear) so rapid backspace doesn't fire on every keystroke.
   const searchTimerRef = useRef(null);
   const handleSearch = useCallback((newSearch) => {
     setSearch(newSearch);
     setPage(1);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (newSearch === '') {
-      fetchItems('', 1, false);
-    } else {
-      searchTimerRef.current = setTimeout(() => {
-        fetchItems(newSearch, 1, false);
-      }, 300);
-    }
+    const delay = newSearch === '' ? 120 : 300;
+    searchTimerRef.current = setTimeout(() => {
+      fetchItems(newSearch, 1, false);
+    }, delay);
   }, [fetchItems]);
 
   // Load more: fetch next page and append

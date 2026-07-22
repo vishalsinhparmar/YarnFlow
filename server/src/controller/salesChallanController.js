@@ -4,7 +4,21 @@ import SalesOrder from '../models/SalesOrder.js';
 import InventoryLot from '../models/InventoryLot.js';
 import Product from '../models/Product.js';
 import CompanyProfile from '../models/CompanyProfile.js';
+import WarehouseLocation from '../models/WarehouseLocation.js';
 import { generateSalesChallanPDF, generateSalesOrderConsolidatedPDF } from '../utils/pdfGenerator.js';
+
+// ============ HELPER: resolve legacy warehouse ObjectId refs to display names ============
+// Some older InventoryLot records may have been saved with a raw WarehouseLocation _id
+// (a form-wiring bug, now fixed at the source in grnController). Resolve defensively here
+// so any pre-existing data still displays a friendly name instead of a raw ObjectId string.
+const resolveWarehouseDisplayName = async (value, session) => {
+  if (!value) return value;
+  if (mongoose.Types.ObjectId.isValid(value)) {
+    const wh = await WarehouseLocation.findById(value).session(session || null).select('name').lean();
+    if (wh?.name) return wh.name;
+  }
+  return value;
+};
 
 // ============ HELPER: fetch active company profile ============
 const getActiveCompanyProfile = async () => {
@@ -193,13 +207,9 @@ export const createSalesChallan = async (req, res) => {
       });
     }
 
-    if (!warehouseLocation) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: 'Warehouse Location is required'
-      });
-    }
+    // Warehouse is auto-derived from the inventory lot(s) that fulfill this order
+    // (see stock-out loop below). Manual entry is still accepted for backward
+    // compatibility / products without lot-level warehouse data, but no longer required.
 
     if (!items || items.length === 0) {
       await session.abortTransaction();
@@ -247,7 +257,16 @@ export const createSalesChallan = async (req, res) => {
       });
     }
     
-    // Validate dispatch quantities
+    // Validate dispatch quantities against remaining (ordered - already dispatched)
+    const existingChallansForValidation = await SalesChallan.find({ salesOrder: so._id }).session(session);
+    const dispatchedMapForValidation = {};
+    existingChallansForValidation.forEach(ch => {
+      ch.items.forEach(ci => {
+        const k = ci.salesOrderItem.toString();
+        dispatchedMapForValidation[k] = (dispatchedMapForValidation[k] || 0) + ci.dispatchQuantity;
+      });
+    });
+
     for (const item of items) {
       const soItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
       if (!soItem) {
@@ -258,13 +277,37 @@ export const createSalesChallan = async (req, res) => {
         });
       }
 
-      if (item.dispatchQuantity > soItem.quantity) {
+      const alreadyDispatched = dispatchedMapForValidation[item.salesOrderItem.toString()] || 0;
+      const remainingQtyAllowed = soItem.quantity - alreadyDispatched;
+      if (item.dispatchQuantity > remainingQtyAllowed) {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
-          message: `Dispatch quantity exceeds ordered quantity for ${item.productName}`
+          message: `Dispatch quantity for ${item.productName} exceeds remaining quantity (${remainingQtyAllowed} ${soItem.unit} remaining)`
         });
       }
+    }
+
+    // Auto-derive warehouse from the inventory lot(s) that will fulfill this order
+    // (same product+category flow that was already used for GRN stock-in) instead of
+    // requiring the user to manually pick a warehouse every time.
+    let derivedWarehouseLocation = warehouseLocation || '';
+    if (!derivedWarehouseLocation) {
+      const derivedWarehouses = new Set();
+      for (const item of items) {
+        const soItemForWarehouse = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
+        const wFilter = {
+          product: item.product,
+          status: 'Active',
+          currentQuantity: { $gt: 0 }
+        };
+        if (soItemForWarehouse?.subProduct) wFilter.subProduct = soItemForWarehouse.subProduct;
+        const fulfillingLot = await InventoryLot.findOne(wFilter).sort({ receivedDate: 1 }).session(session);
+        if (fulfillingLot?.warehouse) {
+          derivedWarehouses.add(await resolveWarehouseDisplayName(fulfillingLot.warehouse, session));
+        }
+      }
+      derivedWarehouseLocation = [...derivedWarehouses].join(', ') || 'Main Warehouse';
     }
 
     // Prepare challan data
@@ -273,7 +316,7 @@ export const createSalesChallan = async (req, res) => {
       soNumber: so.soNumber || `SO-${Date.now()}`,
       customer: so.customer._id,
       customerName: so.customer.companyName || so.customer.name || 'Unknown',
-      warehouseLocation,
+      warehouseLocation: derivedWarehouseLocation,
       expectedDeliveryDate: expectedDeliveryDate || null,
       items: items.map(item => {
         // Find corresponding SO item to get notes and sub-product details
@@ -284,7 +327,7 @@ export const createSalesChallan = async (req, res) => {
           productName: item.productName,
           subProduct: soItem?.subProduct || item.subProduct || null,
           subProductName: soItem?.subProductName || item.subProductName || null,
-          subProductWeights: soItem?.subProductWeights || item.subProductWeights || [],
+          subProductWeights: Array.isArray(item.subProductWeights) ? item.subProductWeights : [],
           orderedQuantity: item.orderedQuantity,
           dispatchQuantity: item.dispatchQuantity,
           unit: item.unit,
@@ -397,12 +440,18 @@ export const createSalesChallan = async (req, res) => {
       let totalQtyToDeduct = 0;
       let totalWeightToDeduct = 0;
       
-      // Calculate total quantity and weight to deduct from all challans
+      // Calculate total quantity and weight to deduct from all challans.
+      // For sub-product items, use the exact sum of subProductWeights (individual bag weights)
+      // as the authoritative weight — never rely on the stored weight field which may differ
+      // due to legacy data or rounding.
       for (const challanToProcess of challansForThisItem) {
         const challanItem = challanToProcess.items.find(i => i.salesOrderItem.toString() === item.salesOrderItem.toString());
         if (challanItem) {
           totalQtyToDeduct += challanItem.dispatchQuantity;
-          totalWeightToDeduct += challanItem.weight || 0;
+          const exactWeight = Array.isArray(challanItem.subProductWeights) && challanItem.subProductWeights.length > 0
+            ? challanItem.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0)
+            : (challanItem.weight || 0);
+          totalWeightToDeduct += exactWeight;
         }
       }
       
@@ -427,8 +476,13 @@ export const createSalesChallan = async (req, res) => {
       }
 
       // Calculate available quantity and weight to enforce non-negative inventory
+      // Production note: when a lot tracks individual per-unit weights (subProductWeights),
+      // use the REAL sum of those entries instead of an average — this is the source of truth.
       const availableQty = lots.reduce((sum, lot) => sum + (lot.currentQuantity - (lot.reservedQuantity || 0)), 0);
       const availableWeight = lots.reduce((sum, lot) => {
+        if (Array.isArray(lot.subProductWeights) && lot.subProductWeights.length > 0) {
+          return sum + lot.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0);
+        }
         const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
         return sum + (lot.currentQuantity - (lot.reservedQuantity || 0)) * weightPerUnit;
       }, 0);
@@ -449,20 +503,42 @@ export const createSalesChallan = async (req, res) => {
       const lotsUpdated = [];
 
       // Deduct from lots using FIFO (following GRN pattern) - within transaction
+      // Production fix: when a lot tracks individual per-unit weights (subProductWeights),
+      // remove the EXACT weight entries for each unit consumed instead of an average split.
+      // This ensures inventory always reflects the real physical weight of each roll/bag,
+      // never a mathematically-averaged approximation.
       for (const lot of lots) {
         if (remainingQty <= 0) break;
 
         const lotAvailableQty = lot.currentQuantity - (lot.reservedQuantity || 0);
         if (lotAvailableQty <= 0) continue;
 
-        const qtyToDeduct = Math.min(remainingQty, lotAvailableQty);
-        
-        // Calculate proportional weight to deduct
-        const weightPerUnit = remainingQty > 0 ? remainingWeight / remainingQty : 0;
-        const weightToDeduct = qtyToDeduct * weightPerUnit;
+        let qtyToDeduct = 0;
+        let weightToDeduct = 0;
+        const lotHasIndividualWeights = Array.isArray(lot.subProductWeights) && lot.subProductWeights.length > 0;
+
+        if (lotHasIndividualWeights) {
+          // Exact deduction: consume the oldest recorded individual weight entries first
+          const unitsToTake = Math.min(remainingQty, lot.subProductWeights.length, lotAvailableQty);
+          const remainingWeights = [...lot.subProductWeights];
+          for (let i = 0; i < unitsToTake; i++) {
+            const w = Number(remainingWeights.shift()) || 0;
+            weightToDeduct += w;
+            qtyToDeduct += 1;
+          }
+          lot.subProductWeights = remainingWeights;
+        } else {
+          // Legacy / no individual weight data: proportional average (only path for non-subproduct products)
+          qtyToDeduct = Math.min(remainingQty, lotAvailableQty);
+          const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
+          weightToDeduct = qtyToDeduct * weightPerUnit;
+        }
+
+        if (qtyToDeduct <= 0) continue;
 
         // Update lot quantities (similar to GRN updating inventory)
         lot.currentQuantity -= qtyToDeduct;
+        lot.totalWeight = Math.max(0, (lot.totalWeight || 0) - weightToDeduct);
 
         // Add movement record with weight for ALL challans (not just current one)
         // Reference all challan numbers that contributed to this deduction, scoped to the SO item
@@ -487,8 +563,7 @@ export const createSalesChallan = async (req, res) => {
         remainingQty -= qtyToDeduct;
         remainingWeight -= weightToDeduct;
 
-        console.log(`📦 Deducted ${qtyToDeduct} ${item.unit} (${weightToDeduct.toFixed(2)} kg) of ${item.productName} from lot ${lot.lotNumber}`);
-        console.log(`⚖️  Weight saved in movement: ${weightToDeduct.toFixed(2)} kg`);
+        console.log(`📦 Deducted ${qtyToDeduct} ${item.unit} (${weightToDeduct.toFixed(2)} kg) of ${item.productName} from lot ${lot.lotNumber}${lotHasIndividualWeights ? ' [exact weights]' : ' [avg]'}`);
       }
 
       // Update product inventory (following GRN pattern) - within transaction
@@ -820,11 +895,17 @@ export const generateChallanPDF = async (req, res) => {
     // Fetch live company profile from DB
     const companyInfo = await getActiveCompanyProfile();
 
-    // Generate PDF buffer
-    const pdfBuffer = await generateSalesChallanPDF(challan.toObject(), companyInfo);
+    // Generate PDF buffer (resolve any legacy raw warehouse ObjectId to a display name)
+    const challanForPdf = {
+      ...challan.toObject(),
+      warehouseLocation: await resolveWarehouseDisplayName(challan.warehouseLocation)
+    };
+    const pdfBuffer = await generateSalesChallanPDF(challanForPdf, companyInfo);
 
     // Set response headers for PDF download
-    const filename = `Sales_Challan_${challan.challanNumber}.pdf`;
+    const rawCustomerName = challan.customerDetails?.companyName || challan.customer?.companyName || 'Customer';
+    const safeCustomer = rawCustomerName.replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').slice(0, 40);
+    const filename = `Challan_${safeCustomer}_${challan.challanNumber}.pdf`;
     
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -882,21 +963,26 @@ export const generateSOConsolidatedPDF = async (req, res) => {
     // Fetch live company profile from DB
     const companyInfo = await getActiveCompanyProfile();
 
-    // Consolidate all challan data
+    // Consolidate all challan data (resolve any legacy raw warehouse ObjectIds to display names)
+    const rawWarehouses = [...new Set(challans.map(c => c.warehouseLocation).filter(Boolean))];
+    const resolvedWarehouses = await Promise.all(rawWarehouses.map(w => resolveWarehouseDisplayName(w)));
     const consolidatedData = {
       salesOrder: challans[0].salesOrder,
       customer: challans[0].customer,
       customerDetails: challans[0].customerDetails,
       challans: challans,
       soNumber: challans[0].soReference || challans[0].salesOrder?.soNumber,
-      totalChallans: challans.length
+      totalChallans: challans.length,
+      warehouseLocation: [...new Set(resolvedWarehouses)].join(', ')
     };
 
     // Generate consolidated PDF buffer
     const pdfBuffer = await generateSalesOrderConsolidatedPDF(consolidatedData, companyInfo);
 
     // Set response headers for download
-    const filename = `SO_${consolidatedData.soNumber}_Consolidated_${Date.now()}.pdf`;
+    const rawCustName = consolidatedData.customerDetails?.companyName || consolidatedData.customer?.companyName || 'Customer';
+    const safeCustName = rawCustName.replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').slice(0, 40);
+    const filename = `Consolidated_${safeCustName}_${consolidatedData.soNumber}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
@@ -947,14 +1033,17 @@ export const previewSOConsolidatedPDF = async (req, res) => {
     // Fetch live company profile from DB
     const companyInfo = await getActiveCompanyProfile();
 
-    // Consolidate data
+    // Consolidate data (resolve any legacy raw warehouse ObjectIds to display names)
+    const rawWarehouses = [...new Set(challans.map(c => c.warehouseLocation).filter(Boolean))];
+    const resolvedWarehouses = await Promise.all(rawWarehouses.map(w => resolveWarehouseDisplayName(w)));
     const consolidatedData = {
       salesOrder: challans[0].salesOrder,
       customer: challans[0].customer,
       customerDetails: challans[0].customerDetails,
       challans: challans,
       soNumber: challans[0].soReference || challans[0].salesOrder?.soNumber,
-      totalChallans: challans.length
+      totalChallans: challans.length,
+      warehouseLocation: [...new Set(resolvedWarehouses)].join(', ')
     };
 
     // Generate PDF buffer
@@ -1010,11 +1099,17 @@ export const previewChallanPDF = async (req, res) => {
     // Fetch live company profile from DB
     const companyInfo = await getActiveCompanyProfile();
 
-    // Generate PDF buffer
-    const pdfBuffer = await generateSalesChallanPDF(challan.toObject(), companyInfo);
+    // Generate PDF buffer (resolve any legacy raw warehouse ObjectId to a display name)
+    const challanForPdf = {
+      ...challan.toObject(),
+      warehouseLocation: await resolveWarehouseDisplayName(challan.warehouseLocation)
+    };
+    const pdfBuffer = await generateSalesChallanPDF(challanForPdf, companyInfo);
 
     // Set response headers for inline display (preview in browser)
-    const filename = `Sales_Challan_${challan.challanNumber}.pdf`;
+    const rawCustomerNameP = challan.customerDetails?.companyName || challan.customer?.companyName || 'Customer';
+    const safeCustomerP = rawCustomerNameP.replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').slice(0, 40);
+    const filename = `Challan_${safeCustomerP}_${challan.challanNumber}.pdf`;
     
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);

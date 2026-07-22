@@ -125,8 +125,11 @@ salesOrderSchema.methods.updateDispatchStatus = function(challans) {
     return;
   }
   
-  // Calculate dispatched quantities per item
+  // Calculate dispatched quantities and actual weights per SO item.
+  // Weight is summed from per-bag subProductWeights when available (exact),
+  // otherwise from the stored challan item weight field (for non-sub-product items).
   const dispatchedMap = {};
+  const dispatchedWeightMap = {};
   const manuallyCompletedMap = {};
   
   challans.forEach(challan => {
@@ -139,8 +142,15 @@ salesOrderSchema.methods.updateDispatchStatus = function(challans) {
       
       if (!dispatchedMap[key]) {
         dispatchedMap[key] = 0;
+        dispatchedWeightMap[key] = 0;
       }
       dispatchedMap[key] += item.dispatchQuantity || 0;
+
+      // Use exact bag weight sum when available, otherwise fall back to stored weight
+      const itemWeight = Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0
+        ? item.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0)
+        : (item.weight || 0);
+      dispatchedWeightMap[key] += itemWeight;
       
       // Track if any challan marked this item as manually completed
       if (item.manuallyCompleted) {
@@ -159,15 +169,13 @@ salesOrderSchema.methods.updateDispatchStatus = function(challans) {
     const dispatched = dispatchedMap[itemId] || 0;
     const manuallyCompleted = manuallyCompletedMap[itemId] || false;
     
-    // UPDATE: Save dispatched quantities to SO item (like GRN saves receivedQuantity to PO item)
+    // Save dispatched quantities to SO item (like GRN saves receivedQuantity to PO item)
     item.deliveredQuantity = dispatched;
     item.shippedQuantity = dispatched; // Keep both in sync
     item.manuallyCompleted = manuallyCompleted;
-    
-    // Calculate dispatched weight (proportional to quantity)
-    if (item.weight && item.quantity > 0) {
-      item.dispatchedWeight = (dispatched / item.quantity) * item.weight;
-    }
+
+    // Use actual summed dispatched weight — never averaged
+    item.dispatchedWeight = dispatchedWeightMap[itemId] || 0;
     
     if (dispatched > 0) {
       anyItemDispatched = true;
