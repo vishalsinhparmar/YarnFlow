@@ -3,10 +3,9 @@ import { ShoppingCart, X, User, Package, Calendar, Plus } from 'lucide-react';
 import { salesOrderAPI } from '../../services/salesOrderAPI.js';
 import { apiRequest } from '../../services/common.js';
 import { inventoryAPI } from '../../services/inventoryAPI.js';
-import masterDataAPI, { subProductAPI } from '../../services/masterDataAPI';
+import masterDataAPI from '../../services/masterDataAPI';
 import CustomerForm from '../masterdata/Customers/CustomerForm';
 import SearchableSelect from '../common/SearchableSelect';
-import SubProductSelector from '../common/SubProductSelector';
 import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
 
 const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
@@ -156,13 +155,24 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                 if (detail.success && detail.data && detail.data.subProductBreakdown) {
                   subProductMap[p.productId] = detail.data.subProductBreakdown
                     .filter(sp => sp.subProductId)
-                    .map(sp => ({
-                      subProductId: sp.subProductId,
-                      subProductName: sp.subProductName,
-                      totalStock: sp.currentStock || 0,
-                      totalWeight: sp.currentWeight || 0,
-                      unit: p.unit
-                    }));
+                    .map(sp => {
+                      // Flatten REAL individual per-unit weights from active lots, oldest first (FIFO) —
+                      // this must mirror the exact order the backend consumes them in at challan time.
+                      const activeLots = (sp.lots || [])
+                        .filter(l => l.status === 'Active' && (l.currentQuantity || 0) > 0)
+                        .sort((a, b) => new Date(a.receivedDate) - new Date(b.receivedDate));
+                      const availableWeights = activeLots.flatMap(l =>
+                        Array.isArray(l.subProductWeights) ? l.subProductWeights.map(w => Number(w) || 0) : []
+                      );
+                      return {
+                        subProductId: sp.subProductId,
+                        subProductName: sp.subProductName,
+                        totalStock: sp.currentStock || 0,
+                        totalWeight: sp.currentWeight || 0,
+                        unit: p.unit,
+                        availableWeights
+                      };
+                    });
                 }
               } catch (err) {
                 console.error('Error loading sub-product detail for', p.productId, err);
@@ -178,7 +188,29 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
               if (item.subProduct && subProductMap[item.product]) {
                 const sp = subProductMap[item.product].find(s => s.subProductId === item.subProduct);
                 if (sp) {
-                  return { ...item, availableStock: sp.totalStock, totalProductWeight: sp.totalWeight, productStock: sp.totalStock };
+                  const availableWeights = sp.availableWeights || [];
+                  // Rebuild selectedWeightIndices from the saved subProductWeights so bag chips
+                  // render pre-selected in edit mode. Match each saved weight to the first
+                  // un-matched index in availableWeights (FIFO order mirrors backend consumption).
+                  const savedWeights = Array.isArray(item.subProductWeights) ? [...item.subProductWeights] : [];
+                  const usedIndices = new Set();
+                  const selectedWeightIndices = [];
+                  savedWeights.forEach(sw => {
+                    const idx = availableWeights.findIndex((w, i) => !usedIndices.has(i) && Number(w) === Number(sw));
+                    if (idx !== -1) {
+                      usedIndices.add(idx);
+                      selectedWeightIndices.push(idx);
+                    }
+                  });
+                  selectedWeightIndices.sort((a, b) => a - b);
+                  return {
+                    ...item,
+                    availableStock: sp.totalStock,
+                    totalProductWeight: sp.totalWeight,
+                    productStock: sp.totalStock,
+                    availableWeights,
+                    selectedWeightIndices,
+                  };
                 }
               } else if (item.product) {
                 const inv = products.find(p => p.productId === item.product);
@@ -339,6 +371,13 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
     // Auto-calculate suggested weight when quantity changes and enforce stock ceiling
     if (field === 'quantity') {
+      // If sub-product is selected, qty is locked to available weights count — ignore manual changes
+      if (item.subProduct) {
+        updatedItems[index] = item;
+        setFormData(prev => ({ ...prev, items: updatedItems }));
+        return;
+      }
+
       const requestedQty = parseFloat(value) || 0;
       const available = item.availableStock || 0;
       let qty = requestedQty;
@@ -357,13 +396,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
       const totalWeight = item.totalProductWeight || 0;
       const totalStock = item.productStock || 1;
       const weightPerUnit = totalStock > 0 ? parseFloat((totalWeight / totalStock).toFixed(4)) : 0;
-
-      if (item.subProduct) {
-        // For sub-products, build/update per-unit weight array using the inventory weight per unit
-        const perUnit = weightPerUnit > 0 ? weightPerUnit : 0;
-        item.subProductWeights = Array.from({ length: Math.max(0, qty) }, () => perUnit);
-        item.weight = parseFloat((qty * perUnit).toFixed(2));
-      } else if (weightPerUnit > 0 && qty > 0) {
+      if (weightPerUnit > 0 && qty > 0) {
         item.weight = parseFloat((qty * weightPerUnit).toFixed(2));
       }
       item.quantity = qty;
@@ -495,6 +528,14 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
   };
 
   const addSubProductRow = (group) => {
+    // Guard: don't add a new row if all sub-products are already selected in this group
+    const spOptions = getSubProductOptions(group.product).filter(sp => (sp.totalStock || 0) > 0);
+    const usedSubProductIds = new Set(
+      group.items.map(item => item.subProduct).filter(Boolean)
+    );
+    const hasUnused = spOptions.some(sp => !usedSubProductIds.has(sp.subProductId));
+    if (!hasUnused) return; // All sub-products already added
+
     const newItem = {
       product: group.product,
       productName: group.productName,
@@ -531,6 +572,19 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
   const updateGroupProduct = (group, productId) => {
     const selected = getProductOptions().find(p => p.productId === productId) || null;
     const hasSubProductOptions = getSubProductOptions(productId).length > 0;
+
+    // Guard: for non-sub-product products, block if this product is already in another group
+    if (!hasSubProductOptions && productId) {
+      const alreadyUsed = formData.items.some((item, i) =>
+        !group.indices.includes(i) && item.product === productId && !item.subProduct
+      );
+      if (alreadyUsed) {
+        setError(`"${selected?.productName || productId}" is already added. You can only have one row per non-variant product.`);
+        setTimeout(() => setError(''), 3000);
+        return;
+      }
+    }
+
     // For non-sub-product products, stock and weight are derived from the product-level inventory row
     const productLevelInv = hasSubProductOptions
       ? null
@@ -574,18 +628,56 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
   const handleSubProductSelect = (index, subProductId) => {
     const productId = formData.items[index].product;
-    const spOptions = subProductOptionsMap[productId] || [];
-    const selected = spOptions.find(sp => sp.subProductId === subProductId) || null;
+    const currentSubProduct = formData.items[index].subProduct;
     const updatedItems = [...formData.items];
     const item = { ...updatedItems[index] };
+
+    // Toggle off: if the same sub-product is selected again, clear the selection
+    if (subProductId && subProductId === currentSubProduct) {
+      item.subProduct = '';
+      item.subProductName = '';
+      item.availableWeights = [];
+      item.selectedWeightIndices = [];
+      item.subProductWeights = [];
+      item.quantity = '';
+      item.weight = '';
+      updatedItems[index] = item;
+      setFormData(prev => ({ ...prev, items: updatedItems }));
+      setStockErrors(prev => { const next = { ...prev }; delete next[index]; return next; });
+      setWeightErrors(prev => { const next = { ...prev }; delete next[index]; return next; });
+      return;
+    }
+
+    // Duplicate check: block if another row for the same product already uses this sub-product
+    const isDuplicate = subProductId && formData.items.some((other, i) =>
+      i !== index &&
+      other.product === productId &&
+      other.subProduct === subProductId
+    );
+    if (isDuplicate) {
+      const spOptions = subProductOptionsMap[productId] || [];
+      const sp = spOptions.find(s => s.subProductId === subProductId);
+      setError(`Sub-product "${sp?.subProductName || subProductId}" is already selected in another row for this product.`);
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    const spOptions = subProductOptionsMap[productId] || [];
+    const selected = spOptions.find(sp => sp.subProductId === subProductId) || null;
     item.subProduct = subProductId || '';
     item.subProductName = selected?.subProductName || '';
     item.availableStock = selected?.totalStock || 0;
     item.totalProductWeight = selected?.totalWeight || 0;
     item.productStock = selected?.totalStock || 0;
     item.unit = selected?.unit || item.unit || '';
-    item.weight = item.quantity ? calculateWeight(item.quantity, item.totalProductWeight, item.productStock) : '';
-    item.subProductWeights = [];
+    item.availableWeights = Array.isArray(selected?.availableWeights) ? selected.availableWeights : [];
+    // All chips pre-selected by default; user can toggle individual ones.
+    item.selectedWeightIndices = item.availableWeights.map((_, i) => i);
+    item.subProductWeights = [...item.availableWeights];
+    item.quantity = item.availableWeights.length;
+    item.weight = item.subProductWeights.length > 0
+      ? parseFloat(item.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0).toFixed(2))
+      : 0;
     updatedItems[index] = item;
     setFormData(prev => ({ ...prev, items: updatedItems }));
     setStockErrors(prev => {
@@ -788,13 +880,15 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative">
+    <div className="fixed top-16 left-64 right-0 bottom-0 z-40 flex flex-col bg-white shadow-2xl overflow-hidden">
         {/* Loading Overlay */}
         {loading && (
-          <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50 rounded-lg">
+          <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
+              <div className="relative mx-auto mb-4 w-16 h-16">
+                <div className="w-16 h-16 rounded-full border-4 border-blue-100"></div>
+                <div className="w-16 h-16 rounded-full border-4 border-blue-600 border-t-transparent animate-spin absolute inset-0"></div>
+              </div>
               <p className="text-lg font-semibold text-gray-700">
                 {order ? 'Updating' : 'Creating'} Sales Order...
               </p>
@@ -803,12 +897,13 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
           </div>
         )}
 
-        <div className="px-8 py-6 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-2xl flex items-center justify-between">
+        {/* Header — sticky so it stays visible while scrolling */}
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
-              <ShoppingCart className="w-6 h-6 text-white" />
+            <div className="w-9 h-9 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
+              <ShoppingCart className="w-5 h-5 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white">
+            <h2 className="text-xl font-bold text-white">
               {order ? 'Update Sales Order' : 'New Sales Order'}
             </h2>
           </div>
@@ -822,7 +917,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-5 space-y-5">
           {error && (
             <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
               <div className="flex items-center">
@@ -840,14 +937,14 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
           )}
 
           {/* Customer and Basic Info */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 shadow-sm border border-blue-100">
-            <div className="flex items-center mb-6">
-              <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+            <div className="flex items-center mb-3 gap-2">
+              <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-              <h3 className="text-xl font-semibold text-gray-900">Customer Information</h3>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Customer Information</h3>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <SearchableSelect
                 label="Customer"
@@ -879,8 +976,8 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
             </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                  <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                  <svg className="h-3 w-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   Expected Delivery Date
@@ -891,7 +988,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                   value={formData.expectedDeliveryDate}
                   onChange={handleInputChange}
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:border-blue-400 transition-all"
                 />
               </div>
             </div>
@@ -941,13 +1038,13 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
 
           {/* Items Section */}
-          <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center">
-                <svg className="h-6 w-6 text-gray-700 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg p-4 border border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <svg className="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
-                <h3 className="text-xl font-semibold text-gray-900">Order Items</h3>
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Order Items</h3>
               </div>
               <button
                 type="button"
@@ -962,15 +1059,15 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
               </button>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-3">
               {getProductGroups().map((group, groupIndex) => (
-                <div key={groupIndex} className="bg-white border-2 border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-5">
+                <div key={groupIndex} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="bg-blue-100 text-blue-700 font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
                         {groupIndex + 1}
                       </div>
-                      <h4 className="font-semibold text-gray-900 text-lg">Product Section</h4>
+                      <h4 className="font-semibold text-gray-800 text-sm">Product Section</h4>
                     </div>
                     <button
                       type="button"
@@ -1028,42 +1125,57 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
                   {group.product && (
                     <div className="space-y-3">
+                      {/* Column headers — only show Sub Product col if product has sub-products */}
                       <div className="grid grid-cols-12 gap-3 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        <div className="col-span-3">Sub Product</div>
-                        <div className="col-span-2">Qty</div>
+                        {getSubProductOptions(group.product).filter(sp => (sp.totalStock || 0) > 0).length > 0 && (
+                          <div className="col-span-3">Sub Product</div>
+                        )}
+                        <div className={getSubProductOptions(group.product).filter(sp => (sp.totalStock || 0) > 0).length > 0 ? 'col-span-2' : 'col-span-3'}>Qty</div>
                         <div className="col-span-2">Unit</div>
-                        <div className="col-span-3">Weight (Kg)</div>
+                        <div className={getSubProductOptions(group.product).filter(sp => (sp.totalStock || 0) > 0).length > 0 ? 'col-span-3' : 'col-span-5'}>Weight (Kg)</div>
                         <div className="col-span-2"></div>
                       </div>
                       {group.items.map((item, rowIndex) => {
                         const globalIndex = group.indices[rowIndex];
-                        const hasSubProductOptions = getSubProductOptions(group.product).length > 0;
+                        const hasSubProductOptions = getSubProductOptions(group.product).filter(sp => (sp.totalStock || 0) > 0).length > 0;
                         return (
                           <div key={globalIndex} className="grid grid-cols-12 gap-3 items-start bg-gray-50 rounded-lg p-3 border border-gray-100">
-                            <div className="col-span-3">
-                              {hasSubProductOptions ? (
+                            {/* Sub-product select — only rendered when product has sub-products */}
+                            {hasSubProductOptions && (
+                              <div className="col-span-3">
                                 <SearchableSelect
-                                  options={getSubProductOptions(group.product)}
+                                  options={getSubProductOptions(group.product).filter(sp => (sp.totalStock || 0) > 0)}
                                   value={item.subProduct || ''}
                                   onChange={(value) => handleSubProductSelect(globalIndex, value)}
-                                  placeholder="Select Sub Product"
+                                  placeholder="Select Sub Pr..."
                                   searchPlaceholder="Search sub-products..."
                                   getOptionLabel={(sp) => `${sp.subProductName} (Stock: ${sp.totalStock})`}
                                   getOptionValue={(sp) => sp.subProductId}
                                   renderOption={(sp, isSelected) => (
-                                    <div className="flex flex-col">
-                                      <span className="font-medium">{sp.subProductName}</span>
+                                    <div className="flex flex-col gap-1">
+                                      <span className="font-semibold text-gray-900">{sp.subProductName}</span>
                                       <span className="text-xs text-gray-500">
-                                        Available: {sp.totalStock} {sp.unit} · Weight: {sp.totalWeight?.toFixed(2) || 0} kg
+                                        Available: {sp.totalStock} {sp.unit} · Weight: {(sp.totalWeight || 0).toFixed(2)} kg
                                       </span>
+                                      {Array.isArray(sp.availableWeights) && sp.availableWeights.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-0.5">
+                                          {sp.availableWeights.slice(0, 6).map((w, wi) => (
+                                            <span key={wi} className="px-1.5 py-0.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded">
+                                              {Number(w).toFixed(2)} kg
+                                            </span>
+                                          ))}
+                                          {sp.availableWeights.length > 6 && (
+                                            <span className="text-xs text-gray-400">+{sp.availableWeights.length - 6} more</span>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 />
-                              ) : (
-                                <span className="text-xs text-gray-400 flex items-center h-full">-</span>
-                              )}
-                            </div>
-                            <div className="col-span-2">
+                              </div>
+                            )}
+                            {/* Qty — read-only when sub-product selected (auto-set from inventory weights count) */}
+                            <div className={hasSubProductOptions ? 'col-span-2' : 'col-span-3'}>
                               <label className="sr-only">Quantity</label>
                               <input
                                 type="number"
@@ -1074,9 +1186,14 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                                 max={item.availableStock || undefined}
                                 step="0.01"
                                 placeholder="Qty"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-400 text-sm"
+                                readOnly={!!item.subProduct}
+                                className={`w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm text-sm ${item.subProduct ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : 'focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-400'}`}
                               />
+                              {item.subProduct && (
+                                <span className="text-xs text-blue-500 mt-0.5 block">Auto from inventory</span>
+                              )}
                             </div>
+                            {/* Unit */}
                             <div className="col-span-2">
                               <input
                                 type="text"
@@ -1085,7 +1202,8 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm bg-gray-50 text-gray-600 text-sm cursor-not-allowed"
                               />
                             </div>
-                            <div className="col-span-3">
+                            {/* Weight */}
+                            <div className={hasSubProductOptions ? 'col-span-3' : 'col-span-5'}>
                               <label className="sr-only">Weight</label>
                               <input
                                 type="number"
@@ -1095,11 +1213,12 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                                 min="0"
                                 step="0.01"
                                 placeholder={item.subProduct ? 'Auto' : 'Kg'}
-                                className={`w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-400 text-sm ${item.subProduct ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                className={`w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${item.subProduct ? 'bg-gray-100 cursor-not-allowed' : 'bg-white hover:border-blue-400'}`}
                                 disabled={!!item.subProduct}
                                 readOnly={!!item.subProduct}
                               />
                             </div>
+                            {/* Remove row */}
                             <div className="col-span-2 flex justify-end">
                               <button
                                 type="button"
@@ -1110,57 +1229,71 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                                 <X className="w-4 h-4" />
                               </button>
                             </div>
-                            <div className="col-span-12">
+
+                            {/* Stock / weight info row */}
+                            <div className="col-span-12 flex flex-wrap gap-x-4 gap-y-1">
                               {item.availableStock > 0 && (
                                 <p className="text-xs text-green-600 flex items-center">
-                                  <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                  </svg>
-                                  Available: {item.availableStock} {item.unit}
+                                  ✓ Available: {item.availableStock} {item.unit}
                                 </p>
                               )}
                               {stockErrors[globalIndex] && (
-                                <p className="text-xs text-red-600 flex items-center">
-                                  <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                  </svg>
-                                  {stockErrors[globalIndex]}
-                                </p>
+                                <p className="text-xs text-red-600">⚠ {stockErrors[globalIndex]}</p>
                               )}
                               {weightErrors[globalIndex] && (
-                                <p className="text-xs text-red-600 flex items-center">
-                                  <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                  </svg>
-                                  {weightErrors[globalIndex]}
-                                </p>
+                                <p className="text-xs text-red-600">⚠ {weightErrors[globalIndex]}</p>
                               )}
-                              {item.totalProductWeight > 0 && item.productStock > 0 && (
-                                <p className="text-xs text-blue-600 mt-1 flex items-center">
-                                  <svg className="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                  </svg>
-                                  Suggested: {calculateWeight(item.quantity, item.totalProductWeight, item.productStock)} Kg
+                              {!item.subProduct && item.totalProductWeight > 0 && item.productStock > 0 && (
+                                <p className="text-xs text-blue-600">
+                                  ⓘ Suggested: {calculateWeight(item.quantity, item.totalProductWeight, item.productStock)} Kg
                                 </p>
-                              )}
-                              {item.subProduct && item.quantity > 0 && (
-                                <div className="mt-2">
-                                  <SubProductSelector
-                                    productId={item.product}
-                                    selectedSubProduct={item.subProduct}
-                                    selectedSubProductName={item.subProductName}
-                                    quantity={item.quantity}
-                                    weights={item.subProductWeights}
-                                    categoryHasSubProducts={true}
-                                    onSelectSubProduct={() => {}}
-                                    onWeightsChange={(weights) => handleSubProductWeightsChange(globalIndex, weights)}
-                                    disableSelection={true}
-                                    allowAddNew={false}
-                                    compact
-                                  />
-                                </div>
                               )}
                             </div>
+
+                            {/* Selectable weight chips for sub-product — click to include/exclude bags */}
+                            {item.subProduct && Array.isArray(item.availableWeights) && item.availableWeights.length > 0 && (
+                              <div className="col-span-12">
+                                <p className="text-xs text-gray-500 mb-1.5 font-medium">
+                                  Select bags to include ({(item.selectedWeightIndices || []).length} of {item.availableWeights.length} selected):
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {item.availableWeights.map((w, wi) => {
+                                    const isSelected = (item.selectedWeightIndices || []).includes(wi);
+                                    return (
+                                      <button
+                                        key={wi}
+                                        type="button"
+                                        onClick={() => {
+                                          const updatedItems = [...formData.items];
+                                          const it = { ...updatedItems[globalIndex] };
+                                          const current = it.selectedWeightIndices || [];
+                                          const next = isSelected
+                                            ? current.filter(i => i !== wi)
+                                            : [...current, wi].sort((a, b) => a - b);
+                                          it.selectedWeightIndices = next;
+                                          it.subProductWeights = next.map(i => it.availableWeights[i]);
+                                          it.quantity = next.length;
+                                          it.weight = parseFloat(it.subProductWeights.reduce((s, v) => s + (Number(v) || 0), 0).toFixed(2));
+                                          updatedItems[globalIndex] = it;
+                                          setFormData(prev => ({ ...prev, items: updatedItems }));
+                                        }}
+                                        className={`px-2 py-1 text-xs font-semibold rounded border transition-all ${
+                                          isSelected
+                                            ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                                            : 'bg-white text-gray-400 border-gray-300 line-through'
+                                        }`}
+                                        title={isSelected ? 'Click to exclude' : 'Click to include'}
+                                      >
+                                        #{wi + 1}: {Number(w) % 1 === 0 ? Number(w) : Number(w).toFixed(2)} kg
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <p className="text-xs text-gray-400 mt-1">Click a chip to include/exclude that bag from the order.</p>
+                              </div>
+                            )}
+
+                            {/* Notes */}
                             <div className="col-span-12">
                               <textarea
                                 value={item.notes || ''}
@@ -1173,16 +1306,23 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                           </div>
                         );
                       })}
-                      {getSubProductOptions(group.product).length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => addSubProductRow(group)}
-                          className="mt-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-2"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Add Sub Product
-                        </button>
-                      )}
+                      {(() => {
+                        const spOptions = getSubProductOptions(group.product).filter(sp => (sp.totalStock || 0) > 0);
+                        const usedIds = new Set(group.items.map(i => i.subProduct).filter(Boolean));
+                        const canAdd = spOptions.length > 0 && spOptions.some(sp => !usedIds.has(sp.subProductId));
+                        return canAdd ? (
+                          <button
+                            type="button"
+                            onClick={() => addSubProductRow(group)}
+                            className="mt-2 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Add Sub Product
+                          </button>
+                        ) : spOptions.length > 0 ? (
+                          <p className="mt-2 text-xs text-gray-400 italic">All sub-products for this product have been added.</p>
+                        ) : null;
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1193,7 +1333,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
 
           {/* Form Actions */}
-          <div className="flex items-center justify-end gap-4 pt-8 border-t-2 border-gray-200">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}

@@ -36,6 +36,8 @@ const SalesChallan = () => {
   const [pagination, setPagination] = useState(null);
   const [pdfLoading, setPdfLoading] = useState({});
   const [challanPdfLoading, setChallanPdfLoading] = useState({});
+  const [pdfPreviewModal, setPdfPreviewModal] = useState({ open: false, url: null, challanId: null, challanNumber: '' });
+  const [consolidatedPreviewModal, setConsolidatedPreviewModal] = useState({ open: false, url: null, soId: null, soNumber: '' });
 
   // Group Challans by Sales Order
   const groupChallansBySO = (challanList) => {
@@ -259,12 +261,12 @@ const SalesChallan = () => {
     }
   };
 
-  // Handle Consolidated PDF Preview for SO
+  // Handle Consolidated PDF Preview for SO — opens in-app modal
   const handlePreviewPDF = async (soId, soNumber) => {
     try {
       setPdfLoading(prev => ({ ...prev, [soId]: 'preview' }));
-      await salesChallanAPI.previewConsolidatedPDF(soId);
-      // Success - PDF opens in new tab
+      const result = await salesChallanAPI.previewConsolidatedPDF(soId);
+      setConsolidatedPreviewModal({ open: true, url: result.blobUrl, soId, soNumber });
     } catch (err) {
       console.error('Error previewing PDF:', err);
       setError(`Failed to preview PDF for ${soNumber}`);
@@ -272,6 +274,11 @@ const SalesChallan = () => {
     } finally {
       setPdfLoading(prev => ({ ...prev, [soId]: null }));
     }
+  };
+
+  const closeConsolidatedPreviewModal = () => {
+    if (consolidatedPreviewModal.url) window.URL.revokeObjectURL(consolidatedPreviewModal.url);
+    setConsolidatedPreviewModal({ open: false, url: null, soId: null, soNumber: '' });
   };
 
   // Handle status update
@@ -292,11 +299,12 @@ const SalesChallan = () => {
     }
   };
 
-  // Handle individual challan PDF preview
+  // Handle individual challan PDF preview — opens in-app modal
   const handlePreviewChallanPDF = async (challanId, challanNumber) => {
     try {
       setChallanPdfLoading(prev => ({ ...prev, [challanId]: 'preview' }));
-      await salesChallanAPI.previewPDF(challanId);
+      const result = await salesChallanAPI.previewPDF(challanId);
+      setPdfPreviewModal({ open: true, url: result.blobUrl, challanId, challanNumber });
     } catch (err) {
       console.error('Error previewing challan PDF:', err);
       setError(`Failed to preview PDF for ${challanNumber}`);
@@ -304,6 +312,11 @@ const SalesChallan = () => {
     } finally {
       setChallanPdfLoading(prev => ({ ...prev, [challanId]: null }));
     }
+  };
+
+  const closePdfPreviewModal = () => {
+    if (pdfPreviewModal.url) window.URL.revokeObjectURL(pdfPreviewModal.url);
+    setPdfPreviewModal({ open: false, url: null, challanId: null, challanNumber: '' });
   };
 
   // Handle individual challan PDF download
@@ -328,6 +341,34 @@ const SalesChallan = () => {
 
   return (
     <div className="space-y-6">
+      {/* PDF Preview Modal */}
+      {pdfPreviewModal.open && pdfPreviewModal.url && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ height: '90vh' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-semibold text-gray-900">PDF Preview — {pdfPreviewModal.challanNumber}</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleDownloadChallanPDF(pdfPreviewModal.challanId, pdfPreviewModal.challanNumber)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Download
+                </button>
+                <button
+                  onClick={closePdfPreviewModal}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <iframe src={pdfPreviewModal.url} className="flex-1 w-full rounded-b-2xl" title="PDF Preview" />
+          </div>
+        </div>
+      )}
       {/* Compact Header with Stats */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="p-6">
@@ -865,6 +906,70 @@ const SalesChallan = () => {
           onClose={() => setShowDetailModal(false)}
           challan={selectedChallan}
         />
+      )}
+
+      {/* Individual Challan PDF Preview Modal */}
+      {pdfPreviewModal.open && pdfPreviewModal.url && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ height: '90vh' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-semibold text-gray-900">Challan PDF — {pdfPreviewModal.challanNumber}</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleDownloadChallanPDF(pdfPreviewModal.challanId, pdfPreviewModal.challanNumber)}
+                  disabled={challanPdfLoading[pdfPreviewModal.challanId]}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                  Download
+                </button>
+                <button
+                  onClick={closePdfPreviewModal}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  Close
+                </button>
+              </div>
+            </div>
+            <iframe src={pdfPreviewModal.url} className="flex-1 w-full rounded-b-2xl" title="Challan PDF Preview" />
+          </div>
+        </div>
+      )}
+
+      {/* Consolidated SO PDF Preview Modal */}
+      {consolidatedPreviewModal.open && consolidatedPreviewModal.url && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col" style={{ height: '90vh' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-semibold text-gray-900">Consolidated PDF — {consolidatedPreviewModal.soNumber}</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleDownloadPDF(consolidatedPreviewModal.soId, consolidatedPreviewModal.soNumber)}
+                  disabled={pdfLoading[consolidatedPreviewModal.soId]}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                  Download
+                </button>
+                <button
+                  onClick={closeConsolidatedPreviewModal}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  Close
+                </button>
+              </div>
+            </div>
+            <iframe src={consolidatedPreviewModal.url} className="flex-1 w-full rounded-b-2xl" title="Consolidated PDF Preview" />
+          </div>
+        </div>
       )}
 
     </div>

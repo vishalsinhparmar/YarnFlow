@@ -37,49 +37,73 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
       const CW = PW - M * 2;  // content width = 258
       const items = challanData.items || [];
 
-      // ─── Row height helper ────────────────────────────────────────────────
-      const rowH = (item) => {
-        if (item.notes && item.notes.trim()) {
-          const lines = Math.ceil(item.notes.length / 34);
-          return Math.max(20, Math.min(14 + lines * 8 + 4, 44));
-        }
-        return 14;
+      // ─── Format weight: omit trailing .00 for whole numbers ───────────────
+      const formatW = (n) => {
+        const v = Number(n);
+        return v % 1 === 0 ? String(v) : v.toFixed(2);
       };
 
-      // ─── Pre-compute page height so nothing is clipped ───────────────────
-      const addrLines = [company.hoAddress, company.boAddress].filter(Boolean).length;
       const contactParts = [
         company.phone  ? `Mobile: ${company.phone}` : '',
         company.msmeNo ? `MSME: ${company.msmeNo}` : '',
         company.panNo  ? `PAN: ${company.panNo}` : ''
       ].filter(Boolean);
 
-      const HEADER_H  = 16                            // company name
-                      + addrLines * 9                 // address lines
-                      + (contactParts.length ? 9 : 0) // phone/msme line
-                      + (company.gstin ? 10 : 0)      // gstin
-                      + 14                            // "DELIVERY CHALLAN" title
-                      + 6;                            // separator
-      const DETAILS_H = 48 + 6;                       // info box + gap
-      const TABLE_H   = 16                            // header row
-                      + items.reduce((s, it) => s + rowH(it), 0)
-                      + 16;                           // totals row
-      const TERMS_H   = company.terms.length > 0
-                        ? 6 + 8 + company.terms.length * 8 + 4
-                        : 6;
-      const SIG_H     = 24;   // signature row
-      const FOOT_H    = 18;   // footer lines
-      const PAD       = 14;
+      // ─── Row height: col2 = product name lines + note lines stacked;
+      //                col4 = weight text lines. Row = max of both * LINE_H + PAD.
+      // At font size 7 on col2 (width=82px): ~16 chars/line (Helvetica 7pt ~5px/char)
+      // At font size 7 on col4 (width=96px): ~20 chars/line
+      const C2_CPL = 16;  // chars per line in Product column (col2, font 7)
+      const C4_CPL = 23;  // chars per line in Weight column (col4=96px, font 7pt ≈ 4.2px/char)
+      const ROW_LINE_H = 7;  // px per text line (Helvetica 7pt actual line height)
+      const ROW_PAD    = 6;  // top+bottom padding per row
 
-      const computedH = M + HEADER_H + DETAILS_H + TABLE_H + TERMS_H + SIG_H + FOOT_H + PAD;
-      const pageHeight = Math.max(420, computedH);
+      const rowH = (item) => {
+        const hasSub = Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0;
+        const label = item.subProductName
+          ? `${item.productName || ''} × ${item.subProductName}`
+          : (item.productName || '');
+        // col2: product name lines
+        const productLines = Math.max(1, Math.ceil(label.length / C2_CPL));
+        // col2: note lines (placed below product name)
+        const noteLines = item.notes && item.notes.trim()
+          ? Math.ceil(item.notes.length / C2_CPL) : 0;
+        const col2Lines = productLines + noteLines;
+        // col4: weight text lines
+        const wText = hasSub
+          ? item.subProductWeights.map(w => formatW(w)).join(', ') + ' kg'
+          : `${formatW(item.weight || 0)} kg`;
+        const col4Lines = Math.max(1, Math.ceil(wText.length / C4_CPL));
+        const totalLines = Math.max(col2Lines, col4Lines);
+        return Math.max(18, totalLines * ROW_LINE_H + ROW_PAD);
+      };
 
-      // ─── Create document ──────────────────────────────────────────────────
-      const doc = new PDFDocument({ size: [PW, pageHeight], margin: M, bufferPages: true });
+      // ─── Fixed dimensions ─────────────────────────────────────────────────
+      const BOX_H = 60;  // info box
+      const TH    = 16;  // table header height
+      const TR_H  = 14;  // totals row height
+
+      // Always A6 height pages — overflow adds pages as needed
+      const A6_H = 420;
+      const termsBlockH = company.terms.length > 0
+        ? 11 + company.terms.length * 8 : 0;
+      // Footer block height: gap(6) + sig(36) + rule+footer(18) = 60
+      const FOOTER_H = 60;
+
+      // ─── Create document ─────────────────────────────────────────────────
+      const doc = new PDFDocument({
+        size: [PW, A6_H],
+        margin: M,
+        bufferPages: true,
+        autoFirstPage: true,
+      });
       const chunks = [];
       doc.on('data', c => chunks.push(c));
       doc.on('end',  () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
+
+      // pageBottom = usable bottom of current page
+      let pageBottom = A6_H - M;
 
       let y = M;
 
@@ -131,7 +155,6 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
       // SECTION 2 — CHALLAN INFO BOX (two columns)
       // ════════════════════════════════════════════════
 
-      const BOX_H  = 48;
       const divX   = M + Math.floor(CW / 2);
       const leftX  = M + 5;
       const rightX = divX + 5;
@@ -143,23 +166,27 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
 
       const boxY = y + 6;
 
-      // Left column — Challan details
-      doc.fontSize(6).font('Helvetica').fillColor('#6b7280')
-         .text('Challan No.', leftX, boxY);
-      doc.fontSize(8).font('Helvetica-Bold').fillColor('#111111')
-         .text(challanData.challanNumber || 'N/A', leftX, boxY + 8);
-      doc.fontSize(6).font('Helvetica').fillColor('#6b7280')
-         .text('Date', leftX, boxY + 20);
-      doc.fontSize(7).font('Helvetica').fillColor('#111111')
-         .text(formatDate(challanData.challanDate), leftX, boxY + 28);
+      // Left column — stacked rows: Challan No. | Date | SO Ref | Warehouse
+      // Row 1: Challan No. label + value
+      doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('Challan No.', leftX, boxY);
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('#111111').text(challanData.challanNumber || 'N/A', leftX, boxY + 7);
 
-      // Left column secondary — SO ref
+      // Row 2: Date label + value (inline on same line)
+      doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('Date', leftX, boxY + 19);
+      doc.fontSize(6.5).font('Helvetica').fillColor('#111111').text(formatDate(challanData.challanDate), leftX + 16, boxY + 19);
+
+      // Row 3: SO Ref label + value (inline)
       const soRef = challanData.salesOrder?.soNumber || challanData.soReference || '';
       if (soRef) {
-        doc.fontSize(6).font('Helvetica').fillColor('#6b7280')
-           .text('SO Ref.', leftX, boxY + 37);
-        doc.fontSize(6.5).font('Helvetica-Bold').fillColor('#0369a1')
-           .text(soRef, leftX + 22, boxY + 37);
+        doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('SO Ref.', leftX, boxY + 30);
+        doc.fontSize(6.5).font('Helvetica-Bold').fillColor('#0369a1').text(soRef, leftX + 22, boxY + 30, { width: (divX - leftX) - 24 });
+      }
+
+      // Row 4: Warehouse label + value (inline)
+      const warehouseLoc = challanData.warehouseLocation || '';
+      if (warehouseLoc) {
+        doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('Warehouse', leftX, boxY + 41);
+        doc.fontSize(6.5).font('Helvetica-Bold').fillColor('#166534').text(warehouseLoc, leftX + 36, boxY + 41, { width: (divX - leftX) - 38 });
       }
 
       // Right column — Customer
@@ -188,104 +215,134 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
       // SECTION 3 — ITEMS TABLE
       // ════════════════════════════════════════════════
 
-      // Column layout
-      const C1X = M,         C1W = 14;   // #
-      const C2X = M + 14,    C2W = 88;   // Product
-      const C3X = M + 102,   C3W = 58;   // Category
-      const C4X = M + 160,   C4W = 46;   // Qty
-      const C5X = M + 206,   C5W = 52;   // Weight (right-edge = M+258=CW+M ✓)
+      // Column layout: CW=258: 12+82+32+96+36=258 ✓
+      const C1X = M,         C1W = 12;
+      const C2X = M + 12,    C2W = 82;
+      const C3X = M + 94,    C3W = 32;
+      const C4X = M + 126,   C4W = 96;
+      const C5X = M + 222,   C5W = 36;
 
-      const TH = 16; // table header height
+      const hasAnySubProduct = items.some(it =>
+        Array.isArray(it.subProductWeights) && it.subProductWeights.length > 0
+      );
 
-      // Header fill
-      doc.rect(M, y, CW, TH).fillColor('#1e3a5f').fill();
-
-      // Draw full outer border on header
-      doc.rect(M, y, CW, TH).strokeColor('#1e3a5f').lineWidth(0.5).stroke();
-
-      // Header text
-      const hY = y + 5;
-      doc.fontSize(7).font('Helvetica-Bold').fillColor('#ffffff')
-         .text('#',        C1X + 2, hY, { width: C1W - 2, align: 'center' })
-         .text('Product',  C2X + 2, hY, { width: C2W - 4 })
-         .text('Category', C3X,     hY, { width: C3W,     align: 'center' })
-         .text('Qty',      C4X,     hY, { width: C4W,     align: 'center' })
-         .text('Weight',   C5X,     hY, { width: C5W - 2, align: 'center' });
-
-      y += TH;
-
-      // Column dividers helper
-      const drawColDividers = (top, height, color = '#d1d5db') => {
-        doc.strokeColor(color).lineWidth(0.4);
-        [C2X, C3X, C4X, C5X].forEach(cx => {
-          doc.moveTo(cx, top).lineTo(cx, top + height).stroke();
-        });
+      // ─── Helper: draw table header row, returns new y ─────────────────────
+      const drawTableHeader = (yy) => {
+        doc.rect(M, yy, CW, TH).fillColor('#1e3a5f').fill();
+        const hY = yy + 5;
+        doc.fontSize(7).font('Helvetica-Bold').fillColor('#ffffff')
+           .text('#',         C1X + 1, hY, { width: C1W - 2, align: 'center' })
+           .text('Product',   C2X + 2, hY, { width: C2W - 4 })
+           .text('Qty',       C3X + 1, hY, { width: C3W - 2, align: 'center' });
+        if (hasAnySubProduct) {
+          doc.text('Weight',    C4X + 2, hY, { width: C4W - 4, align: 'center' })
+             .text('Total Wt.', C5X + 2, hY, { width: C5W - 4, align: 'center' });
+        } else {
+          doc.text('Weight',    C4X + 2, hY, { width: C4W + C5W - 4, align: 'center' });
+        }
+        const hDivCols = hasAnySubProduct ? [C2X, C3X, C4X, C5X] : [C2X, C3X, C4X];
+        hDivCols.forEach(cx =>
+          doc.moveTo(cx, yy).lineTo(cx, yy + TH).strokeColor('#2d4f7c').lineWidth(0.4).stroke()
+        );
+        return yy + TH;
       };
+
+      // ─── Helper: draw col dividers for a data row ─────────────────────────
+      const drawColDividers = (top, height, color, skipC5) => {
+        doc.strokeColor(color).lineWidth(0.4);
+        const cols = skipC5 ? [C2X, C3X, C4X] : [C2X, C3X, C4X, C5X];
+        cols.forEach(cx => doc.moveTo(cx, top).lineTo(cx, top + height).stroke());
+      };
+
+      // ─── Helper: new page with continuation header ────────────────────────
+      const addContinuationPage = () => {
+        doc.addPage({ size: [PW, A6_H], margin: M });
+        pageBottom = A6_H - M;
+        let yy = M;
+        doc.fontSize(6).font('Helvetica').fillColor('#94a3b8')
+           .text(`${challanData.challanNumber || ''} — continued`, M, yy, { align: 'right', width: CW });
+        yy += 10;
+        return drawTableHeader(yy);
+      };
+
+      y = drawTableHeader(y);
 
       let totalQty = 0;
       let totalWeight = 0;
 
       items.forEach((item, index) => {
-        const rh      = rowH(item);
-        const hasNote = item.notes && item.notes.trim();
-        const rY      = y + 4;
+        const rh     = rowH(item);
+        const hasSub = Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0;
 
-        // Alternating row background
+        // Page break: only if this row itself won't fit (totals/footer checked separately)
+        if (y + rh > pageBottom) {
+          y = addContinuationPage();
+        }
+
+        const rY = y + 4;
         doc.rect(M, y, CW, rh)
            .fillColor(index % 2 === 0 ? '#f8fafc' : '#ffffff')
            .fill();
+        doc.moveTo(M, y + rh).lineTo(M + CW, y + rh).strokeColor('#cbd5e1').lineWidth(0.6).stroke();
+        doc.moveTo(M,      y).lineTo(M,      y + rh).strokeColor('#64748b').lineWidth(1.0).stroke();
+        doc.moveTo(M + CW, y).lineTo(M + CW, y + rh).strokeColor('#64748b').lineWidth(1.0).stroke();
+        drawColDividers(y, rh, '#d1d5db', !hasSub);
 
-        // Row border (bottom only — cleaner look)
-        doc.moveTo(M, y + rh).lineTo(M + CW, y + rh)
-           .strokeColor('#e2e8f0').lineWidth(0.4).stroke();
+        const productLabel = item.subProductName
+          ? `${item.productName || 'N/A'} × ${item.subProductName}`
+          : (item.productName || 'N/A');
 
-        // Outer borders
-        doc.moveTo(M,      y).lineTo(M,      y + rh).strokeColor('#94a3b8').lineWidth(0.4).stroke();
-        doc.moveTo(M + CW, y).lineTo(M + CW, y + rh).strokeColor('#94a3b8').lineWidth(0.4).stroke();
-
-        // Col dividers
-        drawColDividers(y, rh);
-
-        // Resolve category
-        let cat = 'N/A';
-        if      (challanData.salesOrder?.category?.categoryName) cat = challanData.salesOrder.category.categoryName;
-        else if (challanData.salesOrder?.category?.name)         cat = challanData.salesOrder.category.name;
-        else if (item.product?.category?.categoryName)           cat = item.product.category.categoryName;
-        else if (item.product?.category?.name)                   cat = item.product.category.name;
-        else if (item.categoryName)                              cat = item.categoryName;
-        else if (item.category?.categoryName)                    cat = item.category.categoryName;
-        else if (item.category?.name)                            cat = item.category.name;
-
-        // Row data
+        // Product name in col2
         doc.fontSize(7).font('Helvetica').fillColor('#1e293b')
-           .text(String(index + 1),                          C1X + 2, rY, { width: C1W - 2, align: 'center' })
-           .text(item.productName || 'N/A',                  C2X + 3, rY, { width: C2W - 6 })
-           .text(cat,                                         C3X + 2, rY, { width: C3W - 4, align: 'center' })
-           .text(`${item.dispatchQuantity || 0} ${item.unit || 'Bags'}`, C4X + 2, rY, { width: C4W - 4, align: 'center' })
-           .text(`${(item.weight || 0).toFixed(2)} kg`,      C5X + 2, rY, { width: C5W - 4, align: 'right'  });
+           .text(String(index + 1), C1X + 1, rY, { width: C1W - 2, align: 'center' })
+           .text(productLabel,      C2X + 2, rY, { width: C2W - 4, lineBreak: true })
+           .text(`${item.dispatchQuantity || 0} ${item.unit || 'Bags'}`, C3X + 1, rY, { width: C3W - 2, align: 'center' });
 
-        // Notes (italic, blue)
-        if (hasNote) {
-          doc.fontSize(6).font('Helvetica-Oblique').fillColor('#1d4ed8')
-             .text(item.notes, C2X + 3, rY + 10, { width: C2W - 6, height: rh - 14 });
+        // Weight in col4 (and col5 for sub-product)
+        if (hasSub) {
+          const bagWeightStr = item.subProductWeights.map(w => formatW(w)).join(', ') + ' kg';
+          const totalWt = item.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0);
+          doc.fontSize(7).font('Helvetica').fillColor('#1e293b')
+             .text(bagWeightStr,             C4X + 2, rY, { width: C4W - 4, lineBreak: true })
+             .text(`${formatW(totalWt)} kg`, C5X + 2, rY, { width: C5W - 4, align: 'center' });
+          totalWeight += totalWt;
+        } else {
+          doc.fontSize(7).font('Helvetica').fillColor('#1e293b')
+             .text(`${formatW(item.weight || 0)} kg`, C4X + 2, rY, { width: C4W + C5W - 4 });
+          totalWeight += item.weight || 0;
         }
 
-        totalQty    += item.dispatchQuantity || 0;
-        totalWeight += item.weight || 0;
+        // Notes: placed below product name lines in col2
+        if (item.notes && item.notes.trim()) {
+          const productLabel2 = item.subProductName
+            ? `${item.productName || ''} × ${item.subProductName}` : (item.productName || '');
+          const productLineCount = Math.max(1, Math.ceil(productLabel2.length / C2_CPL));
+          const noteY = rY + productLineCount * ROW_LINE_H;
+          doc.fontSize(6).font('Helvetica-Oblique').fillColor('#1d4ed8')
+             .text(item.notes, C2X + 2, noteY, { width: C2W - 4, lineBreak: true });
+        }
+
+        totalQty += item.dispatchQuantity || 0;
         y += rh;
       });
 
-      // Totals row
-      const TR_H = 16;
+      // ─── Totals row ───────────────────────────────────────────────────────
+      // Only break if the totals row itself won't fit
+      if (y + TR_H > pageBottom) {
+        y = addContinuationPage();
+      }
       doc.rect(M, y, CW, TR_H).fillColor('#e8f0fe').fill();
-      doc.rect(M, y, CW, TR_H).strokeColor('#94a3b8').lineWidth(0.5).stroke();
-      drawColDividers(y, TR_H, '#94a3b8');
-
-      const tY = y + 5;
+      doc.rect(M, y, CW, TR_H).strokeColor('#64748b').lineWidth(1.0).stroke();
+      drawColDividers(y, TR_H, '#64748b', !hasAnySubProduct);
+      const tY = y + 4;
       doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#0f172a')
-         .text('TOTAL',                              C2X + 3, tY, { width: C2W + C3W - 6 })
-         .text(String(totalQty),                     C4X + 2, tY, { width: C4W - 4, align: 'center' })
-         .text(`${totalWeight.toFixed(2)} kg`,       C5X + 2, tY, { width: C5W - 4, align: 'right'  });
+         .text('TOTAL',          C2X + 2, tY, { width: C2W - 4 })
+         .text(String(totalQty), C3X + 1, tY, { width: C3W - 2, align: 'center' });
+      if (hasAnySubProduct) {
+        doc.text(`${formatW(totalWeight)} kg`, C5X + 2, tY, { width: C5W - 4, align: 'center' });
+      } else {
+        doc.text(`${formatW(totalWeight)} kg`, C4X + 2, tY, { width: C4W + C5W - 4 });
+      }
       y += TR_H;
 
       // ════════════════════════════════════════════════
@@ -310,29 +367,24 @@ export const generateSalesChallanPDF = async (challanData, companyInfo = {}) => 
       }
 
       // ════════════════════════════════════════════════
-      // SECTION 5 — SIGNATURE & FOOTER
+      // SECTION 5 — SIGNATURE & FOOTER pinned to page bottom (standard ERP)
       // ════════════════════════════════════════════════
 
-      // Signature block — right-aligned
-      doc.moveTo(M + CW - 80, y).lineTo(M + CW, y).strokeColor('#94a3b8').lineWidth(0.4).stroke();
-      y += 4;
-      doc.fontSize(6).font('Helvetica').fillColor('#6b7280')
-         .text(`${company.signatureLabel} ${company.name}`, M, y, { align: 'right', width: CW });
-      y += 8;
-      doc.fontSize(5.5).font('Helvetica').fillColor('#9ca3af')
-         .text('Authorised Signatory', M, y, { align: 'right', width: CW });
-      y += 10;
-
-      // Footer rule
-      doc.moveTo(M, y).lineTo(M + CW, y).strokeColor('#e2e8f0').lineWidth(0.4).stroke();
-      y += 5;
-
-      // Footer text
-      doc.fontSize(5.5).font('Helvetica').fillColor('#9ca3af')
-         .text(company.footerNote, M, y, { align: 'center', width: CW });
-      y += 7;
+      // Footer text pinned at absolute bottom of last page
+      const fBot = pageBottom;
       doc.fontSize(5).font('Helvetica').fillColor('#9ca3af')
-         .text(`Generated: ${formatDateTime(new Date())}`, M, y, { align: 'center', width: CW });
+         .text(`Generated: ${formatDateTime(new Date())}`, M, fBot - 7, { align: 'center', width: CW });
+      doc.fontSize(5.5).font('Helvetica').fillColor('#9ca3af')
+         .text(company.footerNote, M, fBot - 15, { align: 'center', width: CW });
+      doc.moveTo(M, fBot - 19).lineTo(M + CW, fBot - 19).strokeColor('#e2e8f0').lineWidth(0.4).stroke();
+
+      // Signature block pinned just above footer
+      const sigY = fBot - 54;
+      doc.moveTo(M + CW - 80, sigY + 16).lineTo(M + CW, sigY + 16).strokeColor('#94a3b8').lineWidth(0.4).stroke();
+      doc.fontSize(6).font('Helvetica-Bold').fillColor('#1e293b')
+         .text(`${company.signatureLabel} ${company.name}`, M, sigY + 18, { align: 'right', width: CW });
+      doc.fontSize(5.5).font('Helvetica').fillColor('#9ca3af')
+         .text('Authorised Signatory', M, sigY + 26, { align: 'right', width: CW });
 
       doc.end();
 
@@ -439,30 +491,27 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       const PW = 298;
       const CW = PW - M * 2;
 
-      // ─── Consolidate products from all challans ───────────────────────────
+      // ─── Consolidate products from all challans (preserving individual weight entries) ───
       const productMap = new Map();
       consolidatedData.challans.forEach(challan => {
         challan.items?.forEach(item => {
           const key = `${item.product?._id || item.productCode}__${item.subProduct || ''}`;
+          const itemWeights = Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0
+            ? item.subProductWeights
+            : (item.weight ? [item.weight] : []);
           if (productMap.has(key)) {
             const ex = productMap.get(key);
             ex.dispatchedQty += item.dispatchQuantity || 0;
             ex.weight        += item.weight           || 0;
+            ex.weightEntries.push(...itemWeights);
           } else {
-            let cat = 'N/A';
-            if      (item.product?.category?.categoryName) cat = item.product.category.categoryName;
-            else if (item.product?.category?.name)         cat = item.product.category.name;
-            else if (item.categoryName)                    cat = item.categoryName;
-            else if (item.category?.categoryName)          cat = item.category.categoryName;
-            else if (item.product?.categoryName)           cat = item.product.categoryName;
-            else if (item.productName)                     cat = 'General';
             productMap.set(key, {
               productName:  item.productName || item.product?.productName || 'N/A',
               subProduct:   item.subProductName || '',
-              category:     cat,
               dispatchedQty: item.dispatchQuantity || 0,
               unit:         item.unit   || 'Bags',
               weight:       item.weight || 0,
+              weightEntries: [...itemWeights],
               notes:        item.notes  || '',
             });
           }
@@ -470,38 +519,49 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       });
       const allProducts = Array.from(productMap.values());
 
-      // ─── Row height helper ────────────────────────────────────────────────
-      const rowH = (p) => {
-        if (p.notes && p.notes.trim()) {
-          return Math.max(20, Math.min(14 + Math.ceil(p.notes.length / 34) * 8 + 4, 44));
-        }
-        return 14;
+      // ─── Format weight: omit trailing .00 for whole numbers ───────────────
+      const formatW = (n) => {
+        const v = Number(n);
+        return v % 1 === 0 ? String(v) : v.toFixed(2);
       };
 
-      // ─── Pre-compute page height ──────────────────────────────────────────
-      const addrLines = [company.hoAddress, company.boAddress].filter(Boolean).length;
-      let H = M;
-      H += 16;                            // company name
-      H += addrLines * 9;                 // address lines
-      H += contactParts.length > 0 ? 9 : 0;
-      H += company.gstin ? 10 : 0;
-      H += 14 + 6 + 6;                    // DELIVERY CHALLAN + rule + gap
-      H += 48 + 6;                        // info box + gap
-      H += 18;                            // table header
-      allProducts.forEach(p => { H += rowH(p); });
-      H += 15 + 8;                        // totals row + gap
-      if (company.terms.length > 0) {
-        H += 7;                           // T&C heading
-        H += company.terms.length * 11;   // each term
-        H += 6;
-      }
-      H += 30 + 6;                        // signature block
-      H += 6 + 7 + 7;                     // footer
-      H += M;
-      const pageHeight = Math.max(420, H);
+      // ─── Row height: same logic as challan PDF ───────────────────────────────────
+      const C2c_CPL = 16;  // chars per line col2 at font 7
+      const C4c_CPL = 23;  // chars per line col4 (c4w=96px, font 7pt ≈ 4.2px/char)
+      const ROW_LINE_Hc = 7;
+      const ROW_PADc    = 6;
 
-      // ─── Create document ──────────────────────────────────────────────────
-      const doc = new PDFDocument({ size: [PW, pageHeight], margin: M, bufferPages: true });
+      const rowH = (p) => {
+        const hasSub = !!p.subProduct;
+        const label = hasSub ? `${p.productName} × ${p.subProduct}` : p.productName;
+        const productLines = Math.max(1, Math.ceil(label.length / C2c_CPL));
+        const noteLines = p.notes && p.notes.trim()
+          ? Math.ceil(p.notes.length / C2c_CPL) : 0;
+        const col2Lines = productLines + noteLines;
+        const wText = hasSub
+          ? (p.weightEntries || []).map(w => formatW(w)).join(', ') + ' kg'
+          : `${formatW(p.weight || 0)} kg`;
+        const col4Lines = Math.max(1, Math.ceil(wText.length / C4c_CPL));
+        return Math.max(18, Math.max(col2Lines, col4Lines) * ROW_LINE_Hc + ROW_PADc);
+      };
+
+      // ─── Fixed dims + pre-compute exact content height ─────────────────────────
+      const THc  = 16;
+      const TRHc = 14;
+      const termsHc = company.terms.length > 0
+        ? 5 + 7 + company.terms.length * 11 + 4 : 0;
+      // Footer block: gap(6) + sig(36) + rule+footer(18) = 60
+      const FOOTER_Hc = 60;
+      const A6_Hc = 420;
+
+      // ─── Create document ─────────────────────────────────────────────────
+      const doc = new PDFDocument({
+        size: [PW, A6_Hc],
+        margin: M,
+        bufferPages: true,
+        autoFirstPage: true,
+      });
+      let pageBottomC = A6_Hc - M;
       const chunks = [];
       doc.on('data', c => chunks.push(c));
       doc.on('end',  () => resolve(Buffer.concat(chunks)));
@@ -515,6 +575,9 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       doc.fontSize(13).font('Helvetica-Bold').fillColor('#111111')
          .text(company.name, M, y, { align: 'center', width: CW });
       y += 16;
+
+      // Track page bottom for multi-page logic (reference via closure)
+      let _pageBotC = pageBottomC;
 
       if (company.hoAddress) {
         doc.fontSize(6.5).font('Helvetica').fillColor('#555555')
@@ -547,7 +610,7 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       // ════════════════════════════════════════════
       // SECTION 2 — INFO BOX (two columns)
       // ════════════════════════════════════════════
-      const BOX_H  = 48;
+      const BOX_H  = 60;
       const divX   = M + Math.floor(CW / 2);
       const leftX  = M + 5;
       const rightX = divX + 5;
@@ -559,13 +622,23 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       const customerInfo  = consolidatedData.customerDetails || {};
       const customerAddr  = consolidatedData.customer?.address || {};
 
-      // Left — SO reference + order date
+      // Left — stacked rows: SO Ref | Order Date | Warehouse
+      // Row 1: SO Ref label + value
       doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('SO Ref.', leftX, boxY);
       doc.fontSize(8).font('Helvetica-Bold').fillColor('#0369a1')
-         .text(consolidatedData.soNumber || 'N/A', leftX, boxY + 8);
-      doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('Order Date', leftX, boxY + 20);
-      doc.fontSize(7).font('Helvetica').fillColor('#111111')
-         .text(formatDate(consolidatedData.salesOrder?.orderDate), leftX, boxY + 28);
+         .text(consolidatedData.soNumber || 'N/A', leftX, boxY + 7);
+
+      // Row 2: Order Date label + value (inline)
+      doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('Order Date', leftX, boxY + 19);
+      doc.fontSize(6.5).font('Helvetica').fillColor('#111111')
+         .text(formatDate(consolidatedData.salesOrder?.orderDate), leftX + 30, boxY + 19);
+
+      // Row 3: Warehouse label + value (inline)
+      if (consolidatedData.warehouseLocation) {
+        doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('Warehouse', leftX, boxY + 30);
+        doc.fontSize(6.5).font('Helvetica-Bold').fillColor('#166534')
+           .text(consolidatedData.warehouseLocation, leftX + 36, boxY + 30, { width: (divX - leftX) - 38 });
+      }
 
       // Right — customer
       doc.fontSize(6).font('Helvetica').fillColor('#6b7280').text('Delivery To', rightX, boxY);
@@ -587,72 +660,124 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       // ════════════════════════════════════════════
       // SECTION 3 — ITEMS TABLE
       // ════════════════════════════════════════════
-      const c1x = M + 4,   c1w = 12;
-      const c2x = M + 18,  c2w = 86;
-      const c3x = M + 108, c3w = 58;
-      const c4x = M + 170, c4w = 46;
-      const c5x = M + 218, c5w = 40;
+      const c1x = M,       c1w = 12;
+      const c2x = M + 12,  c2w = 82;
+      const c3x = M + 94,  c3w = 32;
+      const c4x = M + 126, c4w = 96;
+      const c5x = M + 222, c5w = 36;
 
-      const TH = 18;
-      doc.rect(M, y, CW, TH).fillColor('#1e3a5f').fill();
-      const thY = y + 5;
-      doc.fontSize(7).font('Helvetica-Bold').fillColor('#ffffff')
-         .text('#',        c1x, thY, { width: c1w, align: 'center' })
-         .text('Product',  c2x, thY, { width: c2w, align: 'center' })
-         .text('Category', c3x, thY, { width: c3w, align: 'center' })
-         .text('Qty',      c4x, thY, { width: c4w, align: 'center' })
-         .text('Weight',   c5x, thY, { width: c5w, align: 'right'  });
+      const hasAnySubProduct = allProducts.some(p => !!p.subProduct);
 
-      // column dividers in header
-      const divLine = (x) => doc.moveTo(x, y).lineTo(x, y + TH).strokeColor('#2d4f7c').lineWidth(0.4).stroke();
-      [c2x - 2, c3x - 2, c4x - 2, c5x - 2].forEach(divLine);
+      // ─── Draw table header, returns new y ─────────────────────────────────
+      const drawTblHdrC = (yy) => {
+        doc.rect(M, yy, CW, THc).fillColor('#1e3a5f').fill();
+        const hY = yy + 5;
+        doc.fontSize(7).font('Helvetica-Bold').fillColor('#ffffff')
+           .text('#',         c1x+1, hY, { width: c1w-2, align: 'center' })
+           .text('Product',   c2x+2, hY, { width: c2w-4 })
+           .text('Qty',       c3x+1, hY, { width: c3w-2, align: 'center' });
+        if (hasAnySubProduct) {
+          doc.text('Weight',    c4x+2, hY, { width: c4w-4, align: 'center' })
+             .text('Total Wt.', c5x+2, hY, { width: c5w-4, align: 'center' });
+        } else {
+          doc.text('Weight',    c4x+2, hY, { width: c4w+c5w-4, align: 'center' });
+        }
+        const hDivs = hasAnySubProduct ? [c2x,c3x,c4x,c5x] : [c2x,c3x,c4x];
+        hDivs.forEach(cx =>
+          doc.moveTo(cx,yy).lineTo(cx,yy+THc).strokeColor('#2d4f7c').lineWidth(0.4).stroke()
+        );
+        return yy + THc;
+      };
 
-      y += TH;
+      const addConsolidatedPage = () => {
+        doc.addPage({ size: [PW, A6_Hc], margin: M });
+        _pageBotC = A6_Hc - M;
+        let yy = M;
+        doc.fontSize(6).font('Helvetica').fillColor('#94a3b8')
+           .text(`${consolidatedData.soNumber || ''} — continued`, M, yy, { align: 'right', width: CW });
+        yy += 10;
+        return drawTblHdrC(yy);
+      };
+
+      y = drawTblHdrC(y);
 
       let totalQty = 0, totalWeight = 0;
 
       allProducts.forEach((product, idx) => {
         const rh   = rowH(product);
+        const hasSub = !!product.subProduct;
+
+        // Page break: only if this row itself won't fit
+        if (y + rh > _pageBotC) {
+          y = addConsolidatedPage();
+        }
+
         const fill = idx % 2 === 0 ? '#f8fafc' : '#ffffff';
         doc.rect(M, y, CW, rh).fillColor(fill).fill();
 
         const ry = y + 4;
-        const label = product.subProduct
+        const label = hasSub
           ? `${product.productName} × ${product.subProduct}`
           : product.productName;
 
         doc.fillColor('#1e293b').fontSize(7).font('Helvetica')
-           .text((idx + 1).toString(),         c1x, ry, { width: c1w, align: 'center' })
-           .text(label,                         c2x, ry, { width: c2w - 2 })
-           .text(product.category,              c3x, ry, { width: c3w, align: 'center' })
-           .text(`${product.dispatchedQty} ${product.unit}`, c4x, ry, { width: c4w, align: 'center' })
-           .text(`${product.weight.toFixed(2)} kg`,          c5x, ry, { width: c5w, align: 'right' });
+           .text((idx+1).toString(), c1x+1, ry, { width: c1w-2, align: 'center' })
+           .text(label,             c2x+2, ry, { width: c2w-4, lineBreak: true })
+           .text(`${product.dispatchedQty} ${product.unit}`, c3x+1, ry, { width: c3w-2, align: 'center' });
 
-        if (product.notes && product.notes.trim()) {
-          doc.fontSize(6).font('Helvetica-Oblique').fillColor('#2563eb')
-             .text(product.notes, c2x, ry + 9, { width: c2w - 2 });
+        if (hasSub) {
+          const bagStr  = (product.weightEntries||[]).map(w=>formatW(w)).join(', ')+' kg';
+          const totalWt = (product.weightEntries||[]).reduce((s,w)=>s+(Number(w)||0),0);
+          doc.fillColor('#1e293b').fontSize(7).font('Helvetica')
+             .text(bagStr,                   c4x+2, ry, { width: c4w-4, lineBreak: true })
+             .text(`${formatW(totalWt)} kg`, c5x+2, ry, { width: c5w-4, align: 'center' });
+          totalWeight += totalWt;
+        } else {
+          doc.fillColor('#1e293b').fontSize(7).font('Helvetica')
+             .text(`${formatW(product.weight||0)} kg`, c4x+2, ry, { width: c4w+c5w-4 });
+          totalWeight += product.weight||0;
         }
 
-        // column dividers per row
-        [c2x - 2, c3x - 2, c4x - 2, c5x - 2].forEach(x =>
-          doc.moveTo(x, y).lineTo(x, y + rh).strokeColor('#e2e8f0').lineWidth(0.3).stroke()
-        );
-        doc.moveTo(M, y + rh).lineTo(M + CW, y + rh).strokeColor('#e2e8f0').lineWidth(0.3).stroke();
+        // Notes below product name
+        if (product.notes && product.notes.trim()) {
+          const productLineCount = Math.max(1, Math.ceil(label.length / C2c_CPL));
+          const noteY = ry + productLineCount * ROW_LINE_Hc;
+          doc.fontSize(6).font('Helvetica-Oblique').fillColor('#1d4ed8')
+             .text(product.notes, c2x+2, noteY, { width: c2w-4, lineBreak: true });
+        }
 
-        totalQty    += product.dispatchedQty;
-        totalWeight += product.weight;
+        doc.moveTo(M, y+rh).lineTo(M+CW, y+rh).strokeColor('#cbd5e1').lineWidth(0.6).stroke();
+        doc.moveTo(M, y).lineTo(M, y+rh).strokeColor('#64748b').lineWidth(1.0).stroke();
+        doc.moveTo(M+CW, y).lineTo(M+CW, y+rh).strokeColor('#64748b').lineWidth(1.0).stroke();
+        const rowDivCols = hasSub ? [c2x,c3x,c4x,c5x] : [c2x,c3x,c4x];
+        rowDivCols.forEach(x =>
+          doc.moveTo(x, y).lineTo(x, y+rh).strokeColor('#d1d5db').lineWidth(0.4).stroke()
+        );
+
+        totalQty += product.dispatchedQty;
         y += rh;
       });
 
-      // Totals row
-      doc.rect(M, y, CW, 15).fillColor('#e8f0fe').fill();
+      // ─── Totals row ─────────────────────────────────────────────────────
+      if (y + TRHc > _pageBotC) {
+        y = addConsolidatedPage();
+      }
+      doc.rect(M, y, CW, TRHc).fillColor('#e8f0fe').fill();
+      doc.rect(M, y, CW, TRHc).strokeColor('#64748b').lineWidth(1.0).stroke();
+      const totDivs = hasAnySubProduct ? [c2x,c3x,c4x,c5x] : [c2x,c3x,c4x];
+      totDivs.forEach(x =>
+        doc.moveTo(x,y).lineTo(x,y+TRHc).strokeColor('#64748b').lineWidth(0.5).stroke()
+      );
       const ty = y + 4;
       doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#1e293b')
-         .text('TOTAL', c2x, ty, { width: c2w + c3w })
-         .text(totalQty.toString(),            c4x, ty, { width: c4w, align: 'center' })
-         .text(`${totalWeight.toFixed(2)} kg`, c5x, ty, { width: c5w, align: 'right'  });
-      doc.rect(M, y, CW, 15).strokeColor('#94a3b8').lineWidth(0.4).stroke();
-      y += 15 + 8;
+         .text('TOTAL',             c2x+2, ty, { width: c2w-4 })
+         .text(totalQty.toString(), c3x+1, ty, { width: c3w-2, align: 'center' });
+      if (hasAnySubProduct) {
+        doc.text(`${formatW(totalWeight)} kg`, c5x+2, ty, { width: c5w-4, align: 'center' });
+      } else {
+        doc.text(`${formatW(totalWeight)} kg`, c4x+2, ty, { width: c4w+c5w-4 });
+      }
+      y += TRHc + 8;
 
       // ════════════════════════════════════════════
       // SECTION 4 — TERMS & CONDITIONS
@@ -672,26 +797,24 @@ export const generateSalesOrderConsolidatedPDF = async (consolidatedData, compan
       }
 
       // ════════════════════════════════════════════
-      // SECTION 5 — SIGNATURE
+      // SECTION 5 — SIGNATURE & FOOTER pinned to page bottom (standard ERP)
       // ════════════════════════════════════════════
-      const sigX = M + CW - 80;
-      doc.moveTo(sigX, y + 20).lineTo(M + CW, y + 20).strokeColor('#475569').lineWidth(0.5).stroke();
-      doc.fontSize(6.5).font('Helvetica-Bold').fillColor('#1e293b')
-         .text(`${company.signatureLabel} ${company.name}`, sigX, y + 22, { width: 80, align: 'center' });
-      doc.fontSize(6).font('Helvetica').fillColor('#6b7280')
-         .text('Authorised Signatory', sigX, y + 30, { width: 80, align: 'center' });
-      y += 36;
 
-      // ════════════════════════════════════════════
-      // SECTION 6 — FOOTER
-      // ════════════════════════════════════════════
-      doc.moveTo(M, y).lineTo(M + CW, y).strokeColor('#cbd5e1').lineWidth(0.4).stroke();
-      y += 5;
-      doc.fontSize(5.5).font('Helvetica').fillColor('#94a3b8')
-         .text(company.footerNote, M, y, { align: 'center', width: CW });
-      y += 7;
+      // Footer text pinned at absolute bottom of last page
+      const fBotC = _pageBotC;
       doc.fontSize(5).font('Helvetica').fillColor('#94a3b8')
-         .text(`Generated: ${formatDateTime(new Date())}`, M, y, { align: 'center', width: CW });
+         .text(`Generated: ${formatDateTime(new Date())}`, M, fBotC - 7, { align: 'center', width: CW });
+      doc.fontSize(5.5).font('Helvetica').fillColor('#94a3b8')
+         .text(company.footerNote, M, fBotC - 15, { align: 'center', width: CW });
+      doc.moveTo(M, fBotC - 19).lineTo(M + CW, fBotC - 19).strokeColor('#e2e8f0').lineWidth(0.4).stroke();
+
+      // Signature block pinned just above footer
+      const sigYc = fBotC - 54;
+      doc.moveTo(M + CW - 80, sigYc + 16).lineTo(M + CW, sigYc + 16).strokeColor('#94a3b8').lineWidth(0.4).stroke();
+      doc.fontSize(6).font('Helvetica-Bold').fillColor('#1e293b')
+         .text(`${company.signatureLabel} ${company.name}`, M, sigYc + 18, { align: 'right', width: CW });
+      doc.fontSize(5.5).font('Helvetica').fillColor('#9ca3af')
+         .text('Authorised Signatory', M, sigYc + 26, { align: 'right', width: CW });
 
       doc.end();
     } catch (error) {

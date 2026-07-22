@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FileText, X, FileCheck, Calendar, MapPin, Package } from 'lucide-react';
+import { FileText, X, FileCheck, Calendar, MapPin, Package, Truck, CheckCircle2, Info, StickyNote } from 'lucide-react';
 import { salesOrderAPI } from '../../services/salesOrderAPI';
 import { salesChallanAPI } from '../../services/salesChallanAPI';
 import { inventoryAPI } from '../../services/inventoryAPI';
 import { apiRequest } from '../../services/common';
 import NewSalesOrderModal from '../SalesOrders/NewSalesOrderModal';
 import SearchableSelect from '../common/SearchableSelect';
-import SubProductSelector from '../common/SubProductSelector';
 import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
-import warehouseAPI from '../../services/warehouseAPI';
 
 const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = null }) => {
   const [formData, setFormData] = useState({
@@ -26,11 +24,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
   const [successMessage, setSuccessMessage] = useState('');
   const [showNewSOModal, setShowNewSOModal] = useState(false);
   const [dispatchedQuantities, setDispatchedQuantities] = useState({});
-  const [warehouseLocations, setWarehouseLocations] = useState([]);
-
-  useEffect(() => {
-    warehouseAPI.getAll().then(res => setWarehouseLocations(res.data || [])).catch(() => {});
-  }, []);
+  const [detectedWarehouse, setDetectedWarehouse] = useState('');
 
   // Paginated sales orders with client-side status filter
   const fetchSalesOrders = useCallback(async (params) => {
@@ -71,6 +65,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       setError('');
       setSuccessMessage('');
       setDispatchedQuantities({});
+      setDetectedWarehouse('');
     }
   }, [isOpen]);
 
@@ -230,22 +225,17 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             );
             const uniqueWarehouses = [...new Set(allWarehouses)];
             
-            let autoSelectedWarehouse = '';
-            if (uniqueWarehouses.length === 1 && uniqueWarehouses[0]) {
-              // All products are in the same warehouse
-              autoSelectedWarehouse = uniqueWarehouses[0];
-              console.log('✅ Auto-selected warehouse:', autoSelectedWarehouse, getWarehouseName(autoSelectedWarehouse));
-            } else if (uniqueWarehouses.length > 1) {
-              console.log('⚠️ Products are in multiple warehouses:', uniqueWarehouses.map(wh => getWarehouseName(wh)));
-            }
+            // Collect all unique warehouse names detected from lots
+            const warehouseDisplay = uniqueWarehouses.filter(Boolean).join(', ') || '';
+            setDetectedWarehouse(warehouseDisplay);
             
-            // Update form data with auto-selected warehouse
+            // Update form data with auto-detected warehouse
             setFormData(prev => ({
               ...prev,
               salesOrder: soId,
               expectedDeliveryDate: so.expectedDeliveryDate ? 
                 new Date(so.expectedDeliveryDate).toISOString().split('T')[0] : '',
-              warehouseLocation: autoSelectedWarehouse,
+              warehouseLocation: warehouseDisplay,
               items: itemsWithWarehouses
             }));
             
@@ -386,10 +376,8 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       setError('Please select a sales order');
       return false;
     }
-    if (!formData.warehouseLocation) {
-      setError('Please enter warehouse location');
-      return false;
-    }
+    // Warehouse is auto-derived server-side from the inventory lot(s) fulfilling this
+    // order — no longer a required manual field. Users may still override it below.
     if (!formData.items || formData.items.length === 0) {
       setError('No items to dispatch');
       return false;
@@ -422,13 +410,9 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
         return false;
       }
 
-      // Check if total weight exceeds the remaining weight for the SO item
-      const maxWeight = maxDispatch * (item.weightPerUnit || 0);
-      const itemWeight = parseFloat(item.weight || 0);
-      if (maxWeight > 0 && itemWeight > maxWeight) {
-        setError(`Dispatch weight for ${item.productName} cannot exceed remaining weight (${maxWeight.toFixed(2)} kg)`);
-        return false;
-      }
+      // Weight validation is handled by the backend which checks actual inventory lot weights.
+      // Frontend averaging (totalWeight / qty) is imprecise for non-divisible bag weights
+      // and is not needed here — the backend is the single source of truth.
     }
 
     return true;
@@ -509,26 +493,28 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto relative">
+    <div className="fixed top-16 left-64 right-0 bottom-0 z-40 flex flex-col bg-white shadow-2xl overflow-hidden">
         {/* Loading Overlay */}
         {loading && (
-          <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50 rounded-2xl">
+          <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-teal-600 mb-4"></div>
+              <div className="relative mx-auto mb-4 w-16 h-16">
+                <div className="w-16 h-16 rounded-full border-4 border-teal-100"></div>
+                <div className="w-16 h-16 rounded-full border-4 border-teal-600 border-t-transparent animate-spin absolute inset-0"></div>
+              </div>
               <p className="text-lg font-semibold text-gray-700">Creating Sales Challan...</p>
               <p className="text-sm text-gray-500 mt-2">Please wait</p>
             </div>
           </div>
         )}
 
-        {/* Header */}
-        <div className="px-8 py-6 bg-gradient-to-r from-teal-600 to-emerald-600 rounded-t-2xl flex items-center justify-between">
+        {/* Header — sticky */}
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
-              <FileText className="w-6 h-6 text-white" />
+            <div className="w-9 h-9 bg-black bg-opacity-20 rounded-lg flex items-center justify-center">
+              <FileText className="w-5 h-5 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white">Create Sales Challan</h2>
+            <h2 className="text-xl font-bold text-white">Create Sales Challan</h2>
           </div>
           <button
             onClick={onClose}
@@ -540,13 +526,13 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-5 space-y-5">
           {successMessage && (
             <div className="bg-green-50 border-l-4 border-green-500 rounded-lg p-4 shadow-sm">
-              <div className="flex items-center">
-                <svg className="h-6 w-6 text-green-500 mr-3" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
                 <p className="text-green-800 font-medium">{successMessage}</p>
               </div>
             </div>
@@ -554,10 +540,8 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           
           {error && (
             <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
-              <div className="flex items-center">
-                <svg className="h-6 w-6 text-red-500 mr-3" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
+              <div className="flex items-start gap-3">
+                <X className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                 <div>
                   <h3 className="text-sm font-semibold text-red-800">Error</h3>
                   <p className="text-red-700 text-sm mt-1">{error}</p>
@@ -567,14 +551,12 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           )}
 
           {/* Sales Order Selection */}
-          <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-xl p-6 shadow-sm border border-teal-100">
-            <div className="flex items-center mb-6">
-              <svg className="h-6 w-6 text-teal-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <h3 className="text-xl font-semibold text-gray-900">Sales Order Selection</h3>
+          <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-lg p-4 border border-teal-100">
+            <div className="flex items-center mb-3 gap-2">
+              <FileText className="h-4 w-4 text-teal-600" />
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Sales Order Selection</h3>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Sales Order Selection with SearchableSelect */}
               <div>
                 <SearchableSelect
@@ -617,21 +599,17 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                   )}
                 />
                 {!loadingSOs && salesOrders.length > 0 && !formData.salesOrder && (
-                  <p className="text-xs text-green-600 mt-2 flex items-center">
-                    <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    {salesOrders.length} sales order(s) available - Search to find specific SO
+                  <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {salesOrders.length} orders available — search to filter
                   </p>
                 )}
               </div>
 
               {/* Expected Delivery Date */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                  <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                  <Calendar className="h-3 w-3 text-gray-500" />
                   Expected Delivery Date
                 </label>
                 <input
@@ -639,7 +617,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                   value={formData.expectedDeliveryDate}
                   onChange={(e) => handleInputChange('expectedDeliveryDate', e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white hover:border-teal-400 transition-all"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white hover:border-teal-400 transition-all"
                 />
               </div>
             </div>
@@ -647,9 +625,9 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
           {/* Loading SO Details */}
           {loadingSODetails && (
-            <div className="bg-teal-50 rounded-xl p-6 border border-teal-200">
+            <div className="bg-teal-50 rounded-lg p-3 border border-teal-200">
               <div className="flex items-center justify-center space-x-3">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-teal-600"></div>
                 <span className="text-sm font-medium text-teal-800">Loading sales order details...</span>
               </div>
             </div>
@@ -657,14 +635,12 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
           {/* Selected SO Details */}
           {!loadingSODetails && selectedSO && (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 shadow-sm">
-              <div className="flex items-center mb-4">
-                <svg className="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h3 className="text-base font-semibold text-blue-900">Selected Order Details</h3>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center mb-3 gap-2">
+                <Info className="h-4 w-4 text-blue-600" />
+                <h3 className="text-sm font-semibold text-blue-900 uppercase tracking-wide">Selected Order Details</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="bg-white rounded-lg p-3 shadow-sm">
                   <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</span>
                   <p className="text-sm font-semibold text-gray-900 mt-1">{selectedSO.customer?.companyName || 'N/A'}</p>
@@ -682,51 +658,32 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           )}
 
           {/* Dispatch Information */}
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 shadow-sm border border-purple-100">
-            <div className="flex items-center mb-6">
-              <svg className="h-6 w-6 text-purple-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-              </svg>
-              <h3 className="text-xl font-semibold text-gray-900">Dispatch Information</h3>
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-100">
+            <div className="flex items-center mb-3 gap-2">
+              <Truck className="h-4 w-4 text-purple-600" />
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Dispatch Information</h3>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                  <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                  Warehouse Location <span className="text-red-500 ml-1">*</span>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-gray-500" />
+                  Warehouse Location
                 </label>
-                <div className="relative">
-                  <select
-                    value={formData.warehouseLocation}
-                    onChange={(e) => handleInputChange('warehouseLocation', e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white hover:border-purple-400 transition-all appearance-none"
-                  >
-                    <option value="">Select Warehouse Location</option>
-                    {warehouseLocations.map(warehouse => (
-                      <option key={warehouse._id} value={warehouse._id}>
-                        {warehouse.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                {detectedWarehouse ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+                    <MapPin className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-green-800">{detectedWarehouse}</span>
                   </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Select the warehouse location where goods will be dispatched from
-                </p>
+                ) : (
+                  <div className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-400 italic">
+                    {formData.salesOrder ? 'Detecting from inventory…' : 'Select a Sales Order to detect warehouse'}
+                  </div>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                  <svg className="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                  <StickyNote className="h-3 w-3 text-gray-500" />
                   Dispatch Notes
                 </label>
                 <input
@@ -734,7 +691,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                   value={formData.notes}
                   onChange={(e) => handleInputChange('notes', e.target.value)}
                   placeholder="Special dispatch instructions (optional)"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white hover:border-purple-400 transition-all"
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white hover:border-purple-400 transition-all"
                 />
               </div>
             </div>
@@ -752,27 +709,22 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
               });
 
             return itemsToDispatch.length > 0 ? (
-              <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 shadow-sm border border-orange-100">
-                <div className="flex items-center mb-6">
-                  <svg className="h-6 w-6 text-orange-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                  <h3 className="text-xl font-semibold text-gray-900">Items to Dispatch</h3>
-                  <span className="ml-3 bg-orange-100 text-orange-800 text-sm font-medium px-3 py-1 rounded-full">
-                    {itemsToDispatch.length} item(s)
+              <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-4 border border-orange-100">
+                <div className="flex items-center mb-3 gap-2">
+                  <Package className="h-4 w-4 text-orange-600" />
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Items to Dispatch</h3>
+                  <span className="ml-1 bg-orange-100 text-orange-800 text-xs font-semibold px-2.5 py-1 rounded-full">
+                    {itemsToDispatch.length}
                   </span>
                 </div>
                 
                 {/* Table Header */}
                 <div className="bg-gray-50 border border-gray-200 rounded-t-lg px-4 py-2">
-                  <div className="grid grid-cols-12 gap-4 text-xs font-medium text-gray-600 uppercase">
-                    <div className="col-span-2">Product</div>
-                    <div className="col-span-2">Warehouse</div>
+                  <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="col-span-3">Product</div>
                     <div className="col-span-2 text-center">Ordered</div>
-                    <div className="col-span-1 text-center">Prev. Disp.</div>
-                    <div className="col-span-2 text-center">Dispatching Now *</div>
-                    <div className="col-span-2 text-center">Pending</div>
-                    <div className="col-span-1 text-center">Complete</div>
+                    <div className="col-span-4 text-center">Dispatch Qty / Weight</div>
+                    <div className="col-span-3 text-center">Mark Final</div>
                   </div>
                 </div>
 
@@ -789,8 +741,8 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                           )}
                           <span className="text-xs text-blue-700 font-medium">Unit: {group.unit}</span>
                         </div>
-                        <span className="text-xs text-gray-500">
-                          {group.items.length} sub-product row(s)
+                        <span className="text-xs text-gray-400">
+                          {group.items.length} {group.items.length === 1 ? 'variant' : 'variants'}
                         </span>
                       </div>
                       {group.items.map((item, rowIndex) => {
@@ -805,37 +757,19 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                           <div key={originalIndex} className="px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
                             <div className="grid grid-cols-12 gap-4 items-center">
                               {/* Product / Sub Product */}
-                              <div className="col-span-2">
+                              <div className="col-span-3">
                                 {item.subProductName ? (
                                   <div className="text-sm font-semibold text-green-700">{item.productName} X {item.subProductName}</div>
                                 ) : (
-                                  <div className="text-xs text-gray-400">-</div>
+                                  <div className="text-xs text-gray-400">—</div>
                                 )}
                                 {item.notes && (
-                                  <div className="text-xs text-blue-600 italic mt-1 bg-blue-50 px-2 py-1 rounded inline-block">
-                                    📝 {item.notes}
+                                  <div className="text-xs text-blue-600 italic mt-1 flex items-center gap-1">
+                                    <StickyNote className="w-3 h-3" /> {item.notes}
                                   </div>
                                 )}
-                              </div>
-
-                              {/* Warehouse */}
-                              <div className="col-span-2">
-                                {item.warehouses && item.warehouses.length > 0 ? (
-                                  <div className="text-xs space-y-1">
-                                    {item.warehouses.map((whData, idx) => (
-                                      <div key={idx} className="flex flex-col">
-                                        <div className="flex items-center text-purple-600 font-medium">
-                                          <span className="mr-1">📍</span>
-                                          <span>{getWarehouseName(whData.warehouse)}</span>
-                                        </div>
-                                        <div className="text-xs text-gray-500 ml-4">
-                                          Stock: {whData.availableQuantity} {item.unit}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-gray-400">No stock</div>
+                                {dispatchedQty > 0 && (
+                                  <div className="text-xs text-gray-400 mt-1">Dispatched: {dispatchedQty} · Remaining: {maxDispatch}</div>
                                 )}
                               </div>
 
@@ -845,33 +779,25 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                                 <div className="text-xs text-gray-500">{parseFloat(item.totalSOWeight || item.weight || 0).toFixed(2)} kg</div>
                               </div>
 
-                              {/* Previously Dispatched */}
-                              <div className="col-span-1 text-center">
-                                <div className="text-sm font-medium text-blue-600">{dispatchedQty}</div>
-                                <div className="text-xs text-gray-500">Max: {maxDispatch}</div>
-                              </div>
-
                               {/* Dispatching Now */}
-                              <div className="col-span-2">
-                                <div className="flex gap-2">
-                                  <div className="relative flex-1">
-                                    <input
-                                      type="number"
-                                      value={item.dispatchQuantity}
-                                      onChange={(e) => handleItemChange(originalIndex, 'dispatchQuantity', e.target.value)}
-                                      required
-                                      min="0.01"
-                                      max={maxDispatch}
-                                      step="0.01"
-                                      className="w-full px-2 py-1.5 pr-12 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                                      placeholder="0"
-                                    />
-                                    <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
-                                      {item.unit}
-                                    </span>
-                                  </div>
+                              <div className="col-span-4">
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    value={item.dispatchQuantity}
+                                    onChange={(e) => handleItemChange(originalIndex, 'dispatchQuantity', e.target.value)}
+                                    required
+                                    min="0.01"
+                                    max={maxDispatch}
+                                    step="0.01"
+                                    className="w-full px-2 py-1.5 pr-12 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                    placeholder="0"
+                                  />
+                                  <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
+                                    {item.unit}
+                                  </span>
                                 </div>
-                                {/* Weight Input */}
+                                {/* Weight */}
                                 <div className="relative mt-1">
                                   <input
                                     type="number"
@@ -884,27 +810,15 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                                     disabled={!!item.subProduct}
                                     readOnly={!!item.subProduct}
                                   />
-                                  <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
-                                    kg
-                                  </span>
+                                  <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">kg</span>
                                   {item.subProduct && (
                                     <span className="text-xs text-green-600 block mt-0.5">Auto-calculated</span>
                                   )}
                                 </div>
                               </div>
 
-                              {/* Pending */}
-                              <div className="col-span-2 text-center">
-                                <div className="text-sm font-medium text-orange-600">
-                                  {(item.orderedQuantity - dispatchedQty - parseFloat(item.dispatchQuantity || 0)).toFixed(2)} {item.unit}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {((item.orderedQuantity - dispatchedQty - parseFloat(item.dispatchQuantity || 0)) * (item.weight / item.orderedQuantity)).toFixed(2)} kg
-                                </div>
-                              </div>
-
                               {/* Mark Complete Checkbox */}
-                              <div className="col-span-1 flex flex-col items-center justify-center gap-1">
+                              <div className="col-span-3 flex flex-col items-center justify-center gap-1">
                                 <input
                                   type="checkbox"
                                   checked={item.markAsComplete || false}
@@ -923,22 +837,17 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                               </div>
                             </div>
 
-                            {/* Per-unit weight inputs for sub-products */}
-                            {item.subProduct && item.dispatchQuantity > 0 && (
-                              <div className="col-span-12 mt-3">
-                                <SubProductSelector
-                                  productId={item.product}
-                                  selectedSubProduct={item.subProduct}
-                                  selectedSubProductName={item.subProductName}
-                                  quantity={item.dispatchQuantity}
-                                  weights={item.subProductWeights}
-                                  categoryHasSubProducts={true}
-                                  onSelectSubProduct={() => {}}
-                                  onWeightsChange={(weights) => handleSubProductWeightsChange(originalIndex, weights)}
-                                  disableSelection={true}
-                                  allowAddNew={false}
-                                  compact
-                                />
+                            {/* Per-unit weight chips for sub-products — read-only, from inventory FIFO */}
+                            {item.subProduct && Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0 && (
+                              <div className="mt-2">
+                                <p className="text-xs text-gray-500 mb-1 font-medium">{item.subProductWeights.length} weight(s)</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {item.subProductWeights.map((w, wi) => (
+                                    <span key={wi} className="px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded">
+                                      #{wi + 1}: {Number(w) % 1 === 0 ? Number(w) : Number(w).toFixed(2)} kg
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -951,7 +860,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             ) : (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <p className="text-sm text-green-800">
-                  ✅ All items in this Sales Order have been fully dispatched. No items remaining to dispatch.
+                  All items in this Sales Order have been fully dispatched. No items remaining to dispatch.
                 </p>
               </div>
             );
@@ -968,7 +877,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
 
           {/* Form Actions */}
-          <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
@@ -984,14 +893,15 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
                   Creating...
                 </>
               ) : (
                 <>
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                  <CheckCircle2 className="h-5 w-5" />
                   Create Challan
                 </>
               )}
@@ -1002,15 +912,11 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
       {/* Sales Order Modal */}
       {showNewSOModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <NewSalesOrderModal
-              isOpen={showNewSOModal}
-              onClose={() => setShowNewSOModal(false)}
-              onSubmit={handleSOCreated}
-            />
-          </div>
-        </div>
+        <NewSalesOrderModal
+          isOpen={showNewSOModal}
+          onClose={() => setShowNewSOModal(false)}
+          onSubmit={handleSOCreated}
+        />
       )}
     </div>
   );

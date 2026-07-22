@@ -22,6 +22,10 @@ const SubProductSelector = ({
   const [loading, setLoading] = useState(false);
   const [newSubProductName, setNewSubProductName] = useState('');
 
+  // Stable key derived from propSubProducts so we don't re-run on every render
+  // (callers often pass [] as a default prop literal which creates a new ref each time)
+  const propSubProductsKey = Array.isArray(propSubProducts) ? propSubProducts.map(p => p._id || p).join(',') : '';
+
   // Sync with provided list or fetch from API if not provided
   useEffect(() => {
     if (Array.isArray(propSubProducts) && propSubProducts.length > 0) {
@@ -45,7 +49,8 @@ const SubProductSelector = ({
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [productId, propSubProducts, categoryHasSubProducts]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId, propSubProductsKey, categoryHasSubProducts]);
 
   // Normalize weights array to match quantity
   const normalizedWeights = useMemo(() => {

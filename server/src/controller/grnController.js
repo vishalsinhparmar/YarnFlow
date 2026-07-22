@@ -4,6 +4,19 @@ import InventoryLot from '../models/InventoryLot.js';
 import PurchaseOrder from '../models/PurchaseOrder.js';
 import Product from '../models/Product.js';
 import Supplier from '../models/Supplier.js';
+import WarehouseLocation from '../models/WarehouseLocation.js';
+
+// InventoryLot.warehouse is a display String, but the GRN form submits the
+// WarehouseLocation _id (needed so the dropdown can re-select it when editing).
+// Resolve the id to its friendly name here so PDFs/reports never show a raw ObjectId.
+const resolveWarehouseName = async (value, session) => {
+  if (!value) return value;
+  if (mongoose.Types.ObjectId.isValid(value)) {
+    const wh = await WarehouseLocation.findById(value).session(session || null).select('name').lean();
+    if (wh?.name) return wh.name;
+  }
+  return value;
+};
 
 // ============ GRN CONTROLLERS ============
 
@@ -212,29 +225,31 @@ export const createGRN = async (req, res) => {
       const previouslyReceived = poItem.receivedQuantity || 0;
       console.log("previouslyReceived",previouslyReceived)
       // Calculate previous weight
-      let previousWeight = poItem.receivedWeight || 0;
-      console.log('previousWeight',previousWeight);
-      if (previousWeight === 0 && previouslyReceived > 0 && poItem.quantity > 0 && orderedWeight > 0) {
-        const weightPerUnit = orderedWeight / poItem.quantity;
-        console.log('weightPerUnit',weightPerUnit);
-        previousWeight = previouslyReceived * weightPerUnit;
-      }
-      console.log('previousWeight',previousWeight);
-
       // Sub-product weights from PO (ordered weights) and this GRN
-      const orderedSubProductWeights = poItem.subProductWeights || [];
+      const orderedSubProductWeights = Array.isArray(poItem.subProductWeights)
+        ? poItem.subProductWeights
+        : [];
+      const isSubProduct = Boolean(poItem.subProduct);
+      const previousWeight = isSubProduct
+        ? orderedSubProductWeights
+            .slice(0, previouslyReceived)
+            .reduce((sum, weight) => sum + (Number(weight) || 0), 0)
+        : poItem.receivedWeight || 0;
+      console.log('previousWeight',previousWeight);
       const receivedSubProductWeights = Array.isArray(item.receivedSubProductWeights)
         ? item.receivedSubProductWeights.slice(0, item.receivedQuantity)
-        : [];
+        : isSubProduct
+          ? orderedSubProductWeights.slice(
+              previouslyReceived,
+              previouslyReceived + item.receivedQuantity,
+            )
+          : [];
       
       // Calculate received weight for this GRN
       let receivedWeight = item.receivedWeight || 0;
       console.log('before receivedWeight',receivedWeight);
       if (receivedSubProductWeights.length > 0) {
         receivedWeight = receivedSubProductWeights.reduce((sum, w) => sum + (Number(w) || 0), 0);
-      } else if (receivedWeight === 0 && item.receivedQuantity > 0 && poItem.quantity > 0 && orderedWeight > 0) {
-        const weightPerUnit = orderedWeight / poItem.quantity;
-        receivedWeight = item.receivedQuantity * weightPerUnit;
       }
       
       console.log('after receivedWeight',receivedWeight);
@@ -419,6 +434,10 @@ export const createGRN = async (req, res) => {
             }).session(session);
             
             if (!existingLot) {
+              const prevLotWarehouse = await resolveWarehouseName(
+                prevGRN.warehouseLocation || prevItem.warehouseLocation || undefined,
+                session
+              );
               const prevLot = new InventoryLot({
                 grn: prevGRN._id,
                 grnNumber: prevGRN.grnNumber,
@@ -440,7 +459,7 @@ export const createGRN = async (req, res) => {
                 totalWeight: prevItem.receivedWeight || 0,
                 qualityStatus: 'Approved',
                 qualityNotes: 'Auto-approved (Item Completed in Later GRN)',
-                warehouse: prevGRN.warehouseLocation || prevItem.warehouseLocation || undefined,
+                warehouse: prevLotWarehouse,
                 receivedDate: prevGRN.receiptDate,
                 expiryDate: prevItem.expiryDate,
                 unitCost: prevItem.unitPrice,
@@ -480,13 +499,12 @@ export const createGRN = async (req, res) => {
         }
         
         // Now create lot for current GRN
-        // Debug warehouse location
-        console.log(`📍 Warehouse for ${item.productName}:`, {
-          grnWarehouse: grn.warehouseLocation,
-          itemWarehouse: item.warehouseLocation,
-          final: grn.warehouseLocation || item.warehouseLocation || undefined
-        });
-        
+        const currentLotWarehouse = await resolveWarehouseName(
+          grn.warehouseLocation || item.warehouseLocation || undefined,
+          session
+        );
+        console.log(`📍 Warehouse for ${item.productName}: ${currentLotWarehouse}`);
+
         const lot = new InventoryLot({
           grn: grn._id,
           grnNumber: grn.grnNumber,
@@ -510,7 +528,7 @@ export const createGRN = async (req, res) => {
           qualityNotes: item.manuallyCompleted 
             ? 'Auto-approved (Manually Completed)' 
             : 'Auto-approved (Item Fully Received)',
-          warehouse: grn.warehouseLocation || item.warehouseLocation || undefined,
+          warehouse: currentLotWarehouse,
           receivedDate: grn.receiptDate,
           expiryDate: item.expiryDate,
           unitCost: item.unitPrice,
@@ -750,6 +768,9 @@ export const approveGRN = async (req, res) => {
       if (item.receivedQuantity > 0) {
         const lotQuantity = item.receivedQuantity;
         const lotWeight = item.receivedWeight;
+        const approveLotWarehouse = await resolveWarehouseName(
+          grn.warehouseLocation || item.warehouseLocation || undefined
+        );
         const lot = new InventoryLot({
           grn: grn._id,
           grnNumber: grn.grnNumber,
@@ -771,7 +792,7 @@ export const approveGRN = async (req, res) => {
           totalWeight: lotWeight || 0,
           qualityStatus: 'Approved',
           qualityNotes: item.manuallyCompleted ? 'Auto-approved (Manually Completed)' : item.qualityNotes,
-          warehouse: grn.warehouseLocation || item.warehouseLocation || undefined,
+          warehouse: approveLotWarehouse,
           receivedDate: grn.receiptDate,
           expiryDate: item.expiryDate,
           unitCost: item.unitPrice,

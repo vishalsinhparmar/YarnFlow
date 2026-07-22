@@ -1,26 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, X, Info, Package, Download, Printer, FileEdit } from 'lucide-react';
+import { FileText, X, Info, Package, Download, Printer, FileEdit, Truck, StickyNote, CheckCircle, Eye } from 'lucide-react';
 import { salesChallanUtils, salesChallanAPI } from '../../services/salesChallanAPI';
 import { salesOrderAPI } from '../../services/salesOrderAPI';
+import { warehouseAPI } from '../../services/warehouseAPI';
 
 const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
   const [soData, setSOData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
+  const [resolvedWarehouse, setResolvedWarehouse] = useState('');
   
-  // Fetch SO data to get total dispatched information
+  // Fetch SO data and resolve warehouse name
   useEffect(() => {
     const fetchSOData = async () => {
       if (challan?.salesOrder) {
         try {
           setLoading(true);
-          // Extract ID if salesOrder is an object, otherwise use as-is
           const soId = typeof challan.salesOrder === 'object' && challan.salesOrder !== null
             ? challan.salesOrder._id || challan.salesOrder
             : challan.salesOrder;
-          
-          // Only fetch if we have a valid ID string
           if (soId && typeof soId === 'string') {
             const response = await salesOrderAPI.getById(soId);
             setSOData(response.data);
@@ -32,24 +32,43 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
         }
       }
     };
+
+    const resolveWarehouse = async () => {
+      if (!challan?.warehouseLocation) { setResolvedWarehouse(''); return; }
+      try {
+        const res = await warehouseAPI.getAll();
+        const locations = res.data || [];
+        const match = locations.find(w => w._id === challan.warehouseLocation || w.name === challan.warehouseLocation);
+        setResolvedWarehouse(match ? match.name : challan.warehouseLocation);
+      } catch {
+        setResolvedWarehouse(challan.warehouseLocation);
+      }
+    };
     
     if (isOpen) {
       fetchSOData();
+      resolveWarehouse();
     }
-  }, [challan?.salesOrder, isOpen]);
+  }, [challan?.salesOrder, challan?.warehouseLocation, isOpen]);
   
-  // Handle PDF Preview
+  // Handle PDF Preview — opens in-app modal
   const handleViewPDF = async () => {
     try {
       setPdfLoading(true);
       setPdfError('');
-      await salesChallanAPI.previewPDF(challan._id);
+      const result = await salesChallanAPI.previewPDF(challan._id);
+      setPdfPreviewUrl(result.blobUrl);
     } catch (error) {
       console.error('Error viewing PDF:', error);
-      setPdfError('Failed to open PDF preview. Please try again.');
+      setPdfError('Failed to load PDF preview. Please try again.');
     } finally {
       setPdfLoading(false);
     }
+  };
+
+  const handleClosePdfPreview = () => {
+    if (pdfPreviewUrl) window.URL.revokeObjectURL(pdfPreviewUrl);
+    setPdfPreviewUrl(null);
   };
 
   // Handle PDF Download
@@ -157,9 +176,7 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                 onClick={onClose}
                 className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-all"
               >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-6 h-6" />
               </button>
             </div>
           </div>
@@ -168,11 +185,9 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
           {/* Challan Information */}
           <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center mb-6">
-              <svg className="h-6 w-6 text-gray-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <h3 className="text-xl font-semibold text-gray-900">Challan Information</h3>
+            <div className="flex items-center mb-6 gap-3">
+              <Info className="h-5 w-5 text-gray-600" />
+              <h3 className="text-base font-semibold text-gray-900">Challan Information</h3>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -198,7 +213,7 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
               
               <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
                 <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Warehouse Location</span>
-                <p className="text-base font-bold text-purple-600 mt-1">{challan.warehouseLocation || 'N/A'}</p>
+                <p className="text-base font-bold text-purple-600 mt-1">{resolvedWarehouse || challan.warehouseLocation || 'N/A'}</p>
               </div>
               
               <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
@@ -207,58 +222,44 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
               </div>
             </div>
             
-            {/* Dispatch Notes Section - Always show */}
-            <div className="mt-6 bg-white rounded-lg p-4 shadow-sm border border-blue-200">
-              <div className="flex items-center mb-2">
-                <FileEdit className="h-4 w-4 text-gray-500 mr-2" />
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Dispatch Notes</span>
+            {/* Dispatch Notes Section - Only show when notes exist */}
+            {challan.notes && challan.notes.trim() && (
+              <div className="mt-6 bg-white rounded-lg p-4 shadow-sm border border-blue-200">
+                <div className="flex items-center mb-2">
+                  <FileEdit className="h-4 w-4 text-blue-500 mr-2" />
+                  <span className="text-xs font-medium text-blue-600 uppercase tracking-wide">Dispatch Notes</span>
+                </div>
+                <p className="text-sm text-gray-700 bg-blue-50 rounded-lg p-3 border border-blue-100">
+                  {challan.notes}
+                </p>
               </div>
-              <p className="text-sm text-gray-700 bg-blue-50 rounded-lg p-3 border border-blue-100">
-                {challan.notes || 'No dispatch notes provided'}
-              </p>
-            </div>
+            )}
           </div>
 
           {/* Items */}
           <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 shadow-sm border border-orange-100">
-            <div className="flex items-center mb-6">
-              <svg className="h-6 w-6 text-orange-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              <h3 className="text-xl font-semibold text-gray-900">Dispatched Items</h3>
-              <span className="ml-3 bg-orange-100 text-orange-800 text-sm font-medium px-3 py-1 rounded-full">
-                {challan.items?.length || 0} item(s) across {getProductGroups().length} product{getProductGroups().length !== 1 ? 's' : ''}
+            <div className="flex items-center mb-6 gap-3">
+              <Truck className="h-5 w-5 text-orange-600" />
+              <h3 className="text-base font-semibold text-gray-900">Dispatched Items</h3>
+              <span className="text-xs font-semibold bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full">
+                {getProductGroups().length} product{getProductGroups().length !== 1 ? 's' : ''}
               </span>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-white">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Product
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      SO Total Qty
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      This Challan Qty
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Weight
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Challan Completion
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Product / Variant</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">SO Qty</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">This Challan</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Bag Weights</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {getProductGroups().map((group, groupIndex) => (
                     <React.Fragment key={groupIndex}>
                       <tr className="bg-blue-50">
-                        <td className="px-6 py-2" colSpan="6">
+                        <td className="px-6 py-2" colSpan="4">
                           <div className="flex items-center justify-between">
                             <div>
                               <span className="text-sm font-bold text-gray-900">{group.productName || 'N/A'}</span>
@@ -320,62 +321,44 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
                     return (
                       <tr key={rowIndex} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
-                          {item.subProductName && (
+                          {item.subProductName ? (
                             <div className="text-sm font-semibold text-green-700">
-                              {item.productName} X {item.subProductName}
+                              {item.productName} × {item.subProductName}
                             </div>
-                          )}
-                          {Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              Per-unit weights: {item.subProductWeights.map(w => Number(w).toFixed(2)).join(', ')} kg
-                            </div>
+                          ) : (
+                            <div className="text-sm font-medium text-gray-900">{item.productName}</div>
                           )}
                           {item.notes && (
-                            <div className="text-xs text-blue-600 italic bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
-                              📝 {item.notes}
+                            <div className="text-xs text-blue-600 italic mt-1 flex items-center gap-1">
+                              <StickyNote className="w-3 h-3 flex-shrink-0" /> {item.notes}
                             </div>
                           )}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          {soTotalQty} {item.unit}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-gray-900">{dispatchedInThisChallan} {item.unit}</div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Total: {totalDispatched} / {soTotalQty} {item.unit}
-                          </div>
                           {manuallyCompleted && (
-                            <div className="text-xs text-green-600 mt-1">✓ Manually Completed</div>
+                            <div className="text-xs text-green-600 mt-1 font-medium flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Completed</div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          {(item.weight || 0).toFixed(2)} kg
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-gray-900">{soTotalQty} {item.unit}</div>
+                          {totalDispatched > 0 && totalDispatched !== dispatchedInThisChallan && (
+                            <div className="text-xs text-green-600 mt-0.5">Cumulative: {totalDispatched}</div>
+                          )}
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <div className="w-full bg-gray-200 rounded-full h-2 mr-2">
-                              <div 
-                                className={`h-2 rounded-full ${
-                                  completionPercent === 100 ? 'bg-green-600' :
-                                  completionPercent > 0 ? 'bg-yellow-600' :
-                                  'bg-gray-400'
-                                }`}
-                                style={{ width: `${Math.min(completionPercent, 100)}%` }}
-                              ></div>
+                          <div className="text-sm font-bold text-teal-700">{dispatchedInThisChallan} {item.unit}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{(item.weight || 0).toFixed(2)} kg total</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {item.subProductWeights.map((w, wi) => (
+                                <span key={wi} className="px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded">
+                                  {Number(w).toFixed(2)} kg
+                                </span>
+                              ))}
                             </div>
-                            <span className="text-sm font-medium text-gray-700 min-w-[45px]">
-                              {completionPercent}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            itemStatus === 'Complete' ? 'bg-green-100 text-green-800' :
-                            itemStatus === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {itemStatus}
-                          </span>
+                          ) : (
+                            <span className="text-sm text-gray-700">{(item.weight || 0).toFixed(2)} kg</span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -426,22 +409,19 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
               <button
                 onClick={handleViewPDF}
                 disabled={pdfLoading}
-                className="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {pdfLoading ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    Processing...
+                    Loading...
                   </>
                 ) : (
                   <>
-                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
+                    <Eye className="w-4 h-4" />
                     View PDF
                   </>
                 )}
@@ -450,21 +430,19 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
               <button
                 onClick={handleDownloadPDF}
                 disabled={pdfLoading}
-                className="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {pdfLoading ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    Processing...
+                    Loading...
                   </>
                 ) : (
                   <>
-                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
+                    <Download className="w-4 h-4" />
                     Download PDF
                   </>
                 )}
@@ -481,6 +459,42 @@ const ChallanDetailModal = ({ isOpen, onClose, challan }) => {
           </div>
         </div>
       </div>
+
+      {/* PDF Preview Modal */}
+      {pdfPreviewUrl && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ height: '90vh' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-semibold text-gray-900">Challan PDF — {challan.challanNumber}</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={pdfLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4" />
+                  Download
+                </button>
+                <button
+                  onClick={handleClosePdfPreview}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                  Close
+                </button>
+              </div>
+            </div>
+            <iframe
+              src={pdfPreviewUrl}
+              className="flex-1 w-full rounded-b-2xl"
+              title="Challan PDF Preview"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

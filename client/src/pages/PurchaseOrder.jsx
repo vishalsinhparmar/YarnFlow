@@ -481,8 +481,8 @@ const PurchaseOrder = () => {
             setShowCreatePO(false);
             setSelectedPO(null);
           }}
-          title={selectedPO ? `Edit Purchase Order - ${selectedPO.poNumber}` : "Create New Purchase Order"}
-          size="xl"
+          title={selectedPO ? `Edit Purchase Order — ${selectedPO.poNumber}` : "Create New Purchase Order"}
+          size="drawer"
         >
           <PurchaseOrderForm
             key={selectedPO ? selectedPO._id : 'new-po'}
