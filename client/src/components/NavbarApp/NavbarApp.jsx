@@ -27,7 +27,7 @@ const NavBarApp = ({ onMobileMenuToggle = () => {} }) => {
   };
 
   return (
-    <nav className="fixed left-0 right-0 top-0 z-50 h-16 border-b border-gray-700 bg-gray-900 shadow-lg">
+    <nav className="fixed left-0 right-0 top-0 z-50 h-[var(--header-height)] border-b border-gray-700 bg-gray-900 shadow-lg">
       <div className="flex h-full items-center justify-between px-3 sm:px-4 lg:px-6">
         {/* Logo Section */}
         <div className="flex min-w-0 items-center gap-3">

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Lock, Eye, EyeOff, UserPlus, ShieldCheck, Loader2 } from 'lucide-react';
+import AuthErrorCard from '../components/common/AuthErrorCard';
+import { getAuthErrorDetails } from '../utils/authError';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ const Register = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState(null);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -31,6 +34,7 @@ const Register = () => {
       ...prev,
       [name]: value,
     }));
+    if (submitError) setSubmitError(null);
     
     // Clear error for this field
     if (errors[name]) {
@@ -73,20 +77,21 @@ const Register = () => {
       return;
     }
 
+    setSubmitError(null);
     setIsLoading(true);
 
     try {
       await register(formData.email, formData.password);
       navigate('/dashboard');
     } catch (error) {
-      console.error('Registration error:', error);
+      setSubmitError(getAuthErrorDetails(error, 'register'));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 py-6 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 py-6 px-4 sm:px-6 lg:px-8 relative overflow-x-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
@@ -114,6 +119,12 @@ const Register = () => {
 
         {/* Form Card */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 p-8 space-y-6">
+          <AuthErrorCard
+            error={submitError}
+            onDismiss={() => setSubmitError(null)}
+            onRetry={submitError?.canRetry ? handleSubmit : undefined}
+            isRetrying={isLoading}
+          />
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email Field */}
             <div>

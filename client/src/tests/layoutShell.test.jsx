@@ -6,6 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 import SideBarApp from '../components/SideBarApp/SideBarApp';
 import AppInitializationLoader from '../components/common/AppInitializationLoader';
 import Modal from '../components/model/Modal';
+import Layout from '../layout/Layout';
+
+vi.mock('../components/NavbarApp/NavbarApp', () => ({ default: () => <div>Header</div> }));
 
 const renderSidebar = (props = {}) => render(
   <MemoryRouter initialEntries={['/purchase-order']}>
@@ -14,6 +17,17 @@ const renderSidebar = (props = {}) => render(
 );
 
 describe('ERP layout shell', () => {
+  it('defines one shared workspace boundary below the header and beside the sidebar', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+
+    const main = container.querySelector('[data-erp-main]');
+    expect(main).toHaveClass('top-[var(--header-height)]', 'lg:left-[var(--sidebar-width)]');
+  });
+
   it('provides an accessible desktop collapse control', () => {
     const onToggle = vi.fn();
     renderSidebar({ onToggle });

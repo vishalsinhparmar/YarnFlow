@@ -38,7 +38,10 @@ const Layout = () => {
         onMobileClose={() => setMobileNavigationOpen(false)}
       />
 
-      <main className="erp-main-scroll fixed bottom-0 left-0 right-0 top-16 overflow-y-auto overflow-x-hidden bg-gray-100 transition-[left] duration-200 lg:left-[var(--sidebar-width)]">
+      <main
+        data-erp-main
+        className="erp-main-scroll fixed bottom-0 left-0 right-0 top-[var(--header-height)] overflow-y-auto overflow-x-hidden bg-gray-100 transition-[left] duration-200 lg:left-[var(--sidebar-width)]"
+      >
         <div className="min-w-0 p-3 sm:p-4 lg:p-5">
           <Outlet />
         </div>

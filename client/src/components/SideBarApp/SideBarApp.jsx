@@ -104,7 +104,7 @@ const SideBarApp = ({
       {mobileOpen && (
         <button
           type="button"
-          className="fixed inset-0 top-16 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 top-[var(--header-height)] z-30 bg-black/50 lg:hidden"
           onClick={onMobileClose}
           aria-label="Close navigation"
         />
@@ -112,7 +112,7 @@ const SideBarApp = ({
 
       <aside
         aria-label="Primary navigation"
-        className={`fixed bottom-0 left-0 top-16 z-40 flex w-72 flex-col border-r border-gray-800 bg-gray-900 text-white shadow-xl transition-[width,transform] duration-200 lg:translate-x-0 ${
+        className={`fixed bottom-0 left-0 top-[var(--header-height)] z-40 flex w-72 flex-col border-r border-gray-800 bg-gray-900 text-white shadow-xl transition-[width,transform] duration-200 lg:translate-x-0 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } ${collapsed ? 'lg:w-20' : 'lg:w-64'}`}
       >

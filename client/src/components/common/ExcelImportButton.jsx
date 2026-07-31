@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { FileSpreadsheet, Download, Upload, ChevronDown, CheckCircle, XCircle, Loader2, X } from 'lucide-react';
 import { importMasterData } from '../../services/masterDataAPI';
 
@@ -17,15 +18,66 @@ const ExcelImportButton = ({ type, onImportSuccess, accentColor = 'blue', sample
   const [result, setResult] = useState(null);
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 });
+
+  const updateMenuPosition = useCallback(() => {
+    if (!buttonRef.current || !menuRef.current) return;
+
+    const buttonRect = buttonRef.current.getBoundingClientRect();
+    const workspaceRect = document.querySelector('[data-erp-main]')?.getBoundingClientRect();
+    const menuRect = menuRef.current.getBoundingClientRect();
+    const viewportMargin = 12;
+    const gap = 8;
+    const minLeft = Math.max(workspaceRect?.left ?? 0, 0) + viewportMargin;
+    const maxRight = Math.min(workspaceRect?.right ?? window.innerWidth, window.innerWidth) - viewportMargin;
+    const minTop = Math.max(workspaceRect?.top ?? 0, 0) + viewportMargin;
+    const maxBottom = Math.min(workspaceRect?.bottom ?? window.innerHeight, window.innerHeight) - viewportMargin;
+
+    let left = buttonRect.right - menuRect.width;
+    if (left < minLeft) left = buttonRect.left;
+    left = Math.min(Math.max(left, minLeft), Math.max(minLeft, maxRight - menuRect.width));
+
+    let top = buttonRect.bottom + gap;
+    if (top + menuRect.height > maxBottom) top = buttonRect.top - menuRect.height - gap;
+    top = Math.min(Math.max(top, minTop), Math.max(minTop, maxBottom - menuRect.height));
+
+    setMenuPosition({ left, top });
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
     const handleOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false);
+      const clickedTrigger = dropdownRef.current?.contains(e.target);
+      const clickedMenu = menuRef.current?.contains(e.target);
+      if (!clickedTrigger && !clickedMenu) setOpen(false);
     };
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+
+    updateMenuPosition();
+    const handleViewportChange = () => updateMenuPosition();
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [open, updateMenuPosition]);
 
   const colorMap = {
     blue:   { btn: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',   text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
@@ -79,10 +131,13 @@ const ExcelImportButton = ({ type, onImportSuccess, accentColor = 'blue', sample
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Result Toast */}
-      {result && (
-        <div className={`fixed top-4 right-4 z-50 flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg border max-w-sm ${
+      {result && createPortal((
+        <div
+          role={result.success ? 'status' : 'alert'}
+          className={`fixed left-4 right-4 top-20 z-[35] flex items-start gap-3 rounded-lg border px-4 py-3 shadow-lg sm:left-auto sm:w-full sm:max-w-sm ${
           result.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-        }`}>
+        }`}
+        >
           {result.success ? (
             <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
           ) : (
@@ -106,16 +161,25 @@ const ExcelImportButton = ({ type, onImportSuccess, accentColor = 'blue', sample
               </div>
             )}
           </div>
-          <button onClick={() => setResult(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setResult(null)}
+            className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+            aria-label="Dismiss import result"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
-      )}
+      ), document.body)}
 
       {/* Excel Button */}
       <button
+        ref={buttonRef}
+        type="button"
         onClick={() => setOpen(v => !v)}
         disabled={importing}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className={`${fullWidth ? 'w-full justify-center' : ''} inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 transition-all ${c.btn} disabled:opacity-60`}
       >
         {importing ? (
@@ -128,14 +192,22 @@ const ExcelImportButton = ({ type, onImportSuccess, accentColor = 'blue', sample
       </button>
 
       {/* Dropdown Menu */}
-      {open && (
-        <div className={`absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-xl z-40 overflow-hidden`}>
+      {open && createPortal((
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="Excel actions"
+          className="fixed z-[70] w-56 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+          style={{ left: menuPosition.left, top: menuPosition.top }}
+        >
           <div className="px-3 py-2 border-b border-gray-100">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Excel Actions</p>
           </div>
 
           {/* Download Sample */}
           <button
+            type="button"
+            role="menuitem"
             onClick={handleDownloadSample}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
@@ -150,6 +222,8 @@ const ExcelImportButton = ({ type, onImportSuccess, accentColor = 'blue', sample
 
           {/* Upload / Import */}
           <button
+            type="button"
+            role="menuitem"
             onClick={() => fileInputRef.current?.click()}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
           >
@@ -162,7 +236,7 @@ const ExcelImportButton = ({ type, onImportSuccess, accentColor = 'blue', sample
             </div>
           </button>
         </div>
-      )}
+      ), document.body)}
 
       {/* Hidden file input */}
       <input

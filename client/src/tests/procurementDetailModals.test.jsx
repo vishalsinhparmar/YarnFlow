@@ -134,7 +134,7 @@ describe('Procurement detail modals', () => {
     expect(screen.getByLabelText('Loading GRN details')).toBeInTheDocument();
     expect(await screen.findByText('Receipt Summary')).toBeInTheDocument();
     expect(screen.getByText('Godown - Maryadpatti')).toBeInTheDocument();
-    expect(screen.getByText('Closed by Mark Final')).toBeInTheDocument();
+    expect(screen.queryByText('Closed by Mark Final')).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(grnGetById).toHaveBeenCalledWith('grn-1');

@@ -603,11 +603,11 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO }) => {
                                 </p>
                               </div>
                             </div>
-                            {item.previouslyReceived > 0 && (
+                            {/* {item.previouslyReceived > 0 && (
                               <p className="mt-2 text-xs text-gray-500">
                                 Previously received: <span className="font-medium text-gray-700">{item.previouslyReceived} {item.unit}</span>
                               </p>
-                            )}
+                            )} */}
                           </div>
 
                           <div className="lg:col-span-2">

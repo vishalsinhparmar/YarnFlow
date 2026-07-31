@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, Loader2 } from 'lucide-react';
+import AuthErrorCard from '../components/common/AuthErrorCard';
+import { getAuthErrorDetails } from '../utils/authError';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -15,6 +17,7 @@ const Login = () => {
   
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   // Load remembered email on mount (password is never persisted)
   useEffect(() => {
@@ -41,24 +44,26 @@ const Login = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
+    if (submitError) setSubmitError(null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError(null);
     setIsLoading(true);
 
     try {
       await login(formData.email, formData.password, formData.rememberMe);
       navigate('/dashboard');
     } catch (error) {
-      console.error('Login error:', error);
+      setSubmitError(getAuthErrorDetails(error, 'login'));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 py-6 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 py-6 px-4 sm:px-6 lg:px-8 relative overflow-x-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
@@ -86,6 +91,12 @@ const Login = () => {
 
         {/* Form Card */}
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 p-8 space-y-6">
+          <AuthErrorCard
+            error={submitError}
+            onDismiss={() => setSubmitError(null)}
+            onRetry={submitError?.canRetry ? handleSubmit : undefined}
+            isRetrying={isLoading}
+          />
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email Field */}
             <div>
@@ -104,6 +115,7 @@ const Login = () => {
                   required
                   value={formData.email}
                   onChange={handleChange}
+                  aria-invalid={submitError?.type === 'credentials'}
                   className="block w-full pl-10 pr-3 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
                   placeholder="admin@yarnflow.com"
                 />
@@ -127,6 +139,7 @@ const Login = () => {
                   required
                   value={formData.password}
                   onChange={handleChange}
+                  aria-invalid={submitError?.type === 'credentials'}
                   className="block w-full pl-10 pr-12 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
                   placeholder="Enter your password"
                 />
@@ -180,7 +193,7 @@ const Login = () => {
           </form>
 
           {/* Register Link */}
-          <div className="text-center pt-4 border-t border-white/20">
+          {/* <div className="text-center pt-4 border-t border-white/20">
             <p className="text-sm text-gray-300">
               Don't have an account?{' '}
               <Link
@@ -190,7 +203,7 @@ const Login = () => {
                 Create one now
               </Link>
             </p>
-          </div>
+          </div> */}
         </div>
 
         {/* Footer */}
