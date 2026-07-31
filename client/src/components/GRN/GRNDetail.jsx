@@ -266,7 +266,7 @@ const GRNDetail = ({ grn, onClose, isOpen = true }) => {
                     Receipt Summary
                   </h3>
                 </div>
-                <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 md:grid-cols-3">
+                <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-100 md:grid-cols-3">
                   <div className="bg-white"><DetailField icon={ClipboardList} label="GRN Number" value={detail?.grnNumber || 'Not available'} valueClassName="text-green-700" /></div>
                   <div className="bg-white"><DetailField icon={FileText} label="PO Reference" value={detail?.poNumber || 'Not available'} /></div>
                   <div className="bg-white"><DetailField icon={Calendar} label="Receipt Date" value={formatDate(detail?.receiptDate)} /></div>
@@ -343,24 +343,15 @@ const GRNDetail = ({ grn, onClose, isOpen = true }) => {
                                 <tr>
                                   <th className="px-4 py-2.5">Product / Variant</th>
                                   <th className="px-4 py-2.5">Ordered</th>
-                                  <th className="px-4 py-2.5">Previously Received</th>
+                                  {/* <th className="px-4 py-2.5">Previously Received</th> */}
                                   <th className="bg-green-50 px-4 py-2.5 text-green-800">This GRN</th>
-                                  <th className="px-4 py-2.5">Balance</th>
+                                  {/* <th className="px-4 py-2.5">Balance</th> */}
                                   <th className="px-4 py-2.5">Status</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100">
                                 {group.items.map((item, index) => {
                                   const status = getItemStatus(item);
-                                  const pendingQuantity = item.manuallyCompleted
-                                    ? 0
-                                    : Math.max(
-                                      0,
-                                      Number(item.pendingQuantity) ||
-                                      (Number(item.orderedQuantity) || 0) -
-                                      (Number(item.previouslyReceived) || 0) -
-                                      (Number(item.receivedQuantity) || 0)
-                                    );
                                   return (
                                     <tr key={item._id || `${group.key}-${index}`} className="align-top hover:bg-gray-50">
                                       <td className="px-4 py-3">
@@ -379,12 +370,12 @@ const GRNDetail = ({ grn, onClose, isOpen = true }) => {
                                           <p className="text-xs text-gray-500">{formatNumber(item.orderedWeight)} kg</p>
                                         )}
                                       </td>
-                                      <td className="px-4 py-3">
+                                      {/* <td className="px-4 py-3">
                                         <p className="font-medium text-gray-700">{formatNumber(item.previouslyReceived)} {item.unit}</p>
                                         {(Number(item.previousWeight) || 0) > 0 && (
                                           <p className="text-xs text-gray-500">{formatNumber(item.previousWeight)} kg</p>
                                         )}
-                                      </td>
+                                      </td> */}
                                       <td className="bg-green-50/70 px-4 py-3">
                                         <p className="flex items-center gap-1 font-semibold text-green-800">
                                           <CheckCircle2 className="h-3.5 w-3.5" />
@@ -403,12 +394,12 @@ const GRNDetail = ({ grn, onClose, isOpen = true }) => {
                                           </div>
                                         )}
                                       </td>
-                                      <td className="px-4 py-3">
+                                      {/* <td className="px-4 py-3">
                                         <p className="font-medium text-gray-900">{formatNumber(pendingQuantity)} {item.unit}</p>
                                         {item.manuallyCompleted && (
                                           <p className="mt-0.5 text-xs text-green-700">Closed by Mark Final</p>
                                         )}
-                                      </td>
+                                      </td> */}
                                       <td className="px-4 py-3">
                                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClass(status)}`}>
                                           {status}

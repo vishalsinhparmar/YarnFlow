@@ -152,9 +152,9 @@ describe('🎨 YarnFlow Client Components Production Tests', () => {
       expect(screen.getByLabelText(/remember my credentials/i)).toBeInTheDocument();
     });
 
-    it('✅ link to register page is present', () => {
+    it('✅ public registration link is intentionally hidden', () => {
       render(<WithRouter><Login /></WithRouter>);
-      expect(screen.getByRole('link', { name: /create one now/i })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /create one now/i })).not.toBeInTheDocument();
     });
 
     it('✅ XSS payload in email field does not execute script', () => {

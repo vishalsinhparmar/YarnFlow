@@ -43,47 +43,37 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password, rememberMe = false) => {
-    try {
-      const response = await authAPI.login(email, password);
-      
-      setUser(response.data);
-      setToken(response.token);
-      
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(response.data));
-      
-      // Handle remember me — store email only, NEVER the password
-      if (rememberMe) {
-        localStorage.setItem('rememberedEmail', email);
-      } else {
-        localStorage.removeItem('rememberedEmail');
-      }
-      localStorage.removeItem('rememberedPassword');
-      
-      toast.success('Login successful!');
-      return response;
-    } catch (error) {
-      toast.error(error.message || 'Login failed');
-      throw error;
+    const response = await authAPI.login(email, password);
+
+    setUser(response.data);
+    setToken(response.token);
+
+    localStorage.setItem('token', response.token);
+    localStorage.setItem('user', JSON.stringify(response.data));
+
+    // Handle remember me — store email only, NEVER the password
+    if (rememberMe) {
+      localStorage.setItem('rememberedEmail', email);
+    } else {
+      localStorage.removeItem('rememberedEmail');
     }
+    localStorage.removeItem('rememberedPassword');
+
+    toast.success('Login successful!');
+    return response;
   };
 
   const register = async (email, password) => {
-    try {
-      const response = await authAPI.register(email, password);
-      
-      setUser(response.data);
-      setToken(response.token);
-      
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(response.data));
-      
-      toast.success('Registration successful!');
-      return response;
-    } catch (error) {
-      toast.error(error.message || 'Registration failed');
-      throw error;
-    }
+    const response = await authAPI.register(email, password);
+
+    setUser(response.data);
+    setToken(response.token);
+
+    localStorage.setItem('token', response.token);
+    localStorage.setItem('user', JSON.stringify(response.data));
+
+    toast.success('Registration successful!');
+    return response;
   };
 
   const logout = () => {

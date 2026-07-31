@@ -18,6 +18,16 @@ export const API_BASE_URL = VITE_API_URL || (isDevelopment ? DEVELOPMENT_API : P
 console.log(`🌐 API Mode: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
 console.log(`🔗 API URL: ${API_BASE_URL}`);
 
+export class ApiError extends Error {
+  constructor(message, { status = 0, code = 'REQUEST_FAILED', retryable = false } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
+
 export const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
   const token = localStorage.getItem('token');
@@ -35,19 +45,51 @@ export const apiRequest = async (endpoint, options = {}) => {
     },
   };
 
-  const response = await fetch(url, config);
+  const requestController = options.signal ? null : new AbortController();
+  const requestTimeout = requestController
+    ? window.setTimeout(() => requestController.abort(), 15000)
+    : null;
+  if (requestController) config.signal = requestController.signal;
+
+  let response;
+  try {
+    response = await fetch(url, config);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new ApiError(
+        'YarnFlow took too long to respond. Please try again.',
+        { code: 'REQUEST_TIMEOUT', retryable: true },
+      );
+    }
+    throw new ApiError(
+      'Unable to connect to YarnFlow. Please check your connection and try again.',
+      { code: 'NETWORK_ERROR', retryable: true },
+    );
+  } finally {
+    if (requestTimeout) window.clearTimeout(requestTimeout);
+  }
+
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    if (response.status === 401) {
+    const isPublicAuthRequest = endpoint === '/auth/login' || endpoint === '/auth/register';
+
+    if (response.status === 401 && !isPublicAuthRequest) {
       // Token missing or expired — clear session and redirect to login
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
-      throw new Error('Session expired. Please log in again.');
+      throw new ApiError('Session expired. Please log in again.', {
+        status: 401,
+        code: 'SESSION_EXPIRED',
+      });
     }
     const message = data?.message || `HTTP error! status: ${response.status}`;
-    throw new Error(message);
+    throw new ApiError(message, {
+      status: response.status,
+      code: data?.code || 'REQUEST_FAILED',
+      retryable: data?.retryable === true || response.status >= 500,
+    });
   }
 
   return data;

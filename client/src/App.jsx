@@ -27,11 +27,11 @@ const App = () => {
   return (
     <Router>
       <AuthProvider>
-        <Toaster position="top-right" />
+        <Toaster position="top-right" containerStyle={{ top: '5rem', right: '1rem' }} />
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          {/* <Route path="/register" element={<Register />} /> */}
 
           {/* Protected Routes - Main Layout */}
           <Route
