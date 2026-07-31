@@ -78,7 +78,6 @@ const PurchaseOrder = () => {
   // Initial data load
   useEffect(() => {
     fetchStats();
-    fetchPurchaseOrders();
   }, []);
 
   // Handle search and filter changes
@@ -86,7 +85,7 @@ const PurchaseOrder = () => {
     const timeoutId = setTimeout(() => {
       fetchPurchaseOrders(1, searchTerm, statusFilter);
       setCurrentPage(1);
-    }, 500);
+    }, 300);
 
     return () => clearTimeout(timeoutId);
   }, [searchTerm, statusFilter]);
@@ -109,22 +108,6 @@ const PurchaseOrder = () => {
     } catch (err) {
       console.error('Error saving PO:', err);
       throw err;
-    }
-  };
-
-  // Handle status update
-  const handleStatusUpdate = async (poId, newStatus, notes = '') => {
-    try {
-      await purchaseOrderAPI.updateStatus(poId, newStatus, notes);
-      fetchPurchaseOrders(currentPage, searchTerm, statusFilter);
-      fetchStats();
-      if (selectedPO && selectedPO._id === poId) {
-        const updatedPO = await purchaseOrderAPI.getById(poId);
-        setSelectedPO(updatedPO.data);
-      }
-    } catch (err) {
-      console.error('Error updating PO status:', err);
-      alert('Failed to update PO status');
     }
   };
 
@@ -169,15 +152,9 @@ const PurchaseOrder = () => {
 
 
   // View PO details
-  const handleViewPO = async (po) => {
-    try {
-      const response = await purchaseOrderAPI.getById(po._id);
-      setSelectedPO(response.data);
-      setShowPODetail(true);
-    } catch (err) {
-      console.error('Error fetching PO details:', err);
-      alert('Failed to load PO details');
-    }
+  const handleViewPO = (po) => {
+    setSelectedPO(po);
+    setShowPODetail(true);
   };
 
   // Get status counts for display
@@ -343,6 +320,10 @@ const PurchaseOrder = () => {
                       Category
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Items & Qty
+                    </th>
+
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -374,6 +355,34 @@ const PurchaseOrder = () => {
                         <span className="text-sm text-gray-700 bg-gray-100 px-2 py-1 rounded-lg">
                           {po.category?.categoryName || 'N/A'}
                         </span>
+                      </td>
+                      <td className="min-w-[320px] px-6 py-3">
+                        <div className="divide-y divide-gray-100">
+                          {(po.items || []).map((item, itemIndex) => {
+                            const exactWeights = Array.isArray(item.subProductWeights)
+                              ? item.subProductWeights
+                              : [];
+                            const itemWeight = exactWeights.length > 0
+                              ? exactWeights.reduce((sum, weight) => sum + (Number(weight) || 0), 0)
+                              : Number(item.weight) || 0;
+                            return (
+                              <div
+                                key={item._id || `${po._id}-item-${itemIndex}`}
+                                className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 py-2 first:pt-0 last:pb-0"
+                              >
+                                <p className="min-w-0 break-words text-sm font-medium text-gray-900">
+                                  {item.subProductName
+                                    ? `${item.productName} X ${item.subProductName}`
+                                    : item.productName}
+                                </p>
+                                <div className="whitespace-nowrap text-right">
+                                  <p className="text-sm font-semibold text-gray-900">{item.quantity} {item.unit}</p>
+                                  <p className="text-xs text-gray-500">{itemWeight.toFixed(2)} kg</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {poUtils.formatDate(po.orderDate)}
@@ -425,7 +434,7 @@ const PurchaseOrder = () => {
                   ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
                         No purchase orders found
                       </td>
                     </tr>
@@ -497,17 +506,11 @@ const PurchaseOrder = () => {
       )}
 
       {showPODetail && selectedPO && (
-        <Modal
+        <PurchaseOrderDetail
           isOpen={showPODetail}
           onClose={() => setShowPODetail(false)}
-          title={`Purchase Order - ${selectedPO.poNumber}`}
-          size="xl"
-        >
-          <PurchaseOrderDetail
-            purchaseOrder={selectedPO}
-            onClose={() => setShowPODetail(false)}
-          />
-        </Modal>
+          purchaseOrder={selectedPO}
+        />
       )}
 
     </div>

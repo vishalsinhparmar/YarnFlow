@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ShoppingCart, X, User, Package, Calendar, Plus } from 'lucide-react';
+import {
+  Check,
+  FolderOpen,
+  Layers,
+  Package,
+  Plus,
+  ShoppingCart,
+  X
+} from 'lucide-react';
 import { salesOrderAPI } from '../../services/salesOrderAPI.js';
 import { apiRequest } from '../../services/common.js';
 import { inventoryAPI } from '../../services/inventoryAPI.js';
@@ -78,8 +86,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
     hasMore: hasMoreCategories,
     total: totalCategories,
     handleSearch: handleCategorySearch,
-    handleLoadMore: loadMoreCategories,
-    setItems: setCategories
+    handleLoadMore: loadMoreCategories
   } = usePaginatedSearch(fetchCategoriesWithInventory, { limit: 50 });
 
   // Inventory products with pagination
@@ -90,7 +97,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
   const [inventoryProductLoadingMore, setInventoryProductLoadingMore] = useState(false);
   const [inventoryProductTotal, setInventoryProductTotal] = useState(null);
   const [inventoryProductSearch, setInventoryProductSearch] = useState('');
-  const [inventoryProductCategory, setInventoryProductCategory] = useState('');
   const inventoryProductSearchTimer = useRef(null);
 
   const loadInventoryByCategory = async (categoryId, page = 1, search = '', append = false) => {
@@ -128,7 +134,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
         setInventoryProductPage(page);
         setInventoryProductSearch(search);
-        setInventoryProductCategory(categoryId);
         setInventoryProductTotal(response.pagination?.total ?? null);
         setInventoryProductHasMore(
           response.pagination?.current < response.pagination?.pages
@@ -311,6 +316,8 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
         }
       }
     }
+  // loadInventoryByCategory intentionally reads the latest form and inventory state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, order]);
 
   const handleInputChange = (e) => {
@@ -346,7 +353,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
       setInventoryProductPage(1);
       setInventoryProductHasMore(false);
       setInventoryProductSearch('');
-      setInventoryProductCategory('');
     }
   };
 
@@ -421,18 +427,6 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
     }));
   };
 
-  const handleSubProductWeightsChange = (index, weights) => {
-    const updatedItems = [...formData.items];
-    const updatedItem = {
-      ...updatedItems[index],
-      subProductWeights: weights,
-      weight: weights.reduce((sum, w) => sum + (Number(w) || 0), 0)
-    };
-    updatedItems[index] = updatedItem;
-    setFormData(prev => ({ ...prev, items: updatedItems }));
-    setItemWeightError(index, updatedItem);
-  };
-
   // Unique product options from inventory (flattened inventory rows may repeat products per sub-product)
   const getProductOptions = () => {
     const seen = new Map();
@@ -444,6 +438,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
           productName: inv.productName,
           productCode: inv.productCode,
           unit: inv.unit,
+          hasSubProducts: inv.hasSubProducts,
           value: inv.productId
         });
       }
@@ -880,7 +875,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed top-16 left-64 right-0 bottom-0 z-40 flex flex-col bg-white shadow-2xl overflow-hidden">
+    <div className="fixed bottom-0 left-0 right-0 top-16 z-40 flex flex-col overflow-hidden bg-white shadow-2xl transition-[left] duration-200 lg:left-[var(--sidebar-width)]">
         {/* Loading Overlay */}
         {loading && (
           <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50">
@@ -964,7 +959,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                 total={totalCustomers}
                 onAddNew={() => setShowCustomerModal(true)}
                 addNewLabel="Add Customer"
-                renderOption={(customer, isSelected) => (
+                renderOption={(customer) => (
                   <div className="flex flex-col">
                     <span className="font-medium">{customer.companyName}</span>
                     {customer.contactPerson && (
@@ -1001,10 +996,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
               required
               options={categories}
               value={formData.category}
-              onChange={(value) => {
-                setFormData(prev => ({ ...prev, category: value }));
-                handleCategoryChange({ target: { name: 'category', value } });
-              }}
+              onChange={(value) => handleCategoryChange({ target: { name: 'category', value } })}
               placeholder="Select Category"
               searchPlaceholder="Search categories..."
               getOptionLabel={(category) => category.categoryName}
@@ -1016,11 +1008,22 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
               onLoadMore={loadMoreCategories}
               total={totalCategories}
               renderOption={(category, isSelected) => (
-                <div className="flex flex-col">
-                  <span className="font-medium">{category.categoryName}</span>
-                  {category.description && (
-                    <span className="text-xs text-gray-500 truncate">{category.description}</span>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-700">
+                    <FolderOpen className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-gray-900">{category.categoryName}</span>
+                    <span className="block truncate text-xs font-normal text-gray-500">
+                      {category.description || 'Inventory available'}
+                    </span>
+                  </span>
+                  {category.hasSubProducts && (
+                    <span className="flex-shrink-0 rounded bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700">
+                      Variants
+                    </span>
                   )}
+                  {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-blue-600" />}
                 </div>
               )}
             />
@@ -1067,7 +1070,27 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                       <div className="bg-blue-100 text-blue-700 font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
                         {groupIndex + 1}
                       </div>
-                      <h4 className="font-semibold text-gray-800 text-sm">Product Section</h4>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-sm font-semibold text-gray-800">
+                            {group.productName || 'Product Section'}
+                          </h4>
+                          {group.product && (
+                            <span className="flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                              <Check className="h-3 w-3" />
+                              Selected
+                            </span>
+                          )}
+                          {group.items.length > 1 && (
+                            <span className="rounded bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
+                              {group.items.length} variant lines
+                            </span>
+                          )}
+                        </div>
+                        {group.productCode && (
+                          <p className="mt-0.5 text-xs text-gray-500">{group.productCode}</p>
+                        )}
+                      </div>
                     </div>
                     <button
                       type="button"
@@ -1100,12 +1123,35 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                       total={inventoryProductTotal}
                       disabled={!formData.category}
                       emptyMessage={!formData.category ? 'Please select a category first' : 'No products in inventory'}
-                      renderOption={(product, isSelected) => (
-                        <div className="flex flex-col">
-                          <span className="font-medium">{product.productName}</span>
-                          <span className="text-xs text-gray-500">{product.productCode}</span>
-                        </div>
-                      )}
+                      renderOption={(product, isSelected) => {
+                        const selectedLines = formData.items.filter(
+                          item => item.product === product.productId
+                        ).length;
+                        const selectedElsewhere = selectedLines > 0 && !isSelected;
+                        return (
+                          <div className={`flex min-w-0 items-center gap-3 ${selectedElsewhere ? 'opacity-75' : ''}`}>
+                            <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md ${
+                              isSelected ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              <Package className="h-4 w-4" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-semibold text-gray-900">{product.productName}</span>
+                            </span>
+                            {isSelected && (
+                              <span className="flex flex-shrink-0 items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                                <Check className="h-3 w-3" />
+                                Selected
+                              </span>
+                            )}
+                            {selectedElsewhere && (
+                              <span className="flex-shrink-0 rounded bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                                Already added
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }}
                     />
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
@@ -1139,7 +1185,14 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                         const globalIndex = group.indices[rowIndex];
                         const hasSubProductOptions = getSubProductOptions(group.product).filter(sp => (sp.totalStock || 0) > 0).length > 0;
                         return (
-                          <div key={globalIndex} className="grid grid-cols-12 gap-3 items-start bg-gray-50 rounded-lg p-3 border border-gray-100">
+                          <div
+                            key={globalIndex}
+                            className={`grid grid-cols-12 items-start gap-3 rounded-lg border p-3 ${
+                              item.subProduct
+                                ? 'border-blue-200 bg-blue-50/50'
+                                : 'border-gray-100 bg-gray-50'
+                            }`}
+                          >
                             {/* Sub-product select — only rendered when product has sub-products */}
                             {hasSubProductOptions && (
                               <div className="col-span-3">
@@ -1149,11 +1202,34 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                                   onChange={(value) => handleSubProductSelect(globalIndex, value)}
                                   placeholder="Select Sub Pr..."
                                   searchPlaceholder="Search sub-products..."
-                                  getOptionLabel={(sp) => `${sp.subProductName} (Stock: ${sp.totalStock})`}
+                                  getOptionLabel={(sp) => sp.subProductName}
                                   getOptionValue={(sp) => sp.subProductId}
                                   renderOption={(sp, isSelected) => (
-                                    <div className="flex flex-col gap-1">
-                                      <span className="font-semibold text-gray-900">{sp.subProductName}</span>
+                                    <div className={`flex flex-col gap-1 ${
+                                      formData.items.some((other, otherIndex) => (
+                                        otherIndex !== globalIndex
+                                        && other.product === group.product
+                                        && other.subProduct === sp.subProductId
+                                      )) ? 'opacity-70' : ''
+                                    }`}>
+                                      <span className="flex flex-wrap items-center gap-2">
+                                        <span className="font-semibold text-gray-900">{sp.subProductName}</span>
+                                        {isSelected && (
+                                          <span className="flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-xs font-semibold text-blue-700">
+                                            <Check className="h-3 w-3" />
+                                            Selected
+                                          </span>
+                                        )}
+                                        {formData.items.some((other, otherIndex) => (
+                                          otherIndex !== globalIndex
+                                          && other.product === group.product
+                                          && other.subProduct === sp.subProductId
+                                        )) && (
+                                          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-700">
+                                            Already selected
+                                          </span>
+                                        )}
+                                      </span>
                                       <span className="text-xs text-gray-500">
                                         Available: {sp.totalStock} {sp.unit} · Weight: {(sp.totalWeight || 0).toFixed(2)} kg
                                       </span>
@@ -1172,6 +1248,12 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                                     </div>
                                   )}
                                 />
+                                {/* {item.subProduct && (
+                                  <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-blue-700">
+                                    <Check className="h-3 w-3" />
+                                    Selected for variant line {rowIndex + 1}
+                                  </p>
+                                )} */}
                               </div>
                             )}
                             {/* Qty — read-only when sub-product selected (auto-set from inventory weights count) */}
@@ -1189,9 +1271,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                                 readOnly={!!item.subProduct}
                                 className={`w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm text-sm ${item.subProduct ? 'bg-gray-100 cursor-not-allowed focus:ring-0' : 'focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-400'}`}
                               />
-                              {item.subProduct && (
-                                <span className="text-xs text-blue-500 mt-0.5 block">Auto from inventory</span>
-                              )}
+                              {/* {item.subProduct && (
+                                // <span className="text-xs text-blue-500 mt-0.5 block">Auto from inventory</span>
+                              )} */}
                             </div>
                             {/* Unit */}
                             <div className="col-span-2">
@@ -1253,9 +1335,9 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                             {/* Selectable weight chips for sub-product — click to include/exclude bags */}
                             {item.subProduct && Array.isArray(item.availableWeights) && item.availableWeights.length > 0 && (
                               <div className="col-span-12">
-                                <p className="text-xs text-gray-500 mb-1.5 font-medium">
+                                {/* <p className="text-xs text-gray-500 mb-1.5 font-medium">
                                   Select bags to include ({(item.selectedWeightIndices || []).length} of {item.availableWeights.length} selected):
-                                </p>
+                                </p> */}
                                 <div className="flex flex-wrap gap-1.5">
                                   {item.availableWeights.map((w, wi) => {
                                     const isSelected = (item.selectedWeightIndices || []).includes(wi);
@@ -1289,7 +1371,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
                                     );
                                   })}
                                 </div>
-                                <p className="text-xs text-gray-400 mt-1">Click a chip to include/exclude that bag from the order.</p>
+                                {/* <p className="text-xs text-gray-400 mt-1">Click a chip to include/exclude that bag from the order.</p> */}
                               </div>
                             )}
 
@@ -1372,7 +1454,7 @@ const NewSalesOrderModal = ({ isOpen, onClose, onSubmit, order = null }) => {
 
       {/* Customer Modal */}
       {showCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">

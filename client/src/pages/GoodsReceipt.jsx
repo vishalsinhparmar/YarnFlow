@@ -6,7 +6,7 @@ import GRNForm from '../components/GRN/GRNForm';
 import GRNDetail from '../components/GRN/GRNDetail';
 
 const GoodsReceipt = () => {
-  const [grns, setGRNs] = useState([]);
+  const [, setGRNs] = useState([]);
   const [groupedByPO, setGroupedByPO] = useState([]);
   const [expandedPOs, setExpandedPOs] = useState({});
   const [poGRNLimits, setPOGRNLimits] = useState({}); // Pagination per PO
@@ -23,7 +23,6 @@ const GoodsReceipt = () => {
   // Modal states
   const [showCreateGRN, setShowCreateGRN] = useState(false);
   const [showGRNDetail, setShowGRNDetail] = useState(false);
-  const [showQualityCheck, setShowQualityCheck] = useState(false);
   const [selectedGRN, setSelectedGRN] = useState(null);
   const [selectedPO, setSelectedPO] = useState(null);
   
@@ -31,7 +30,6 @@ const GoodsReceipt = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState({});
   
   // PO-level pagination
   const [currentPOPage, setCurrentPOPage] = useState(1);
@@ -219,7 +217,6 @@ const GoodsReceipt = () => {
       setExpandedPOs(expanded);
       setPOGRNLimits(limits);
       
-      setPagination(response?.pagination || {});
       setError(null);
     } catch (err) {
       setError('Failed to fetch GRNs');
@@ -234,7 +231,6 @@ const GoodsReceipt = () => {
   // Initial data load
   useEffect(() => {
     fetchStats();
-    fetchGRNs();
   }, []);
 
   // Handle search and filter changes
@@ -242,7 +238,7 @@ const GoodsReceipt = () => {
     const timeoutId = setTimeout(() => {
       fetchGRNs(1, searchTerm, statusFilter);
       setCurrentPage(1);
-    }, 500);
+    }, 300);
 
     return () => clearTimeout(timeoutId);
   }, [searchTerm, statusFilter]);
@@ -267,33 +263,9 @@ const GoodsReceipt = () => {
 
 
   // View GRN details
-  const handleViewGRN = async (grn) => {
-    try {
-      const response = await grnAPI.getById(grn._id);
-      setSelectedGRN(response.data);
-      setShowGRNDetail(true);
-    } catch (err) {
-      console.error('Error fetching GRN details:', err);
-      alert('Failed to load GRN details');
-    }
-  };
-
-  // Handle quality check
-  const handleQualityCheck = async (grn) => {
-    try {
-      const response = await grnAPI.getById(grn._id);
-      setSelectedGRN(response.data);
-      setShowQualityCheck(true);
-    } catch (err) {
-      console.error('Error loading GRN for quality check:', err);
-      alert('Failed to load GRN for quality check');
-    }
-  };
-
-  // Get status counts for display
-  const getStatusCount = (status) => {
-    const statusItem = stats?.statusBreakdown?.find(item => item._id === status);
-    return statusItem ? statusItem.count : 0;
+  const handleViewGRN = (grn) => {
+    setSelectedGRN(grn);
+    setShowGRNDetail(true);
   };
 
   // Toggle PO expansion
@@ -567,8 +539,7 @@ const GoodsReceipt = () => {
                         <tr>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">GRN Number</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Received Date</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Products</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Quantity & Weight</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Items Received</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -603,32 +574,38 @@ const GoodsReceipt = () => {
                                   {grnUtils.formatDate(grn.receiptDate)}
                                 </div>
                               </td>
-                              <td className="px-6 py-4">
-                                {grn.items?.map((item, idx) => (
-                                  <div key={idx} className="text-sm mb-1 last:mb-0">
-                                    <span className="font-medium text-gray-900">
-                                      {item.subProductName ? `${item.productName} X ${item.subProductName}` : item.productName}
-                                    </span>
-                                  </div>
-                                ))}
-                              </td>
-                              <td className="px-6 py-4">
+                              <td className="min-w-[360px] px-6 py-3">
+                                <div className="divide-y divide-gray-100">
                                 {grn.items?.map((item, idx) => {
-                                  let weight = item.receivedWeight || 0;
+                                  const exactWeights = Array.isArray(item.receivedSubProductWeights)
+                                    ? item.receivedSubProductWeights
+                                    : [];
+                                  let weight = exactWeights.length > 0
+                                    ? exactWeights.reduce((sum, unitWeight) => sum + (Number(unitWeight) || 0), 0)
+                                    : Number(item.receivedWeight) || 0;
                                   if (weight === 0 && item.receivedQuantity > 0 && item.orderedQuantity > 0 && item.orderedWeight > 0) {
                                     weight = item.receivedQuantity * (item.orderedWeight / item.orderedQuantity);
                                   }
                                   return (
-                                    <div key={idx} className="text-sm mb-1 last:mb-0">
-                                      <div className="font-semibold text-gray-900">
-                                        {item.receivedQuantity} {item.unit}
-                                      </div>
-                                      <div className="text-xs text-gray-500">
-                                        {weight.toFixed(2)} kg
+                                    <div
+                                      key={item._id || `${grn._id}-item-${idx}`}
+                                      className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 py-2 first:pt-0 last:pb-0"
+                                    >
+                                      <p className="min-w-0 break-words text-sm font-medium text-gray-900">
+                                        {item.subProductName
+                                          ? `${item.productName} X ${item.subProductName}`
+                                          : item.productName}
+                                      </p>
+                                      <div className="whitespace-nowrap text-right">
+                                        <p className="text-sm font-semibold text-gray-900">
+                                          {item.receivedQuantity} {item.unit}
+                                        </p>
+                                        <p className="text-xs text-gray-500">{weight.toFixed(2)} kg</p>
                                       </div>
                                     </div>
                                   );
                                 })}
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-lg ${
@@ -743,17 +720,11 @@ const GoodsReceipt = () => {
       )}
 
       {showGRNDetail && selectedGRN && (
-        <Modal
+        <GRNDetail
           isOpen={showGRNDetail}
           onClose={() => setShowGRNDetail(false)}
-          title={`GRN Details - ${selectedGRN.grnNumber}`}
-          size="xl"
-        >
-          <GRNDetail
-            grn={selectedGRN}
-            onClose={() => setShowGRNDetail(false)}
-          />
-        </Modal>
+          grn={selectedGRN}
+        />
       )}
 
 

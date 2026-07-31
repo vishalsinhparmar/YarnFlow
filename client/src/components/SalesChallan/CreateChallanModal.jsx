@@ -2,11 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { FileText, X, FileCheck, Calendar, MapPin, Package, Truck, CheckCircle2, Info, StickyNote } from 'lucide-react';
 import { salesOrderAPI } from '../../services/salesOrderAPI';
 import { salesChallanAPI } from '../../services/salesChallanAPI';
-import { inventoryAPI } from '../../services/inventoryAPI';
 import { apiRequest } from '../../services/common';
 import NewSalesOrderModal from '../SalesOrders/NewSalesOrderModal';
 import SearchableSelect from '../common/SearchableSelect';
 import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
+
+const isItemDispatchable = (item) => {
+  const dispatchedQuantity = Number(item.previouslyDispatched) || 0;
+  return !item.manuallyCompleted && item.orderedQuantity - dispatchedQuantity > 0;
+};
 
 const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = null }) => {
   const [formData, setFormData] = useState({
@@ -23,7 +27,6 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showNewSOModal, setShowNewSOModal] = useState(false);
-  const [dispatchedQuantities, setDispatchedQuantities] = useState({});
   const [detectedWarehouse, setDetectedWarehouse] = useState('');
 
   // Paginated sales orders with client-side status filter
@@ -64,7 +67,6 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       setSelectedSO(null);
       setError('');
       setSuccessMessage('');
-      setDispatchedQuantities({});
       setDetectedWarehouse('');
     }
   }, [isOpen]);
@@ -116,18 +118,22 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
         setSelectedSO(so);
         
         // Build dispatched map
-        const dispatchedMap = {};
+        const dispatchStateMap = {};
         if (dispatchedResponse.success && dispatchedResponse.data) {
           dispatchedResponse.data.forEach(item => {
-            dispatchedMap[item.salesOrderItem] = item.totalDispatched;
+            dispatchStateMap[item.salesOrderItem] = {
+              totalDispatched: item.totalDispatched,
+              manuallyCompleted: item.manuallyCompleted === true
+            };
           });
         }
-        setDispatchedQuantities(dispatchedMap);
-        console.log('Dispatched quantities:', dispatchedMap);
+        console.log('Dispatch states:', dispatchStateMap);
         
         // Auto-populate form from SO
         const items = so.items?.map(item => {
-          const dispatched = dispatchedMap[item._id] || 0;
+          const dispatchState = dispatchStateMap[item._id] || {};
+          const dispatched = dispatchState.totalDispatched || 0;
+          const manuallyCompleted = item.manuallyCompleted === true || dispatchState.manuallyCompleted === true;
           const remaining = Math.max(0, (item.quantity || 0) - dispatched);
           
           // Use sub-product ordered weights if available, otherwise fall back to total SO weight
@@ -138,7 +144,10 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           const totalQuantity = item.quantity || 1;
           const weightPerUnit = parseFloat((totalWeight / totalQuantity).toFixed(4));
           const remainingWeight = parseFloat((remaining * weightPerUnit).toFixed(2));
-          const remainingWeights = orderedWeights.slice(0, remaining);
+          const remainingWeights = orderedWeights.slice(
+            Math.floor(dispatched),
+            Math.floor(dispatched + remaining)
+          );
           
           return {
             salesOrderItem: item._id,
@@ -157,6 +166,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             weight: remainingWeight, // Proportional weight for remaining quantity
             totalSOWeight: totalWeight, // Store total SO weight for reference
             weightPerUnit: weightPerUnit, // Store weight per unit for calculations
+            manuallyCompleted,
             markAsComplete: false,
             notes: item.notes || ''  // Include notes from Sales Order item
           };
@@ -164,15 +174,15 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
         console.log('Items mapped:', items);
 
-        // Check if all items are fully dispatched
-        const allFullyDispatched = items.every(item => item.previouslyDispatched >= item.orderedQuantity);
+        // Check if every item was fully dispatched or explicitly finalized.
+        const allFullyDispatched = items.every(item => !isItemDispatchable(item));
         
         if (allFullyDispatched) {
-          setError('⚠️ This Sales Order is already fully dispatched. All items have been completed.');
+          setError('⚠️ This Sales Order is already complete. No items remain to dispatch.');
         }
 
         // Fetch warehouse locations for each product/sub-product from inventory lots
-        const itemsWithStock = items.filter(item => item.product);
+        const itemsWithStock = items.filter(item => item.product && isItemDispatchable(item));
         if (itemsWithStock.length > 0) {
           try {
             // Fetch inventory lots for each product/sub-product
@@ -286,7 +296,11 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       
       if (item.subProduct) {
         const orderedWeights = item.orderedSubProductWeights || [];
-        item.subProductWeights = orderedWeights.slice(0, dispatchQty);
+        const startIndex = Math.floor(item.previouslyDispatched || 0);
+        item.subProductWeights = orderedWeights.slice(
+          startIndex,
+          startIndex + Math.floor(dispatchQty)
+        );
         item.weight = item.subProductWeights.reduce((sum, w) => sum + (Number(w) || 0), 0);
       } else {
         // Auto-calculate proportional weight based on dispatch quantity
@@ -310,16 +324,6 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       ...prev,
       items: updatedItems
     }));
-  };
-
-  const handleSubProductWeightsChange = (index, weights) => {
-    const updatedItems = [...formData.items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      subProductWeights: weights,
-      weight: weights.reduce((sum, w) => sum + (Number(w) || 0), 0)
-    };
-    setFormData(prev => ({ ...prev, items: updatedItems }));
   };
 
   // Group dispatch items by product so multiple sub-product rows render under one product header
@@ -384,14 +388,10 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
     }
 
     // Filter items that have remaining quantity to dispatch
-    const itemsToDispatch = formData.items.filter(item => {
-      const dispatchedQty = item.previouslyDispatched || 0;
-      const maxDispatch = item.orderedQuantity - dispatchedQty;
-      return maxDispatch > 0;
-    });
+    const itemsToDispatch = formData.items.filter(isItemDispatchable);
 
     if (itemsToDispatch.length === 0) {
-      setError('All items are already fully dispatched. No items remaining to dispatch.');
+      setError('All items are already completed. No items remain to dispatch.');
       return false;
     }
 
@@ -407,6 +407,10 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
       }
       if (dispatchQty > maxDispatch) {
         setError(`Dispatch quantity for ${item.productName} cannot exceed remaining quantity (${maxDispatch} ${item.unit})`);
+        return false;
+      }
+      if (item.subProduct && !Number.isInteger(dispatchQty)) {
+        setError(`Dispatch quantity for ${item.productName} must be a whole number`);
         return false;
       }
 
@@ -430,11 +434,9 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
     try {
       // Prepare challan data - only include items with remaining quantity
-      const itemsToDispatch = formData.items.filter(item => {
-        const dispatchedQty = item.previouslyDispatched || 0;
-        const maxDispatch = item.orderedQuantity - dispatchedQty;
-        return maxDispatch > 0 && parseFloat(item.dispatchQuantity || 0) > 0;
-      });
+      const itemsToDispatch = formData.items.filter(
+        item => isItemDispatchable(item) && parseFloat(item.dispatchQuantity || 0) > 0
+      );
 
       const challanData = {
         salesOrder: formData.salesOrder,
@@ -493,7 +495,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
   if (!isOpen) return null;
 
   return (
-    <div className="fixed top-16 left-64 right-0 bottom-0 z-40 flex flex-col bg-white shadow-2xl overflow-hidden">
+    <div className="fixed bottom-0 left-0 right-0 top-16 z-40 flex flex-col overflow-hidden bg-white shadow-2xl transition-[left] duration-200 lg:left-[var(--sidebar-width)]">
         {/* Loading Overlay */}
         {loading && (
           <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50">
@@ -551,14 +553,26 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
           )}
 
           {/* Sales Order Selection */}
-          <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-lg p-4 border border-teal-100">
-            <div className="flex items-center mb-3 gap-2">
-              <FileText className="h-4 w-4 text-teal-600" />
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Sales Order Selection</h3>
+          <section className="overflow-visible rounded-lg border border-gray-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700">
+                  <FileText className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-gray-900">Sales order</h3>
+                  <p className="text-xs text-gray-500">Source document for this delivery challan</p>
+                </div>
+              </div>
+              {!loadingSOs && totalSOs !== null && (
+                <p className="text-sm text-gray-500">
+                  <span className="font-semibold text-gray-900">{totalSOs}</span> available
+                </p>
+              )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:px-5 md:grid-cols-[minmax(0,1fr)_15rem]">
               {/* Sales Order Selection with SearchableSelect */}
-              <div>
+              <div className="min-w-0">
                 <SearchableSelect
                   label="Sales Order"
                   required
@@ -578,30 +592,55 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                   disabled={loadingSODetails}
                   onAddNew={handleAddSO}
                   addNewLabel="Add SO"
-                  renderOption={(so, isSelected) => (
-                    <div className="flex flex-col">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-gray-900">{so.soNumber}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          so.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                          so.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                          so.status === 'Partial' ? 'bg-orange-100 text-orange-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {so.status}
-                        </span>
+                  renderValue={(so) => (
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-900">{so.soNumber}</p>
+                        <p className="truncate text-xs text-gray-500">
+                          {so.customer?.companyName || 'Unknown Customer'}
+                        </p>
                       </div>
-                      <span className="text-sm text-gray-500">{so.customer?.companyName || 'Unknown Customer'}</span>
-                      {so.category?.categoryName && (
-                        <span className="text-xs text-teal-600">{so.category.categoryName}</span>
-                      )}
+                      <span className="hidden flex-shrink-0 text-xs font-medium text-teal-700 sm:inline">
+                        {so.status || 'Pending'}
+                      </span>
+                    </div>
+                  )}
+                  renderOption={(so, isSelected) => (
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md ${
+                        isSelected ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {isSelected
+                          ? <CheckCircle2 className="h-4 w-4" />
+                          : <FileText className="h-4 w-4" />}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center justify-between gap-3">
+                          <span className="truncate font-semibold text-gray-900">{so.soNumber}</span>
+                          <span className={`flex-shrink-0 text-xs font-medium ${
+                            so.status === 'In Progress' ? 'text-blue-700' :
+                            so.status === 'Partial' ? 'text-orange-700' :
+                            so.status === 'Pending' ? 'text-amber-700' :
+                            'text-gray-600'
+                          }`}>
+                            {so.status || 'Pending'}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 truncate text-sm text-gray-600">
+                          {so.customer?.companyName || 'Unknown Customer'}
+                        </p>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                          {so.category?.categoryName && <span>{so.category.categoryName}</span>}
+                          {isSelected && <span className="font-medium text-blue-700">Selected</span>}
+                        </div>
+                      </div>
                     </div>
                   )}
                 />
                 {!loadingSOs && salesOrders.length > 0 && !formData.salesOrder && (
-                  <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                  <p className="mt-2 flex items-center gap-1 text-xs text-gray-500">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    {salesOrders.length} orders available — search to filter
+                    Search by SO number or customer
                   </p>
                 )}
               </div>
@@ -621,7 +660,7 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
                 />
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Loading SO Details */}
           {loadingSODetails && (
@@ -635,26 +674,26 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
 
           {/* Selected SO Details */}
           {!loadingSODetails && selectedSO && (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center mb-3 gap-2">
-                <Info className="h-4 w-4 text-blue-600" />
-                <h3 className="text-sm font-semibold text-blue-900 uppercase tracking-wide">Selected Order Details</h3>
+            <section className="overflow-hidden rounded-lg border border-blue-200 bg-white">
+              <div className="flex items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5">
+                <Info className="h-4 w-4 text-blue-700" />
+                <h3 className="text-sm font-semibold text-blue-900">Selected order details</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="bg-white rounded-lg p-3 shadow-sm">
-                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</span>
-                  <p className="text-sm font-semibold text-gray-900 mt-1">{selectedSO.customer?.companyName || 'N/A'}</p>
+              <dl className="grid grid-cols-1 divide-y divide-gray-200 md:grid-cols-3 md:divide-x md:divide-y-0">
+                <div className="px-4 py-3">
+                  <dt className="text-xs font-medium uppercase text-gray-500">Customer</dt>
+                  <dd className="mt-1 text-sm font-semibold text-gray-900">{selectedSO.customer?.companyName || 'N/A'}</dd>
                 </div>
-                <div className="bg-white rounded-lg p-3 shadow-sm">
-                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Order Date</span>
-                  <p className="text-sm font-semibold text-gray-900 mt-1">{new Date(selectedSO.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                <div className="px-4 py-3">
+                  <dt className="text-xs font-medium uppercase text-gray-500">Order date</dt>
+                  <dd className="mt-1 text-sm font-semibold text-gray-900">{new Date(selectedSO.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</dd>
                 </div>
-                <div className="bg-white rounded-lg p-3 shadow-sm">
-                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Category</span>
-                  <p className="text-sm font-semibold text-gray-900 mt-1">{selectedSO.category?.categoryName || 'N/A'}</p>
+                <div className="px-4 py-3">
+                  <dt className="text-xs font-medium uppercase text-gray-500">Category</dt>
+                  <dd className="mt-1 text-sm font-semibold text-gray-900">{selectedSO.category?.categoryName || 'N/A'}</dd>
                 </div>
-              </div>
-            </div>
+              </dl>
+            </section>
           )}
 
           {/* Dispatch Information */}
@@ -702,166 +741,212 @@ const CreateChallanModal = ({ isOpen, onClose, onSubmit, preSelectedOrderId = nu
             // Filter out fully dispatched items while preserving original formData index
             const itemsToDispatch = formData.items
               .map((item, originalIndex) => ({ ...item, originalIndex }))
-              .filter(item => {
-                const dispatchedQty = item.previouslyDispatched || 0;
-                const maxDispatch = item.orderedQuantity - dispatchedQty;
-                return maxDispatch > 0; // Only show items with remaining quantity
-              });
+              .filter(isItemDispatchable);
 
             return itemsToDispatch.length > 0 ? (
-              <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-4 border border-orange-100">
-                <div className="flex items-center mb-3 gap-2">
-                  <Package className="h-4 w-4 text-orange-600" />
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Items to Dispatch</h3>
-                  <span className="ml-1 bg-orange-100 text-orange-800 text-xs font-semibold px-2.5 py-1 rounded-full">
-                    {itemsToDispatch.length}
-                  </span>
-                </div>
-                
-                {/* Table Header */}
-                <div className="bg-gray-50 border border-gray-200 rounded-t-lg px-4 py-2">
-                  <div className="grid grid-cols-12 gap-4 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                    <div className="col-span-3">Product</div>
-                    <div className="col-span-2 text-center">Ordered</div>
-                    <div className="col-span-4 text-center">Dispatch Qty / Weight</div>
-                    <div className="col-span-3 text-center">Mark Final</div>
+              <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+                <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600">
+                      <Package className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold text-gray-900">Items to dispatch</h3>
+                      <p className="text-xs text-gray-500">Remaining sales order balance</p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Table Body */}
-                <div className="border-l border-r border-b border-gray-200 rounded-b-lg">
+                <div className="hidden grid-cols-12 gap-4 border-b border-gray-200 bg-white px-5 py-2.5 text-xs font-semibold uppercase text-gray-500 lg:grid">
+                  <div className="col-span-3">Product / variant</div>
+                  <div className="col-span-2">SO balance</div>
+                  <div className="col-span-6">This dispatch</div>
+                  <div className="col-span-1 text-center">Final</div>
+                </div>
+
+                <div className="divide-y divide-gray-200">
                   {getProductGroups(itemsToDispatch).map((group, groupIndex) => (
-                    <div key={groupIndex}>
-                      {/* Product header */}
-                      <div className="px-4 py-2 bg-blue-100 border-b border-gray-200 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                    <div key={`${group.product || group.productName}-${groupIndex}`}>
+                      <div className="flex flex-wrap items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5 sm:px-5">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                           <span className="font-semibold text-gray-900">{group.productName}</span>
                           {group.productCode && (
-                            <span className="text-xs text-gray-500">({group.productCode})</span>
+                            <span className="text-xs text-gray-500">{group.productCode}</span>
                           )}
-                          <span className="text-xs text-blue-700 font-medium">Unit: {group.unit}</span>
+                          <span className="text-xs font-medium text-blue-700">{group.unit}</span>
                         </div>
-                        <span className="text-xs text-gray-400">
-                          {group.items.length} {group.items.length === 1 ? 'variant' : 'variants'}
-                        </span>
                       </div>
-                      {group.items.map((item, rowIndex) => {
-                        const originalIndex = item.originalIndex;
-                        const dispatchedQty = item.previouslyDispatched || 0;
-                        const maxDispatch = item.orderedQuantity - dispatchedQty;
-                        const currentDispatch = parseFloat(item.dispatchQuantity || 0);
-                        const totalAfterThis = dispatchedQty + currentDispatch;
-                        const progress = ((totalAfterThis) / item.orderedQuantity * 100).toFixed(0);
 
-                        return (
-                          <div key={originalIndex} className="px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
-                            <div className="grid grid-cols-12 gap-4 items-center">
-                              {/* Product / Sub Product */}
-                              <div className="col-span-3">
-                                {item.subProductName ? (
-                                  <div className="text-sm font-semibold text-green-700">{item.productName} X {item.subProductName}</div>
-                                ) : (
-                                  <div className="text-xs text-gray-400">—</div>
-                                )}
-                                {item.notes && (
-                                  <div className="text-xs text-blue-600 italic mt-1 flex items-center gap-1">
-                                    <StickyNote className="w-3 h-3" /> {item.notes}
+                      <div className="divide-y divide-gray-100">
+                        {group.items.map((item) => {
+                          const originalIndex = item.originalIndex;
+                          const dispatchedQty = item.previouslyDispatched || 0;
+                          const maxDispatch = item.orderedQuantity - dispatchedQty;
+
+                          return (
+                            <div key={originalIndex} className="px-4 py-4 transition-colors hover:bg-gray-50 sm:px-5">
+                              <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
+                                <div className="min-w-0 lg:col-span-3">
+                                  <p className="mb-1 text-xs font-semibold uppercase text-gray-500 lg:hidden">
+                                    Product / variant
+                                  </p>
+                                  <div className="flex min-w-0 items-start gap-2">
+                                    <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${
+                                      item.subProductName ? 'bg-green-500' : 'bg-blue-500'
+                                    }`} />
+                                    <div className="min-w-0">
+                                      <p className="break-words text-sm font-semibold text-gray-900">
+                                        {item.subProductName
+                                          ? `${item.productName} X ${item.subProductName}`
+                                          : item.productName}
+                                      </p>
+                                      {item.subProductName && (
+                                        <p className="mt-0.5 text-xs text-gray-500">Inventory variant</p>
+                                      )}
+                                    </div>
                                   </div>
-                                )}
-                                {dispatchedQty > 0 && (
-                                  <div className="text-xs text-gray-400 mt-1">Dispatched: {dispatchedQty} · Remaining: {maxDispatch}</div>
-                                )}
-                              </div>
 
-                              {/* Ordered */}
-                              <div className="col-span-2 text-center">
-                                <div className="text-sm font-medium text-gray-900">{item.orderedQuantity} {item.unit}</div>
-                                <div className="text-xs text-gray-500">{parseFloat(item.totalSOWeight || item.weight || 0).toFixed(2)} kg</div>
-                              </div>
+                                  {item.notes && (
+                                    <div className="mt-2 flex items-start gap-1.5 text-xs italic text-blue-700">
+                                      <StickyNote className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                                      <span className="break-words">{item.notes}</span>
+                                    </div>
+                                  )}
 
-                              {/* Dispatching Now */}
-                              <div className="col-span-4">
-                                <div className="relative">
-                                  <input
-                                    type="number"
-                                    value={item.dispatchQuantity}
-                                    onChange={(e) => handleItemChange(originalIndex, 'dispatchQuantity', e.target.value)}
-                                    required
-                                    min="0.01"
-                                    max={maxDispatch}
-                                    step="0.01"
-                                    className="w-full px-2 py-1.5 pr-12 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                                    placeholder="0"
-                                  />
-                                  <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">
-                                    {item.unit}
-                                  </span>
-                                </div>
-                                {/* Weight */}
-                                <div className="relative mt-1">
-                                  <input
-                                    type="number"
-                                    value={parseFloat(item.weight || 0).toFixed(2)}
-                                    onChange={(e) => handleItemChange(originalIndex, 'weight', e.target.value)}
-                                    min="0"
-                                    step="0.01"
-                                    className={`w-full px-2 py-1.5 pr-8 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 ${item.subProduct ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                    placeholder="Weight"
-                                    disabled={!!item.subProduct}
-                                    readOnly={!!item.subProduct}
-                                  />
-                                  <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 pointer-events-none">kg</span>
-                                  {item.subProduct && (
-                                    <span className="text-xs text-green-600 block mt-0.5">Auto-calculated</span>
+                                  {dispatchedQty > 0 && (
+                                    <p className="mt-2 text-xs text-gray-500">
+                                      Previously dispatched: <span className="font-medium text-gray-700">{dispatchedQty} {item.unit}</span>
+                                    </p>
                                   )}
                                 </div>
-                              </div>
 
-                              {/* Mark Complete Checkbox */}
-                              <div className="col-span-3 flex flex-col items-center justify-center gap-1">
-                                <input
-                                  type="checkbox"
-                                  checked={item.markAsComplete || false}
-                                  onChange={(e) => {
-                                    const updatedItems = [...formData.items];
-                                    updatedItems[originalIndex].markAsComplete = e.target.checked;
-                                    setFormData(prev => ({ ...prev, items: updatedItems }));
-                                  }}
-                                  disabled={maxDispatch <= 0}
-                                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title={maxDispatch <= 0 ? 'Already fully dispatched' : 'Mark this item as complete even if quantity doesn\'t match (e.g., due to losses)'}
-                                />
-                                {item.markAsComplete && (
-                                  <span className="text-xs text-green-600 font-medium">Final</span>
-                                )}
-                              </div>
-                            </div>
+                                <div className="lg:col-span-2">
+                                  <p className="mb-1 text-xs font-semibold uppercase text-gray-500 lg:hidden">
+                                    SO balance
+                                  </p>
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    {maxDispatch} {item.unit}
+                                  </p>
+                                </div>
 
-                            {/* Per-unit weight chips for sub-products — read-only, from inventory FIFO */}
-                            {item.subProduct && Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0 && (
-                              <div className="mt-2">
-                                <p className="text-xs text-gray-500 mb-1 font-medium">{item.subProductWeights.length} weight(s)</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {item.subProductWeights.map((w, wi) => (
-                                    <span key={wi} className="px-2 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 rounded">
-                                      #{wi + 1}: {Number(w) % 1 === 0 ? Number(w) : Number(w).toFixed(2)} kg
+                                <div className="min-w-0 lg:col-span-6">
+                                  <p className="mb-2 text-xs font-semibold uppercase text-gray-500 lg:hidden">
+                                    This dispatch
+                                  </p>
+                                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <label className="min-w-0">
+                                      <span className="mb-1 block text-xs font-medium text-gray-600">Quantity</span>
+                                      <span className="flex min-w-0 items-center gap-2">
+                                        <input
+                                          type="number"
+                                          aria-label={`Dispatch quantity for ${item.productName}${item.subProductName ? ` X ${item.subProductName}` : ''}`}
+                                          value={item.dispatchQuantity}
+                                          onChange={(e) => handleItemChange(originalIndex, 'dispatchQuantity', e.target.value)}
+                                          required
+                                          min={item.subProduct ? '1' : '0.01'}
+                                          max={maxDispatch}
+                                          step={item.subProduct ? '1' : '0.01'}
+                                          inputMode={item.subProduct ? 'numeric' : 'decimal'}
+                                          className="h-10 min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-900 shadow-sm outline-none transition-colors hover:border-gray-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                                          placeholder="0"
+                                        />
+                                        <span className="flex-shrink-0 text-xs font-medium text-gray-500">{item.unit}</span>
+                                      </span>
+                                    </label>
+
+                                    <label className="min-w-0">
+                                      <span className="mb-1 block text-xs font-medium text-gray-600">Weight</span>
+                                      <span className="flex min-w-0 items-center gap-2">
+                                        <input
+                                          type="number"
+                                          aria-label={`Dispatch weight for ${item.productName}${item.subProductName ? ` X ${item.subProductName}` : ''}`}
+                                          value={parseFloat(item.weight || 0).toFixed(2)}
+                                          onChange={(e) => handleItemChange(originalIndex, 'weight', e.target.value)}
+                                          min="0"
+                                          step="0.01"
+                                          className={`h-10 min-w-0 flex-1 rounded-md border border-gray-300 px-3 text-sm text-gray-900 shadow-sm outline-none transition-colors focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 ${
+                                            item.subProduct ? 'cursor-not-allowed bg-gray-100 text-gray-600' : 'bg-white hover:border-gray-400'
+                                          }`}
+                                          placeholder="Weight"
+                                          disabled={!!item.subProduct}
+                                          readOnly={!!item.subProduct}
+                                        />
+                                        <span className="flex-shrink-0 text-xs font-medium text-gray-500">kg</span>
+                                      </span>
+                                      {item.subProduct && (
+                                        <span className="mt-1 block text-xs font-medium text-green-700">Auto-calculated</span>
+                                      )}
+                                    </label>
+                                  </div>
+                                </div>
+
+                                <div className="lg:col-span-1">
+                                  <p className="mb-2 text-xs font-semibold uppercase text-gray-500 lg:hidden">
+                                    Final
+                                  </p>
+                                  <label className={`inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border px-3 transition-colors lg:w-10 lg:px-0 ${
+                                    item.markAsComplete
+                                      ? 'border-green-300 bg-green-50'
+                                      : 'border-gray-200 bg-white hover:border-gray-300'
+                                  } ${maxDispatch <= 0 ? 'cursor-not-allowed opacity-50' : ''}`}>
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`Mark ${item.productName}${item.subProductName ? ` X ${item.subProductName}` : ''} as final`}
+                                      checked={item.markAsComplete || false}
+                                      onChange={(e) => {
+                                        const updatedItems = [...formData.items];
+                                        updatedItems[originalIndex].markAsComplete = e.target.checked;
+                                        setFormData(prev => ({ ...prev, items: updatedItems }));
+                                      }}
+                                      disabled={maxDispatch <= 0}
+                                      className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                      title={maxDispatch <= 0 ? 'Already fully dispatched' : 'Mark this item as complete even if quantity doesn\'t match (e.g., due to losses)'}
+                                    />
+                                    <span className={`text-sm font-semibold lg:hidden ${
+                                      item.markAsComplete ? 'text-green-800' : 'text-gray-700'
+                                    }`}>
+                                      {item.markAsComplete ? 'Marked final' : 'Mark final'}
                                     </span>
-                                  ))}
+                                  </label>
                                 </div>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+
+                              {item.subProduct && Array.isArray(item.subProductWeights) && item.subProductWeights.length > 0 && (
+                                <div className="mt-3 border-t border-gray-100 pt-3 lg:ml-[41.666667%] lg:mr-[8.333333%]">
+                                  <p className="mb-2 text-xs font-medium text-gray-500">
+                                    Exact bag weights ({item.subProductWeights.length})
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {item.subProductWeights.map((weight, weightIndex) => (
+                                      <span
+                                        key={weightIndex}
+                                        className="rounded border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700"
+                                      >
+                                        #{weightIndex + 1}: {Number(weight) % 1 === 0
+                                          ? Number(weight)
+                                          : Number(weight).toFixed(2)} kg
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
             ) : (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm text-green-800">
-                  All items in this Sales Order have been fully dispatched. No items remaining to dispatch.
-                </p>
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-900">Sales order dispatch is complete</p>
+                    <p className="mt-1 text-sm text-green-700">No items remain to dispatch.</p>
+                  </div>
+                </div>
               </div>
             );
           })()}

@@ -115,7 +115,9 @@ const SubProductSelector = ({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className={`font-semibold text-gray-700 ${compact ? 'text-xs' : 'text-sm'}`}>
-          {selectedSubProductName} weights ({quantity} {quantity === 1 ? 'unit' : 'units'})
+          {isWeightsOnly
+            ? `Exact unit weights (${quantity})`
+            : `${selectedSubProductName} weights (${quantity} ${quantity === 1 ? 'unit' : 'units'})`}
         </span>
         <span className={`font-semibold text-green-700 ${compact ? 'text-xs' : 'text-sm'}`}>
           Total: {totalWeight.toFixed(2)} kg
@@ -123,17 +125,18 @@ const SubProductSelector = ({
       </div>
       <div className={compact ? 'flex flex-wrap gap-2' : 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3'}>
         {normalizedWeights.map((w, idx) => (
-          <div key={idx} className={`flex items-center gap-2 bg-white border border-gray-200 ${compact ? 'px-2 py-1 rounded' : 'px-3 py-2 rounded-lg'}`}>
+          <div key={idx} className={`flex items-center gap-2 bg-white border border-gray-200 ${compact ? 'px-2 py-1 rounded-md' : 'px-3 py-2 rounded-lg'}`}>
             <span className={`font-semibold text-gray-500 ${compact ? 'text-xs w-4' : 'text-xs w-6'}`}>#{idx + 1}</span>
             <input
               type="number"
+              aria-label={`Weight ${idx + 1} for ${selectedSubProductName || 'sub-product'}`}
               min="0"
               step="0.01"
               value={w || ''}
               onChange={(e) => handleWeightChange(idx, e.target.value)}
               disabled={disabled}
               className={`min-w-0 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 ${compact ? 'w-16 text-xs px-1 py-0.5' : 'flex-1 text-sm px-2 py-1'}`}
-              placeholder="kg"
+              placeholder="0"
             />
             <span className="text-xs text-gray-500 font-medium">kg</span>
           </div>
@@ -157,19 +160,7 @@ const SubProductSelector = ({
       )}
 
       {isWeightsOnly ? (
-        <div className="space-y-2">
-          {selectedSubProduct && (
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded border border-green-200">
-                {selectedSubProductName}
-              </span>
-              <span className="text-xs text-gray-500">
-                {quantity > 0 ? `${quantity} ${quantity === 1 ? 'unit' : 'units'}` : ''}
-              </span>
-            </div>
-          )}
-          {weightInputs}
-        </div>
+        weightInputs
       ) : localSubProducts.length === 0 ? (
         <div className="space-y-2">
           {!compact && <p className="text-xs text-gray-500">No sub-products found for this product.</p>}
