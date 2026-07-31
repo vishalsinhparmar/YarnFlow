@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { categoryAPI, productAPI, subProductAPI } from '../services/masterDataAPI';
 import ExcelImportButton from '../components/common/ExcelImportButton';
+import Modal from '../components/model/Modal';
 import useToast from '../hooks/useToast';
 
 const SUBPRODUCT_SAMPLE_HEADERS = ['productName', 'category', 'subProductName'];
@@ -16,7 +17,7 @@ const SUBPRODUCT_SAMPLE_DATA = [
 ];
 
 // ── Add Sub Product Modal ─────────────────────────────────────────────────────
-const AddSubProductModal = ({ categories, onClose, onAdded, preCategory = '', preProduct = '', preProductName = '' }) => {
+const AddSubProductModal = ({ categories, onClose, onAdded, preCategory = '', preProduct = '' }) => {
   const { toastSuccess, toastError } = useToast();
   const [modalCategory, setModalCategory] = useState(preCategory);
   const [modalProducts, setModalProducts] = useState([]);
@@ -40,7 +41,7 @@ const AddSubProductModal = ({ categories, onClose, onAdded, preCategory = '', pr
         }
       })
       .finally(() => setProductsLoading(false));
-  }, [modalCategory]);
+  }, [modalCategory, preProduct]);
 
   const handleAdd = async () => {
     const name = nameInput.trim();
@@ -84,26 +85,10 @@ const AddSubProductModal = ({ categories, onClose, onAdded, preCategory = '', pr
   const canAdd = modalProduct && nameInput.trim() && !saving;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
-              <Layers className="w-5 h-5 text-teal-600" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-gray-900">Add Sub Product</h2>
-              <p className="text-xs text-gray-400">Select product and enter a size or variant</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+    <Modal isOpen onClose={onClose} size="md" title="Add Sub Product">
+      <p className="mb-5 text-sm text-gray-500">Select a product and enter its size or variant.</p>
         {/* Body */}
-        <div className="px-6 py-5 space-y-4">
+        <div className="space-y-4">
           {/* Step 1 — Category */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
@@ -179,7 +164,7 @@ const AddSubProductModal = ({ categories, onClose, onAdded, preCategory = '', pr
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-2 justify-end">
+        <div className="mt-5 flex flex-col justify-end gap-2 border-t border-gray-200 pt-4 sm:flex-row">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -203,8 +188,7 @@ const AddSubProductModal = ({ categories, onClose, onAdded, preCategory = '', pr
             Add &amp; Close
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

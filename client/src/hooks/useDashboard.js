@@ -18,7 +18,7 @@ export const useDashboard = (autoRefresh = false, refreshInterval = null) => {
       setLoading(true);
       const response = await dashboardAPI.getStats();
       setDashboardData(response.data);
-      setLastUpdated(new Date());
+      setLastUpdated(new Date(response.timestamp || Date.now()));
       setError(null);
       return response;
     } catch (err) {
@@ -33,19 +33,13 @@ export const useDashboard = (autoRefresh = false, refreshInterval = null) => {
   // Fetch real-time metrics
   const fetchRealtimeMetrics = useCallback(async () => {
     try {
-      // Temporarily disable realtime metrics for production until backend is redeployed
-      if (window.location.hostname !== 'localhost') {
-        console.log('Realtime metrics disabled in production until backend redeploy');
-        return null;
-      }
-      
       const response = await dashboardAPI.getRealtimeMetrics();
       setRealtimeMetrics(response.data);
       setError(null);
       return response;
     } catch (err) {
       const errorMessage = handleDashboardError(err, 'Failed to fetch real-time metrics');
-      console.warn('Realtime metrics error (expected until backend redeploy):', errorMessage);
+      console.warn('Realtime metrics error:', errorMessage);
       // Don't set error for realtime metrics to avoid dashboard disruption
       return null;
     }

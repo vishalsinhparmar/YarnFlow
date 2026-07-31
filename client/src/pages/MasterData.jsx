@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { useMasterData } from '../hooks/useMasterData';
 import ExcelImportButton from '../components/common/ExcelImportButton';
 
@@ -42,10 +43,11 @@ const MasterData = () => {
 
   if (loading && !stats) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading Master Data...</p>
+      <div className="flex min-h-[24rem] items-center justify-center rounded-lg border border-gray-200 bg-white">
+        <div aria-live="polite" className="text-center">
+          <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-orange-600" />
+          <p className="text-sm font-medium text-gray-700">Loading master data</p>
+          <p className="mt-1 text-xs text-gray-500">Refreshing customers, suppliers, and products.</p>
         </div>
       </div>
     );
@@ -246,7 +248,10 @@ const MasterData = () => {
             ) : (
               <div className="text-center py-4">
                 <p className="text-gray-500">No customers found</p>
-                <button className="text-blue-600 hover:text-blue-900 text-sm mt-2">
+                <button
+                  onClick={() => navigate('/master-data/customers')}
+                  className="text-blue-600 hover:text-blue-900 text-sm mt-2"
+                >
                   Add First Customer
                 </button>
               </div>
@@ -293,7 +298,7 @@ const MasterData = () => {
               <div className="text-center py-4">
                 <p className="text-gray-500">No suppliers found</p>
                 <button 
-                  onClick={() => setShowSupplierManagement(true)}
+                  onClick={() => navigate('/master-data/suppliers')}
                   className="text-purple-600 hover:text-purple-900 text-sm mt-2"
                 >
                   Add First Supplier
@@ -309,7 +314,7 @@ const MasterData = () => {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Product Categories</h2>
           <button 
-            onClick={() => setShowCategoryManagement(true)}
+            onClick={() => navigate('/master-data/categories')}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             Manage Categories

@@ -50,6 +50,15 @@ const dashboardAPI = {
     }
   },
 
+  getRecentActivities: async () => {
+    return apiRequest('/dashboard/recent-activities', {
+      timeout: DASHBOARD_CONFIG.apiTimeout,
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    });
+  },
+
   // Configuration getter
   getConfig: () => DASHBOARD_CONFIG
 };

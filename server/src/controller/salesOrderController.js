@@ -2,6 +2,7 @@ import SalesOrder from '../models/SalesOrder.js';
 import Customer from '../models/Customer.js';
 import Product from '../models/Product.js';
 import InventoryLot from '../models/InventoryLot.js';
+import { getLotUnitWeight } from '../utils/salesChallanInventory.js';
 import SalesChallan from '../models/SalesChallan.js';
 import { validationResult } from 'express-validator';
 
@@ -208,7 +209,7 @@ export const createSalesOrder = async (req, res) => {
         if (Array.isArray(lot.subProductWeights) && lot.subProductWeights.length > 0) {
           return sum + lot.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0);
         }
-        const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
+        const weightPerUnit = getLotUnitWeight(lot);
         return sum + (lot.currentQuantity || 0) * weightPerUnit;
       }, 0);
 

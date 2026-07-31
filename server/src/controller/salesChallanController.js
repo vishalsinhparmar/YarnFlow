@@ -6,6 +6,13 @@ import Product from '../models/Product.js';
 import CompanyProfile from '../models/CompanyProfile.js';
 import WarehouseLocation from '../models/WarehouseLocation.js';
 import { generateSalesChallanPDF, generateSalesOrderConsolidatedPDF } from '../utils/pdfGenerator.js';
+import {
+  getChallanIssueTotals,
+  getLotAvailableQuantity,
+  getLotAvailableWeight,
+  getLotUnitWeight,
+  getSalesOrderItemDispatchStates
+} from '../utils/salesChallanInventory.js';
 
 // ============ HELPER: resolve legacy warehouse ObjectId refs to display names ============
 // Some older InventoryLot records may have been saved with a raw WarehouseLocation _id
@@ -52,27 +59,11 @@ export const getDispatchedQuantities = async (req, res) => {
     // Get all challans for this SO
     const challans = await SalesChallan.find({ salesOrder: salesOrderId });
 
-    // Calculate dispatched quantities per item
-    const dispatchedMap = {};
-    challans.forEach(challan => {
-      challan.items.forEach(item => {
-        const key = item.salesOrderItem.toString();
-        if (!dispatchedMap[key]) {
-          dispatchedMap[key] = {
-            salesOrderItem: item.salesOrderItem,
-            product: item.product,
-            productName: item.productName,
-            totalDispatched: 0,
-            unit: item.unit
-          };
-        }
-        dispatchedMap[key].totalDispatched += item.dispatchQuantity;
-      });
-    });
+    const dispatchStates = getSalesOrderItemDispatchStates(challans);
 
     res.status(200).json({
       success: true,
-      data: Object.values(dispatchedMap)
+      data: Object.values(dispatchStates)
     });
   } catch (error) {
     console.error('Error getting dispatched quantities:', error);
@@ -259,16 +250,29 @@ export const createSalesChallan = async (req, res) => {
     
     // Validate dispatch quantities against remaining (ordered - already dispatched)
     const existingChallansForValidation = await SalesChallan.find({ salesOrder: so._id }).session(session);
-    const dispatchedMapForValidation = {};
-    existingChallansForValidation.forEach(ch => {
-      ch.items.forEach(ci => {
-        const k = ci.salesOrderItem.toString();
-        dispatchedMapForValidation[k] = (dispatchedMapForValidation[k] || 0) + ci.dispatchQuantity;
-      });
-    });
+    const existingDispatchStates = getSalesOrderItemDispatchStates(existingChallansForValidation);
 
+    const requestedSalesOrderItems = new Set();
     for (const item of items) {
-      const soItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
+      const salesOrderItemId = item.salesOrderItem?.toString();
+      if (!salesOrderItemId) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: 'Sales order item is required for every dispatch item'
+        });
+      }
+
+      if (requestedSalesOrderItems.has(salesOrderItemId)) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: 'A sales order item cannot be included more than once in a challan'
+        });
+      }
+      requestedSalesOrderItems.add(salesOrderItemId);
+
+      const soItem = so.items.find(si => si._id.toString() === salesOrderItemId);
       if (!soItem) {
         await session.abortTransaction();
         return res.status(400).json({
@@ -277,9 +281,43 @@ export const createSalesChallan = async (req, res) => {
         });
       }
 
-      const alreadyDispatched = dispatchedMapForValidation[item.salesOrderItem.toString()] || 0;
+      const existingDispatchState = existingDispatchStates[salesOrderItemId];
+      if (soItem.manuallyCompleted || existingDispatchState?.manuallyCompleted) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `${soItem.productName} is already marked as complete`
+        });
+      }
+
+      const dispatchQuantity = Number(item.dispatchQuantity);
+      if (!Number.isFinite(dispatchQuantity) || dispatchQuantity <= 0) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Dispatch quantity for ${soItem.productName} must be greater than zero`
+        });
+      }
+
+      if (soItem.subProduct && !Number.isInteger(dispatchQuantity)) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Dispatch quantity for ${soItem.productName} must be a whole number`
+        });
+      }
+
+      if (soItem.product?._id.toString() !== item.product?.toString()) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Product does not match the sales order item for ${soItem.productName}`
+        });
+      }
+
+      const alreadyDispatched = existingDispatchState?.totalDispatched || 0;
       const remainingQtyAllowed = soItem.quantity - alreadyDispatched;
-      if (item.dispatchQuantity > remainingQtyAllowed) {
+      if (dispatchQuantity > remainingQtyAllowed) {
         await session.abortTransaction();
         return res.status(400).json({
           success: false,
@@ -355,17 +393,8 @@ export const createSalesChallan = async (req, res) => {
       throw saveError;
     }
 
-    // Update SO dispatch status (like GRN updates PO receipt status)
-    // Fetch all challans for this SO to calculate dispatch status (within transaction)
-    const allChallans = await SalesChallan.find({ salesOrder: so._id }).session(session);
-    so.updateDispatchStatus(allChallans);
-    await so.save({ session });
-
-    // Process Stock Out for inventory (following GRN pattern)
-    // IMPORTANT: Only deduct stock when SO item is COMPLETE (like GRN only creates lots when PO item is complete)
-    // Stock out happens ONLY when:
-    // 1. Item is 100% dispatched (quantity fully dispatched), OR
-    // 2. Item is manually marked as complete
+    // Issue each challan's dispatched quantity immediately. "Mark Final" only closes
+    // the SO item; it must never make this transaction re-issue historical challans.
     console.log(`\n🔄 Starting stock out processing for ${items.length} item(s)...`);
     
     for (const item of items) {
@@ -385,75 +414,33 @@ export const createSalesChallan = async (req, res) => {
       
       console.log(`   SO Item found: ${soItem.productName}, Qty: ${soItem.quantity}`);
       
-      // Calculate total dispatched for this SO item across all challans
-      const totalDispatched = allChallans.reduce((sum, ch) => {
-        const chItem = ch.items.find(i => i.salesOrderItem.toString() === item.salesOrderItem.toString());
-        return sum + (chItem ? chItem.dispatchQuantity : 0);
-      }, 0);
-      
-      // Check if this specific SO item is now complete
-      const isItemComplete = item.markAsComplete || totalDispatched >= soItem.quantity;
-      
-      console.log(`   Total dispatched across all challans: ${totalDispatched}`);
-      console.log(`   SO item quantity: ${soItem.quantity}`);
-      console.log(`   Mark as complete: ${item.markAsComplete || false}`);
-      console.log(`   Is item complete: ${isItemComplete}`);
-      
-      if (!isItemComplete) {
-        console.log(`⏳ SO item ${item.productName} not yet complete (${totalDispatched}/${soItem.quantity}). Stock will NOT be deducted yet.`);
-        continue; // Skip stock deduction for incomplete items
-      }
-      
-      console.log(`✅ SO item ${item.productName} is COMPLETE (${totalDispatched}/${soItem.quantity}). Processing stock out for ALL challans...`);
-      
-      // When item becomes complete, deduct stock for ALL challans (current + previous)
-      // This is similar to GRN creating lots for all previous partial GRNs when item completes
-      const challansForThisItem = allChallans.filter(ch => 
-        ch.items.some(i => i.salesOrderItem.toString() === item.salesOrderItem.toString())
-      ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); // Process in chronological order
-      
-      console.log(`📦 Found ${challansForThisItem.length} challan(s) for this item. Processing stock out...`);
-      console.log(`   Challan numbers: ${challansForThisItem.map(ch => ch.challanNumber).join(', ')}`);
-      
-      // Check if stock has already been deducted by looking for a movement with all these challan numbers
-      // Include the SO item id so multi-sub-product orders don't collide on the same product+challan reference
-      const challanNumbersStr = `${challansForThisItem.map(ch => ch.challanNumber).sort().join(', ')}|SOItem:${item.salesOrderItem}`;
-      console.log(`   Looking for existing movement with reference: "${challanNumbersStr}"`);
+      const movementReference = `${challan.challanNumber}|SOItem:${item.salesOrderItem}`;
+      console.log(`   Looking for existing movement with reference: "${movementReference}"`);
       
       const existingMovement = await InventoryLot.findOne({
         product: item.product,
         'movements': {
           $elemMatch: {
             type: 'Issued',
-            reference: challanNumbersStr
+            reference: movementReference
           }
         }
       }).session(session).lean();
       
       if (existingMovement) {
-        console.log(`⏭️ Stock already deducted for this SO item (found movement with reference: ${challanNumbersStr})`);
+        console.log(`⏭️ Stock already deducted for this challan item (reference: ${movementReference})`);
         continue;
       }
       
       console.log(`   No existing movement found. Proceeding with stock deduction...`);
       
-      let totalQtyToDeduct = 0;
-      let totalWeightToDeduct = 0;
-      
-      // Calculate total quantity and weight to deduct from all challans.
-      // For sub-product items, use the exact sum of subProductWeights (individual bag weights)
-      // as the authoritative weight — never rely on the stored weight field which may differ
-      // due to legacy data or rounding.
-      for (const challanToProcess of challansForThisItem) {
-        const challanItem = challanToProcess.items.find(i => i.salesOrderItem.toString() === item.salesOrderItem.toString());
-        if (challanItem) {
-          totalQtyToDeduct += challanItem.dispatchQuantity;
-          const exactWeight = Array.isArray(challanItem.subProductWeights) && challanItem.subProductWeights.length > 0
-            ? challanItem.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0)
-            : (challanItem.weight || 0);
-          totalWeightToDeduct += exactWeight;
-        }
-      }
+      const challanItem = challan.items.find(
+        ci => ci.salesOrderItem.toString() === item.salesOrderItem.toString()
+      );
+      const {
+        quantity: totalQtyToDeduct,
+        weight: totalWeightToDeduct
+      } = getChallanIssueTotals(challanItem);
       
       console.log(`📊 Total to deduct: ${totalQtyToDeduct} ${item.unit}, ${totalWeightToDeduct.toFixed(2)} kg`);
       
@@ -471,21 +458,16 @@ export const createSalesChallan = async (req, res) => {
       const lots = await InventoryLot.find(lotFilter).sort({ receivedDate: 1 }).session(session); // FIFO: oldest first
 
       if (lots.length === 0) {
-        console.warn(`⚠️ No inventory lots found for ${item.productName}`);
-        continue;
+        const err = new Error(`Insufficient stock for ${item.productName}. Available: 0 ${item.unit}, Required: ${totalQtyToDeduct} ${item.unit}`);
+        err.statusCode = 400;
+        throw err;
       }
 
       // Calculate available quantity and weight to enforce non-negative inventory
       // Production note: when a lot tracks individual per-unit weights (subProductWeights),
       // use the REAL sum of those entries instead of an average — this is the source of truth.
-      const availableQty = lots.reduce((sum, lot) => sum + (lot.currentQuantity - (lot.reservedQuantity || 0)), 0);
-      const availableWeight = lots.reduce((sum, lot) => {
-        if (Array.isArray(lot.subProductWeights) && lot.subProductWeights.length > 0) {
-          return sum + lot.subProductWeights.reduce((s, w) => s + (Number(w) || 0), 0);
-        }
-        const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
-        return sum + (lot.currentQuantity - (lot.reservedQuantity || 0)) * weightPerUnit;
-      }, 0);
+      const availableQty = lots.reduce((sum, lot) => sum + getLotAvailableQuantity(lot), 0);
+      const availableWeight = lots.reduce((sum, lot) => sum + getLotAvailableWeight(lot), 0);
 
       if (totalQtyToDeduct > availableQty) {
         const err = new Error(`Insufficient stock for ${item.productName}. Available: ${availableQty} ${item.unit}, Required: ${totalQtyToDeduct} ${item.unit}`);
@@ -510,7 +492,7 @@ export const createSalesChallan = async (req, res) => {
       for (const lot of lots) {
         if (remainingQty <= 0) break;
 
-        const lotAvailableQty = lot.currentQuantity - (lot.reservedQuantity || 0);
+        const lotAvailableQty = getLotAvailableQuantity(lot);
         if (lotAvailableQty <= 0) continue;
 
         let qtyToDeduct = 0;
@@ -530,7 +512,7 @@ export const createSalesChallan = async (req, res) => {
         } else {
           // Legacy / no individual weight data: proportional average (only path for non-subproduct products)
           qtyToDeduct = Math.min(remainingQty, lotAvailableQty);
-          const weightPerUnit = lot.receivedQuantity > 0 ? (lot.totalWeight || 0) / lot.receivedQuantity : 0;
+          const weightPerUnit = getLotUnitWeight(lot);
           weightToDeduct = qtyToDeduct * weightPerUnit;
         }
 
@@ -540,16 +522,14 @@ export const createSalesChallan = async (req, res) => {
         lot.currentQuantity -= qtyToDeduct;
         lot.totalWeight = Math.max(0, (lot.totalWeight || 0) - weightToDeduct);
 
-        // Add movement record with weight for ALL challans (not just current one)
-        // Reference all challan numbers that contributed to this deduction, scoped to the SO item
-        const challanRefs = challansForThisItem.map(ch => ch.challanNumber).join(', ');
+        // Scope movements to one challan item so partial and final dispatches are independent.
         lot.movements.push({
           type: 'Issued',
           quantity: qtyToDeduct,
           weight: weightToDeduct,
           date: new Date(),
-          reference: challanNumbersStr,
-          notes: `Stock out for Sales Challan(s): ${challanRefs} (SO Item Completed)`,
+          reference: movementReference,
+          notes: `Stock out for Sales Challan: ${challan.challanNumber}`,
           performedBy: createdBy || 'Admin'
         });
 
@@ -583,6 +563,11 @@ export const createSalesChallan = async (req, res) => {
         throw err;
       }
     }
+
+    // Only mark dispatch/final completion after every inventory issue succeeds.
+    const allChallans = await SalesChallan.find({ salesOrder: so._id }).session(session);
+    so.updateDispatchStatus(allChallans);
+    await so.save({ session });
 
     console.log(`✅ Stock out processed for challan ${challan.challanNumber}`);
     

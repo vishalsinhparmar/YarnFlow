@@ -1,337 +1,268 @@
-import { Link, useLocation } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  ClipboardCheck, 
-  Package, 
-  FileText, 
-  Truck, 
-  Database,
-  Users,
-  Factory,
+import { createElement, useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import {
+  BarChart3,
   Boxes,
+  Building2,
+  ChevronDown,
+  ClipboardCheck,
+  Database,
+  Factory,
+  FileText,
   FolderOpen,
   Layers,
-  Building2,
-  Settings,
+  LayoutDashboard,
   MapPin,
-  BarChart3
-} from "lucide-react";
+  Package,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  ShoppingCart,
+  Truck,
+  Users,
+  X
+} from 'lucide-react';
 
-const SideBarApp = () => {
+const primaryItems = [
+  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  { name: 'Purchase Order (PO)', path: '/purchase-order', icon: ShoppingCart },
+  { name: 'Goods Receipt Note (GRN)', path: '/goods-receipt', icon: ClipboardCheck },
+  { name: 'Inventory Lots', path: '/inventory', icon: Package },
+  { name: 'Sales Order (SO)', path: '/sales-order', icon: FileText },
+  { name: 'Sales Challan', path: '/sales-challan', icon: Truck }
+];
+
+const masterDataItems = [
+  { name: 'Dashboard', path: '/master-data', icon: LayoutDashboard },
+  { name: 'Customers', path: '/master-data/customers', icon: Users },
+  { name: 'Suppliers', path: '/master-data/suppliers', icon: Factory },
+  { name: 'Products', path: '/master-data/products', icon: Boxes },
+  { name: 'Categories', path: '/master-data/categories', icon: FolderOpen },
+  { name: 'Sub Products', path: '/master-data/sub-products', icon: Layers }
+];
+
+const configurationItems = [
+  { name: 'Warehouses', path: '/configuration/warehouses', icon: MapPin },
+  { name: 'Users', path: '/configuration/users', icon: Users }
+];
+
+const NavLink = ({ item, active, collapsed, onNavigate, nested = false }) => (
+  <Link
+    to={item.path}
+    onClick={onNavigate}
+    title={collapsed ? item.name : undefined}
+    aria-label={collapsed ? item.name : undefined}
+    className={`group flex min-h-10 items-center rounded-lg transition-colors ${
+      collapsed ? 'justify-center px-2' : nested ? 'gap-3 px-3 py-2.5' : 'gap-3 px-3 py-2.5'
+    } ${
+      active
+        ? 'bg-orange-600 text-white shadow-sm'
+        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+    }`}
+  >
+    {createElement(item.icon, {
+      className: `h-5 w-5 flex-shrink-0 ${active ? 'text-white' : 'text-gray-400 group-hover:text-white'}`
+    })}
+    {!collapsed && <span className="min-w-0 truncate text-sm font-medium">{item.name}</span>}
+    {!collapsed && active && <span className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full bg-white" />}
+  </Link>
+);
+
+const SideBarApp = ({
+  collapsed = false,
+  onToggle = () => {},
+  mobileOpen = false,
+  onMobileClose = () => {}
+}) => {
   const location = useLocation();
-  const [masterDataOpen, setMasterDataOpen] = useState(false);
-  const [configOpen, setConfigOpen] = useState(false);
+  const isMasterDataActive = location.pathname.startsWith('/master-data');
   const isConfigActive = location.pathname.startsWith('/configuration');
+  const [masterDataOpen, setMasterDataOpen] = useState(isMasterDataActive);
+  const [configOpen, setConfigOpen] = useState(isConfigActive);
+
+  useEffect(() => {
+    if (isMasterDataActive) setMasterDataOpen(true);
+  }, [isMasterDataActive]);
 
   useEffect(() => {
     if (isConfigActive) setConfigOpen(true);
   }, [isConfigActive]);
 
-  const menuItems = [
-    {
-      name: "Dashboard",
-      path: "/dashboard",
-      icon: LayoutDashboard
-    },
-    {
-      name: "Purchase Order (PO)",
-      path: "/purchase-order",
-      icon: ShoppingCart
-    },
-    {
-      name: "Goods Receipt Note (GRN)",
-      path: "/goods-receipt",
-      icon: ClipboardCheck
-    },
-    {
-      name: "Inventory Lots",
-      path: "/inventory",
-      icon: Package
-    },
-    {
-      name: "Sales Order (SO)",
-      path: "/sales-order",
-      icon: FileText
-    },
-    {
-      name: "Sales Challan",
-      path: "/sales-challan",
-      icon: Truck
+  const handleSectionToggle = (section) => {
+    if (collapsed) {
+      onToggle();
+      if (section === 'master') setMasterDataOpen(true);
+      if (section === 'config') setConfigOpen(true);
+      return;
     }
-  ];
-
-  const masterDataItems = [
-    {
-      name: "Dashboard",
-      path: "/master-data",
-      icon: LayoutDashboard
-    },
-    {
-      name: "Customers",
-      path: "/master-data/customers",
-      icon: Users
-    },
-    {
-      name: "Suppliers",
-      path: "/master-data/suppliers",
-      icon: Factory
-    },
-    {
-      name: "Products",
-      path: "/master-data/products",
-      icon: Boxes
-    },
-    {
-      name: "Categories",
-      path: "/master-data/categories",
-      icon: FolderOpen
-    },
-    {
-      name: "Sub Products",
-      path: "/master-data/sub-products",
-      icon: Layers
-    }
-  ];
-
-  // Check if current path is within master data section
-  const isMasterDataActive = location.pathname.startsWith('/master-data');
-  
-  // Auto-open master data dropdown if we're in that section
-  useEffect(() => {
-    if (isMasterDataActive) {
-      setMasterDataOpen(true);
-    }
-  }, [isMasterDataActive]);
+    if (section === 'master') setMasterDataOpen((open) => !open);
+    if (section === 'config') setConfigOpen((open) => !open);
+  };
 
   return (
-    <aside className="fixed left-0 top-16 h-full w-64 bg-gradient-to-b from-gray-900 to-gray-800 text-white shadow-xl z-40 overflow-hidden border-r border-gray-700">
-      <div className="h-full flex flex-col">
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 pt-6 pb-4">
+    <>
+      {mobileOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 top-16 z-30 bg-black/50 lg:hidden"
+          onClick={onMobileClose}
+          aria-label="Close navigation"
+        />
+      )}
+
+      <aside
+        aria-label="Primary navigation"
+        className={`fixed bottom-0 left-0 top-16 z-40 flex w-72 flex-col border-r border-gray-800 bg-gray-900 text-white shadow-xl transition-[width,transform] duration-200 lg:translate-x-0 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${collapsed ? 'lg:w-20' : 'lg:w-64'}`}
+      >
+        <div className={`flex h-12 flex-shrink-0 items-center border-b border-gray-800 ${collapsed ? 'justify-center px-2' : 'justify-between px-3'}`}>
+          {!collapsed && <span className="text-xs font-semibold uppercase text-gray-500">Navigation</span>}
+          <button
+            type="button"
+            onClick={onToggle}
+            className="hidden h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-800 hover:text-white lg:flex"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={onMobileClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white lg:hidden"
+            aria-label="Close navigation"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <nav className={`erp-scrollbar-hidden min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-3 ${collapsed ? 'px-2' : 'px-3'}`}>
           <ul className="space-y-1">
-            {menuItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              
-              return (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    className={`group flex items-center px-3 py-3 rounded-lg transition-all duration-200 ${
-                      isActive
-                        ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg transform scale-105"
-                        : "text-gray-300 hover:bg-gray-800 hover:text-white hover:transform hover:scale-102"
-                    }`}
-                  >
-                    <item.icon className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform duration-200" />
-                    <span className="text-sm font-medium">{item.name}</span>
-                    {isActive && (
-                      <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-            
-            {/* Master Data Dropdown */}
-            <li className="mt-6">
-              <div className="mb-2">
-                <div className="flex items-center px-3 py-1">
-                  <div className="flex-1 h-px bg-gray-700"></div>
-                  <span className="px-2 text-xs text-gray-500 font-medium">MASTER DATA</span>
-                  <div className="flex-1 h-px bg-gray-700"></div>
+            {primaryItems.map((item) => (
+              <li key={item.path}>
+                <NavLink
+                  item={item}
+                  active={location.pathname === item.path}
+                  collapsed={collapsed}
+                  onNavigate={onMobileClose}
+                />
+              </li>
+            ))}
+
+            <li className="pt-4">
+              {!collapsed && (
+                <div className="mb-2 flex items-center gap-2 px-2">
+                  <div className="h-px flex-1 bg-gray-800" />
+                  <span className="text-xs font-semibold uppercase text-gray-500">Master Data</span>
+                  <div className="h-px flex-1 bg-gray-800" />
                 </div>
-              </div>
-              
-              <div className="bg-gray-800/50 rounded-lg border border-gray-700">
-                <button
-                  onClick={() => setMasterDataOpen(!masterDataOpen)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${
-                    isMasterDataActive
-                      ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg"
-                      : "text-gray-300 hover:bg-gray-700 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <Database className="w-5 h-5 mr-3" />
+              )}
+              <button
+                type="button"
+                onClick={() => handleSectionToggle('master')}
+                title={collapsed ? 'Master Data' : undefined}
+                className={`flex min-h-10 w-full items-center rounded-lg transition-colors ${
+                  collapsed ? 'justify-center px-2' : 'gap-3 px-3 py-2.5'
+                } ${
+                  isMasterDataActive
+                    ? 'bg-orange-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
+                aria-expanded={!collapsed && masterDataOpen}
+              >
+                <Database className="h-5 w-5 flex-shrink-0" />
+                {!collapsed && (
+                  <>
                     <span className="text-sm font-semibold">Master Data</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {isMasterDataActive && (
-                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                    )}
-                    <svg
-                      className={`w-4 h-4 transition-transform duration-300 ${
-                        masterDataOpen ? "rotate-180" : ""
-                      }`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </button>
-                
-                {/* Enhanced Dropdown Menu */}
-                <div className={`overflow-hidden transition-all duration-300 ${
-                  masterDataOpen ? "max-h-[28rem] opacity-100" : "max-h-0 opacity-0"
-                }`}>
-                  <div className="px-2 pb-2">
-                    <ul className="space-y-1">
-                      {masterDataItems.map((item, index) => {
-                        const isActive = location.pathname === item.path;
-                        
-                        return (
-                          <li key={item.path} 
-                              className={`transform transition-all duration-200 ${
-                                masterDataOpen ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0"
-                              }`}
-                              style={{ transitionDelay: `${index * 50}ms` }}>
-                            <Link
-                              to={item.path}
-                              className={`group flex items-center px-4 py-2.5 rounded-md transition-all duration-200 text-sm relative ${
-                                isActive
-                                  ? "bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-md transform scale-105"
-                                  : "text-gray-400 hover:bg-gray-700 hover:text-white hover:transform hover:scale-102"
-                              }`}
-                            >
-                              {/* Connection Line */}
-                              <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-600 group-hover:bg-orange-400 transition-colors duration-200"></div>
-                              
-                              <item.icon className="w-4 h-4 mr-3 group-hover:scale-110 transition-transform duration-200" />
-                              <span className="font-medium">{item.name}</span>
-                              
-                              {/* Active Indicator */}
-                              {isActive && (
-                                <div className="ml-auto flex items-center space-x-1">
-                                  <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                                  <div className="w-1 h-1 bg-white/70 rounded-full"></div>
-                                </div>
-                              )}
-                              
-                              {/* Hover Effect */}
-                              {!isActive && (
-                                <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                  <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                  </svg>
-                                </div>
-                              )}
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                </div>
-              </div>
+                    <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${masterDataOpen ? 'rotate-180' : ''}`} />
+                  </>
+                )}
+              </button>
+              {!collapsed && masterDataOpen && (
+                <ul className="mt-1 space-y-1 border-l border-gray-700 pl-2">
+                  {masterDataItems.map((item) => (
+                    <li key={item.path}>
+                      <NavLink
+                        item={item}
+                        active={location.pathname === item.path}
+                        collapsed={false}
+                        nested
+                        onNavigate={onMobileClose}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
 
-            {/* Company Profile */}
-            <li className="mt-2">
-              <Link
-                to="/company-profile"
-                className={`group flex items-center px-3 py-3 rounded-lg transition-all duration-200 ${
-                  location.pathname === '/company-profile'
-                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg transform scale-105'
+            <li className="pt-1">
+              <NavLink
+                item={{ name: 'Company Profile', path: '/company-profile', icon: Building2 }}
+                active={location.pathname === '/company-profile'}
+                collapsed={collapsed}
+                onNavigate={onMobileClose}
+              />
+            </li>
+
+            <li className="pt-1">
+              <button
+                type="button"
+                onClick={() => handleSectionToggle('config')}
+                title={collapsed ? 'Configuration' : undefined}
+                className={`flex min-h-10 w-full items-center rounded-lg transition-colors ${
+                  collapsed ? 'justify-center px-2' : 'gap-3 px-3 py-2.5'
+                } ${
+                  isConfigActive
+                    ? 'bg-orange-600 text-white'
                     : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                 }`}
+                aria-expanded={!collapsed && configOpen}
               >
-                <Building2 className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform duration-200" />
-                <span className="text-sm font-medium">Company Profile</span>
-                {location.pathname === '/company-profile' && (
-                  <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
-                )}
-              </Link>
-            </li>
-
-            {/* Configuration Dropdown */}
-            <li className="mt-2">
-              <div className="bg-gray-800/50 rounded-lg border border-gray-700">
-                <button
-                  onClick={() => setConfigOpen(!configOpen)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${
-                    isConfigActive
-                      ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <Settings className="w-5 h-5 mr-3" />
+                <Settings className="h-5 w-5 flex-shrink-0" />
+                {!collapsed && (
+                  <>
                     <span className="text-sm font-semibold">Configuration</span>
-                  </div>
-                  <svg className={`w-4 h-4 transition-transform duration-300 ${configOpen ? 'rotate-180' : ''}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                <div className={`overflow-hidden transition-all duration-300 ${configOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}>
-                  <div className="px-2 pb-2">
-                    <ul className="space-y-1">
-                      {[
-                        { name: 'Warehouses', path: '/configuration/warehouses', icon: MapPin },
-                        { name: 'Users',      path: '/configuration/users',      icon: Users  }
-                      ].map((item, index) => {
-                        const isActive = location.pathname === item.path;
-                        return (
-                          <li key={item.path}
-                            className={`transform transition-all duration-200 ${configOpen ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
-                            style={{ transitionDelay: `${index * 50}ms` }}>
-                            <Link
-                              to={item.path}
-                              className={`group flex items-center px-4 py-2.5 rounded-md transition-all duration-200 text-sm relative ${
-                                isActive
-                                  ? 'bg-gradient-to-r from-orange-400 to-orange-500 text-white shadow-md'
-                                  : 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                              }`}
-                            >
-                              <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-600 group-hover:bg-orange-400 transition-colors"></div>
-                              <item.icon className="w-4 h-4 mr-3" />
-                              <span className="font-medium">{item.name}</span>
-                              {isActive && <div className="ml-auto w-1.5 h-1.5 bg-white rounded-full"></div>}
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                </div>
-              </div>
+                    <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${configOpen ? 'rotate-180' : ''}`} />
+                  </>
+                )}
+              </button>
+              {!collapsed && configOpen && (
+                <ul className="mt-1 space-y-1 border-l border-gray-700 pl-2">
+                  {configurationItems.map((item) => (
+                    <li key={item.path}>
+                      <NavLink
+                        item={item}
+                        active={location.pathname === item.path}
+                        collapsed={false}
+                        nested
+                        onNavigate={onMobileClose}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
 
-            {/* Reports */}
-            <li className="mt-2">
-              <Link
-                to="/reports"
-                className={`group flex items-center px-3 py-3 rounded-lg transition-all duration-200 ${
-                  location.pathname === '/reports'
-                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg transform scale-105'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                <BarChart3 className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform duration-200" />
-                <span className="text-sm font-medium">Reports</span>
-                {location.pathname === '/reports' && (
-                  <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
-                )}
-              </Link>
+            <li className="pt-1">
+              <NavLink
+                item={{ name: 'Reports', path: '/reports', icon: BarChart3 }}
+                active={location.pathname === '/reports'}
+                collapsed={collapsed}
+                onNavigate={onMobileClose}
+              />
             </li>
           </ul>
         </nav>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-700 flex-shrink-0">
-          <div className="text-xs text-gray-500 text-center">
-            <div className="flex items-center justify-center space-x-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span>System Online</span>
-            </div>
+        <div className={`flex h-12 flex-shrink-0 items-center border-t border-gray-800 px-3 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-green-500" />
+            {!collapsed && <span className="text-xs text-gray-400">System Online</span>}
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 };
 

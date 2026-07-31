@@ -1,13 +1,32 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { FileText, CheckCircle, Clock, Calendar, Plus, Search, ChevronDown, ChevronRight, Eye } from 'lucide-react';
 import { salesChallanAPI, salesChallanUtils } from '../services/salesChallanAPI';
 import CreateChallanModal from '../components/SalesChallan/CreateChallanModal';
 import ChallanDetailModal from '../components/SalesChallan/ChallanDetailModal';
+import PdfPreviewModal from '../components/SalesChallan/PdfPreviewModal';
+
+const getChallanDisplayStatus = (items = []) => {
+  if (items.length === 0) return 'Pending';
+
+  let completedItems = 0;
+  let hasDispatch = false;
+  items.forEach((item) => {
+    const dispatched = Number(item.dispatchQuantity) || 0;
+    const ordered = Number(item.orderedQuantity) || 0;
+    const isComplete = item.manuallyCompleted || (ordered > 0 && dispatched >= ordered);
+    if (isComplete) completedItems += 1;
+    if (dispatched > 0 || item.manuallyCompleted) hasDispatch = true;
+  });
+
+  if (completedItems === items.length) return 'Delivered';
+  if (hasDispatch || completedItems > 0) return 'Partial';
+  return 'Pending';
+};
 
 const SalesChallan = () => {
   const location = useLocation();
-  const [challans, setChallans] = useState([]);
+  const [, setChallans] = useState([]);
   const [groupedBySO, setGroupedBySO] = useState([]);
   const [expandedSOs, setExpandedSOs] = useState({});
   const [soChallanLimits, setSOChallanLimits] = useState({}); // Pagination per SO
@@ -23,17 +42,14 @@ const SalesChallan = () => {
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedChallan, setSelectedChallan] = useState(null);
   const [selectedSO, setSelectedSO] = useState(null);
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState(''); // '', 'Completed', 'Partial'
-  const [currentPage, setCurrentPage] = useState(1);
   const [currentSOPage, setCurrentSOPage] = useState(1);
   const [sosPerPage] = useState(5); // Show 5 SOs per page
-  const [pagination, setPagination] = useState(null);
   const [pdfLoading, setPdfLoading] = useState({});
   const [challanPdfLoading, setChallanPdfLoading] = useState({});
   const [pdfPreviewModal, setPdfPreviewModal] = useState({ open: false, url: null, challanId: null, challanNumber: '' });
@@ -164,39 +180,12 @@ const SalesChallan = () => {
         // Apply status filter on frontend (optimized)
         if (statusFilter && challanData.length > 0) {
           challanData = challanData.filter(challan => {
-            // Safety check
-            if (!challan || !Array.isArray(challan.items) || challan.items.length === 0) {
-              return statusFilter === 'Pending';
-            }
-            
-            // Use for loop for better performance with large datasets
-            let allItemsComplete = true;
-            let anyItemPartial = false;
-            
-            for (let i = 0; i < challan.items.length; i++) {
-              const item = challan.items[i];
-              const dispatched = item.dispatchQuantity || 0;
-              const ordered = item.orderedQuantity || 0;
-              const manuallyCompleted = item.manuallyCompleted || false;
-              
-              if (manuallyCompleted || dispatched >= ordered) {
-                // Item is complete - continue checking
-                continue;
-              } else if (dispatched > 0 && dispatched < ordered) {
-                // Item is partial
-                allItemsComplete = false;
-                anyItemPartial = true;
-              } else {
-                // Item is pending
-                allItemsComplete = false;
-              }
-            }
-            
-            // Return based on filter
+            const displayStatus = getChallanDisplayStatus(challan?.items || []);
             if (statusFilter === 'Completed') {
-              return allItemsComplete;
-            } else if (statusFilter === 'Partial') {
-              return anyItemPartial;
+              return displayStatus === 'Delivered';
+            }
+            if (statusFilter === 'Partial') {
+              return displayStatus === 'Partial';
             }
             return true;
           });
@@ -281,24 +270,6 @@ const SalesChallan = () => {
     setConsolidatedPreviewModal({ open: false, url: null, soId: null, soNumber: '' });
   };
 
-  // Handle status update
-  const handleStatusUpdate = async (challanId, statusData) => {
-    try {
-      await salesChallanAPI.updateStatus(challanId, statusData);
-      setShowStatusModal(false);
-      fetchAllData(); // Refresh data
-      
-      // Update selected challan if it's the one being updated
-      if (selectedChallan && selectedChallan._id === challanId) {
-        const updatedChallan = await salesChallanAPI.getById(challanId);
-        setSelectedChallan(updatedChallan.data);
-      }
-    } catch (err) {
-      console.error('Error updating status:', err);
-      throw err;
-    }
-  };
-
   // Handle individual challan PDF preview — opens in-app modal
   const handlePreviewChallanPDF = async (challanId, challanNumber) => {
     try {
@@ -341,34 +312,6 @@ const SalesChallan = () => {
 
   return (
     <div className="space-y-6">
-      {/* PDF Preview Modal */}
-      {pdfPreviewModal.open && pdfPreviewModal.url && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ height: '90vh' }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                <h3 className="text-base font-semibold text-gray-900">PDF Preview — {pdfPreviewModal.challanNumber}</h3>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleDownloadChallanPDF(pdfPreviewModal.challanId, pdfPreviewModal.challanNumber)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Download
-                </button>
-                <button
-                  onClick={closePdfPreviewModal}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-            <iframe src={pdfPreviewModal.url} className="flex-1 w-full rounded-b-2xl" title="PDF Preview" />
-          </div>
-        </div>
-      )}
       {/* Compact Header with Stats */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="p-6">
@@ -679,46 +622,14 @@ const SalesChallan = () => {
                         <tr>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Challan Number</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Dispatch Date</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Products</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Quantity & Weight</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Dispatched Items</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-100">
                         {so.challans.slice(0, soChallanLimits[soKey] || 5).map((challan) => {
-                          // Determine challan status based on item completion
-                          let challanStatus = 'Pending';
-                          
-                          if (challan.items && challan.items.length > 0) {
-                            let allItemsComplete = true;
-                            let anyItemPartial = false;
-                            
-                            challan.items.forEach(item => {
-                              const dispatched = item.dispatchQuantity || 0;
-                              const ordered = item.orderedQuantity || 0;
-                              const manuallyCompleted = item.manuallyCompleted || false;
-                              
-                              if (manuallyCompleted || dispatched >= ordered) {
-                                // Item is complete
-                              } else if (dispatched > 0 && dispatched < ordered) {
-                                // Item is partial
-                                allItemsComplete = false;
-                                anyItemPartial = true;
-                              } else {
-                                // Item is pending
-                                allItemsComplete = false;
-                              }
-                            });
-                            
-                            if (allItemsComplete) {
-                              challanStatus = 'Delivered';
-                            } else if (anyItemPartial) {
-                              challanStatus = 'Partial';
-                            } else {
-                              challanStatus = 'Pending';
-                            }
-                          }
+                          const challanStatus = getChallanDisplayStatus(challan.items || []);
                           
                           return (
                             <tr key={challan._id} className="hover:bg-gray-50 transition-colors">
@@ -737,26 +648,35 @@ const SalesChallan = () => {
                                   {salesChallanUtils.formatDate(challan.challanDate)}
                                 </div>
                               </td>
-                              <td className="px-6 py-4">
-                                {challan.items?.map((item, idx) => (
-                                  <div key={idx} className="text-sm mb-1 last:mb-0">
-                                    <span className="font-medium text-gray-900">
-                                      {item.subProductName ? `${item.productName} X ${item.subProductName}` : item.productName}
-                                    </span>
-                                  </div>
-                                ))}
-                              </td>
-                              <td className="px-6 py-4">
-                                {challan.items?.map((item, idx) => (
-                                  <div key={idx} className="text-sm mb-1 last:mb-0">
-                                    <div className="font-semibold text-gray-900">
-                                      {item.dispatchQuantity} {item.unit}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      {item.weight?.toFixed(2) || 0} kg
-                                    </div>
-                                  </div>
-                                ))}
+                              <td className="min-w-[360px] px-6 py-3">
+                                <div className="divide-y divide-gray-100">
+                                  {challan.items?.map((item, idx) => {
+                                    const exactWeights = Array.isArray(item.subProductWeights)
+                                      ? item.subProductWeights
+                                      : [];
+                                    const itemWeight = exactWeights.length > 0
+                                      ? exactWeights.reduce((sum, weight) => sum + (Number(weight) || 0), 0)
+                                      : Number(item.weight) || 0;
+                                    return (
+                                      <div
+                                        key={item._id || `${challan._id}-item-${idx}`}
+                                        className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 py-2 first:pt-0 last:pb-0"
+                                      >
+                                        <p className="min-w-0 break-words text-sm font-medium text-gray-900">
+                                          {item.subProductName
+                                            ? `${item.productName} X ${item.subProductName}`
+                                            : item.productName}
+                                        </p>
+                                        <div className="whitespace-nowrap text-right">
+                                          <p className="text-sm font-semibold text-gray-900">
+                                            {item.dispatchQuantity} {item.unit}
+                                          </p>
+                                          <p className="text-xs text-gray-500">{itemWeight.toFixed(2)} kg</p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-lg ${
@@ -908,69 +828,33 @@ const SalesChallan = () => {
         />
       )}
 
-      {/* Individual Challan PDF Preview Modal */}
-      {pdfPreviewModal.open && pdfPreviewModal.url && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ height: '90vh' }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                <h3 className="text-base font-semibold text-gray-900">Challan PDF — {pdfPreviewModal.challanNumber}</h3>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleDownloadChallanPDF(pdfPreviewModal.challanId, pdfPreviewModal.challanNumber)}
-                  disabled={challanPdfLoading[pdfPreviewModal.challanId]}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                  Download
-                </button>
-                <button
-                  onClick={closePdfPreviewModal}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  Close
-                </button>
-              </div>
-            </div>
-            <iframe src={pdfPreviewModal.url} className="flex-1 w-full rounded-b-2xl" title="Challan PDF Preview" />
-          </div>
-        </div>
-      )}
+      <PdfPreviewModal
+        isOpen={pdfPreviewModal.open}
+        url={pdfPreviewModal.url}
+        title="Delivery challan"
+        reference={pdfPreviewModal.challanNumber}
+        description="Individual challan document"
+        onClose={closePdfPreviewModal}
+        onDownload={() => handleDownloadChallanPDF(
+          pdfPreviewModal.challanId,
+          pdfPreviewModal.challanNumber
+        )}
+        downloading={challanPdfLoading[pdfPreviewModal.challanId] === 'download'}
+      />
 
-      {/* Consolidated SO PDF Preview Modal */}
-      {consolidatedPreviewModal.open && consolidatedPreviewModal.url && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col" style={{ height: '90vh' }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                <h3 className="text-base font-semibold text-gray-900">Consolidated PDF — {consolidatedPreviewModal.soNumber}</h3>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleDownloadPDF(consolidatedPreviewModal.soId, consolidatedPreviewModal.soNumber)}
-                  disabled={pdfLoading[consolidatedPreviewModal.soId]}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                  Download
-                </button>
-                <button
-                  onClick={closeConsolidatedPreviewModal}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  Close
-                </button>
-              </div>
-            </div>
-            <iframe src={consolidatedPreviewModal.url} className="flex-1 w-full rounded-b-2xl" title="Consolidated PDF Preview" />
-          </div>
-        </div>
-      )}
+      <PdfPreviewModal
+        isOpen={consolidatedPreviewModal.open}
+        url={consolidatedPreviewModal.url}
+        title="Consolidated delivery challan"
+        reference={consolidatedPreviewModal.soNumber}
+        description="All challans for this sales order"
+        onClose={closeConsolidatedPreviewModal}
+        onDownload={() => handleDownloadPDF(
+          consolidatedPreviewModal.soId,
+          consolidatedPreviewModal.soNumber
+        )}
+        downloading={pdfLoading[consolidatedPreviewModal.soId] === 'download'}
+      />
 
     </div>
   );

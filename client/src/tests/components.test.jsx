@@ -336,7 +336,9 @@ describe('🎨 YarnFlow Client Components Production Tests', () => {
         })
       );
 
-      await expect(apiRequest('/secured')).rejects.toThrow('Unauthorized');
+      await expect(apiRequest('/secured')).rejects.toThrow(
+        'Session expired. Please log in again.'
+      );
     });
 
     it('✅ common.js apiRequest handles JSON parse failure gracefully', async () => {

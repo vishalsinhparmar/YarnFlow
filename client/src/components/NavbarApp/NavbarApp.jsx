@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, User, ChevronDown, Shield, Mail } from 'lucide-react';
+import { LogOut, User, ChevronDown, Shield, Mail, Menu } from 'lucide-react';
 
-const NavBarApp = () => {
+const NavBarApp = ({ onMobileMenuToggle = () => {} }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
@@ -27,27 +27,35 @@ const NavBarApp = () => {
   };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 shadow-2xl border-b border-gray-700 z-50">
-      <div className="flex items-center justify-between px-6 py-2">
+    <nav className="fixed left-0 right-0 top-0 z-50 h-16 border-b border-gray-700 bg-gray-900 shadow-lg">
+      <div className="flex h-full items-center justify-between px-3 sm:px-4 lg:px-6">
         {/* Logo Section */}
-        <div className="flex items-center space-x-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={onMobileMenuToggle}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white lg:hidden"
+            aria-label="Open navigation"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg blur-md opacity-50"></div>
             <div className="relative bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-2">
               <Shield className="w-5 h-5 text-white" />
             </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">YarnFlow</h1>
-            <p className="text-xs text-gray-400">Management System</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-bold text-white sm:text-2xl">YarnFlow</h1>
+            <p className="hidden text-xs text-gray-400 sm:block">Management System</p>
           </div>
-          <div className="ml-2 bg-gradient-to-r from-orange-500 to-orange-600 px-2 py-1 rounded-md">
+          <div className="hidden rounded-md bg-orange-600 px-2 py-1 sm:block">
             <span className="text-xs font-semibold text-white">ADMIN</span>
           </div>
         </div>
 
         {/* Right Section */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center">
           {/* System Status Indicator
           <div className="hidden lg:flex items-center space-x-2 bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/20">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>

@@ -2,14 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Minus, Loader2, Warehouse, StickyNote, Package, MapPin, FileText, Calendar, ChevronDown, X, CheckCircle2 } from 'lucide-react';
 import { purchaseOrderAPI } from '../../services/purchaseOrderAPI';
-import masterDataAPI from '../../services/masterDataAPI';
 import PurchaseOrderForm from '../PurchaseOrders/PurchaseOrderForm';
 import SearchableSelect from '../common/SearchableSelect';
 import SubProductSelector from '../common/SubProductSelector';
 import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
 import warehouseAPI from '../../services/warehouseAPI';
 
-const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) => {
+const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO }) => {
   const [selectedPO, setSelectedPO] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -67,6 +66,8 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
       // Just trigger the normal PO selection
       handlePOSelection(preSelectedPO);
     }
+  // Selection should rerun only when the route-provided PO changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preSelectedPO]);
 
   // Populate form if editing
@@ -377,15 +378,27 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
       )}
 
       {/* Purchase Order Selection */}
-      <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 border border-green-100">
-        <div className="flex items-center mb-3 gap-2">
-          <FileText className="h-4 w-4 text-green-600" />
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Purchase Order Selection</h3>
+      <section className="overflow-visible rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-green-50 text-green-700">
+              <FileText className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-gray-900">Purchase order</h3>
+              <p className="text-xs text-gray-500">Source document for this goods receipt</p>
+            </div>
+          </div>
+          {!loadingPOs && totalPOs !== null && (
+            <p className="text-sm text-gray-500">
+              <span className="font-semibold text-gray-900">{totalPOs}</span> available
+            </p>
+          )}
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:px-5 md:grid-cols-[minmax(0,1fr)_15rem]">
           {/* PO Selection with SearchableSelect */}
-          <div>
+          <div className="min-w-0">
             <SearchableSelect
               label="Purchase Order"
               required
@@ -406,23 +419,48 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
               onAddNew={() => setShowPOModal(true)}
               addNewLabel="Add PO"
               error={errors.purchaseOrder}
-              renderOption={(po, isSelected) => (
-                <div className="flex flex-col">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900">{po.poNumber}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      po.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                      po.status === 'Partially_Received' ? 'bg-blue-100 text-blue-800' :
-                      po.status === 'Approved' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {po.status?.replace('_', ' ') || 'Pending'}
-                    </span>
+              renderValue={(po) => (
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-gray-900">{po.poNumber}</p>
+                    <p className="truncate text-xs text-gray-500">
+                      {po.supplierDetails?.companyName || po.supplier?.companyName || 'Unknown Supplier'}
+                    </p>
                   </div>
-                  <span className="text-sm text-gray-500">{po.supplierDetails?.companyName || po.supplier?.companyName || 'Unknown Supplier'}</span>
-                  {po.category?.categoryName && (
-                    <span className="text-xs text-green-600">{po.category.categoryName}</span>
-                  )}
+                  <span className="hidden flex-shrink-0 text-xs font-medium text-green-700 sm:inline">
+                    {po.status?.replaceAll('_', ' ') || 'Pending'}
+                  </span>
+                </div>
+              )}
+              renderOption={(po, isSelected) => (
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md ${
+                    isSelected ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {isSelected
+                      ? <CheckCircle2 className="h-4 w-4" />
+                      : <FileText className="h-4 w-4" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <span className="truncate font-semibold text-gray-900">{po.poNumber}</span>
+                      <span className={`flex-shrink-0 text-xs font-medium ${
+                        po.status === 'Approved' ? 'text-green-700' :
+                        po.status === 'Partially_Received' ? 'text-blue-700' :
+                        po.status === 'Pending' ? 'text-amber-700' :
+                        'text-gray-600'
+                      }`}>
+                        {po.status?.replaceAll('_', ' ') || 'Pending'}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-sm text-gray-600">
+                      {po.supplierDetails?.companyName || po.supplier?.companyName || 'Unknown Supplier'}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                      {po.category?.categoryName && <span>{po.category.categoryName}</span>}
+                      {isSelected && <span className="font-medium text-blue-700">Selected</span>}
+                    </div>
+                  </div>
                 </div>
               )}
             />
@@ -448,7 +486,7 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
             )}
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Warehouse Information */}
       <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg p-4 border border-purple-100">
@@ -508,199 +546,238 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO, purchaseOrderData }) 
 
       {/* Items */}
       {selectedPO && formData.items.length > 0 && (
-        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-4 border border-orange-100">
-          <div className="flex items-center mb-3 gap-2">
-            <Package className="h-4 w-4 text-orange-600" />
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Items Received</h3>
+        <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-green-50 text-green-700">
+                <Package className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">Items to receive</h3>
+                <p className="text-xs text-gray-500">Remaining purchase order balance</p>
+              </div>
+            </div>
           </div>
-          
-          <div className="space-y-3">
+
+          <div className="hidden grid-cols-12 gap-4 border-b border-gray-200 bg-white px-5 py-2.5 text-xs font-semibold uppercase text-gray-500 lg:grid">
+            <div className="col-span-3">Product / variant</div>
+            <div className="col-span-2">PO balance</div>
+            <div className="col-span-6">Receiving now</div>
+            <div className="col-span-1 text-center">Final</div>
+          </div>
+
+          <div className="divide-y divide-gray-200">
             {getProductGroups().map((group, groupIndex) => (
-              <div key={groupIndex} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-gradient-to-r from-orange-100 to-amber-100 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
-                  <div>
-                    <div className="font-semibold text-gray-900">{group.productName}</div>
-                    <div className="text-xs text-gray-500">{group.productCode} • Unit: {group.unit}</div>
-                  </div>
-                  <div className="text-xs font-semibold text-orange-700 bg-white px-2 py-1 rounded border border-orange-200">
-                    {group.items.length} variant{group.items.length > 1 ? 's' : ''}
+              <div key={`${group.product || group.productName}-${groupIndex}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-green-100 bg-green-50 px-4 py-2.5 sm:px-5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-semibold text-gray-900">{group.productName}</span>
+                    {group.productCode && (
+                      <span className="text-xs text-gray-500">{group.productCode}</span>
+                    )}
+                    <span className="text-xs font-medium text-green-700">{group.unit}</span>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Product / Variant
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Ordered
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-green-700 uppercase tracking-wider bg-green-50/50">
-                          Receiving Now
-                        </th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Mark Final
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {group.items.map((item, rowIndex) => {
-                        const globalIndex = group.indices[rowIndex];
-                        const completionPercentage = item.orderedQuantity > 0
-                          ? Math.round(((item.previouslyReceived + Number(item.receivedQuantity || 0)) / item.orderedQuantity) * 100)
-                          : 0;
-                        return (
-                          <tr key={globalIndex} className="hover:bg-gray-50">
-                            <td className="px-4 py-4">
-                              <div className="text-sm font-semibold text-green-700">
-                                {item.subProductName ? `${item.productName} X ${item.subProductName}` : <span className="text-gray-400">-</span>}
+
+                <div className="divide-y divide-gray-100">
+                  {group.items.map((item, rowIndex) => {
+                    const globalIndex = group.indices[rowIndex];
+                    const maxReceivable = item.orderedQuantity - item.previouslyReceived;
+
+                    return (
+                      <div key={globalIndex} className="px-4 py-4 transition-colors hover:bg-gray-50 sm:px-5">
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
+                          <div className="min-w-0 lg:col-span-3">
+                            <p className="mb-1 text-xs font-semibold uppercase text-gray-500 lg:hidden">
+                              Product / variant
+                            </p>
+                            <div className="flex min-w-0 items-start gap-2">
+                              <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${
+                                item.subProductName ? 'bg-green-500' : 'bg-blue-500'
+                              }`} />
+                              <div className="min-w-0">
+                                <p className="break-words text-sm font-semibold text-gray-900">
+                                  {item.subProductName
+                                    ? `${item.productName} X ${item.subProductName}`
+                                    : item.productName}
+                                </p>
                               </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="text-sm font-medium text-gray-900">{item.orderedQuantity} {item.unit}</div>
-                              <div className="text-xs text-gray-500">{item.orderedWeight > 0 ? item.orderedWeight + ' kg' : '-'}</div>
-                            </td>
-                            <td className="px-4 py-4 bg-green-50/30">
-                              <div className="space-y-3">
-                                <div>
-                                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Quantity</div>
+                            </div>
+                            {item.previouslyReceived > 0 && (
+                              <p className="mt-2 text-xs text-gray-500">
+                                Previously received: <span className="font-medium text-gray-700">{item.previouslyReceived} {item.unit}</span>
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="lg:col-span-2">
+                            <p className="mb-1 text-xs font-semibold uppercase text-gray-500 lg:hidden">
+                              PO balance
+                            </p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {maxReceivable} {item.unit}
+                            </p>
+                          </div>
+
+                          <div className="min-w-0 lg:col-span-6">
+                            <p className="mb-2 text-xs font-semibold uppercase text-gray-500 lg:hidden">
+                              Receiving now
+                            </p>
+                            <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(15rem,1.2fr)_minmax(10rem,0.8fr)]">
+                              <div className="min-w-0">
+                                <span className="mb-1 block text-xs font-medium text-gray-600">Quantity</span>
+                                <div className="grid grid-cols-[2.25rem_minmax(6rem,1fr)_2.25rem_auto] items-center gap-2">
+                                  <button
+                                    type="button"
+                                    aria-label={`Decrease received quantity for ${item.productName}${item.subProductName ? ` X ${item.subProductName}` : ''}`}
+                                    onClick={() => {
+                                      const newQty = Math.max(0, Number(item.receivedQuantity) - 1);
+                                      handleItemChange(globalIndex, 'receivedQuantity', newQty);
+                                    }}
+                                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                    disabled={item.receivedQuantity <= 0}
+                                  >
+                                    <Minus className="h-4 w-4" />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    aria-label={`Received quantity for ${item.productName}${item.subProductName ? ` X ${item.subProductName}` : ''}`}
+                                    value={item.receivedQuantity}
+                                    onChange={(e) => handleItemChange(globalIndex, 'receivedQuantity', e.target.value)}
+                                    className="h-9 min-w-0 w-full rounded-md border border-gray-300 bg-white px-2 text-center text-sm font-medium text-gray-900 outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                                    min="0"
+                                    max={maxReceivable}
+                                    step="1"
+                                    placeholder="0"
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label={`Increase received quantity for ${item.productName}${item.subProductName ? ` X ${item.subProductName}` : ''}`}
+                                    onClick={() => {
+                                      const newQty = Math.min(maxReceivable, Number(item.receivedQuantity) + 1);
+                                      handleItemChange(globalIndex, 'receivedQuantity', newQty);
+                                    }}
+                                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                    disabled={item.receivedQuantity >= maxReceivable}
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                  </button>
+                                  <span className="text-xs font-medium text-gray-600">{item.unit}</span>
+                                </div>
+                              </div>
+
+                              <div className="min-w-0">
+                                <span className="mb-1 block text-xs font-medium text-gray-600">Weight</span>
+                                {item.subProduct ? (
+                                  <div className="flex h-9 items-center rounded-md border border-green-200 bg-green-50 px-3">
+                                    <span className="text-sm font-semibold text-green-800">
+                                      {(Number(item.receivedWeight) || 0).toFixed(2)} kg
+                                    </span>
+                                  </div>
+                                ) : (
                                   <div className="flex items-center gap-2">
                                     <button
                                       type="button"
+                                      aria-label={`Decrease received weight for ${item.productName}`}
                                       onClick={() => {
-                                        const newQty = Math.max(0, Number(item.receivedQuantity) - 1);
-                                        handleItemChange(globalIndex, 'receivedQuantity', newQty);
+                                        const weight = Math.max(0, Number(item.receivedWeight || 0) - 1);
+                                        handleItemChange(globalIndex, 'receivedWeight', weight);
                                       }}
-                                      className="p-1 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                                      disabled={item.receivedQuantity <= 0}
+                                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                      disabled={item.receivedWeight <= 0}
                                     >
-                                      <Minus className="w-3.5 h-3.5 text-gray-600" />
+                                      <Minus className="h-4 w-4" />
                                     </button>
-                                    <input
-                                      type="number"
-                                      value={item.receivedQuantity}
-                                      onChange={(e) => handleItemChange(globalIndex, 'receivedQuantity', e.target.value)}
-                                      className="w-20 px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                                      min="0"
-                                      max={item.orderedQuantity - item.previouslyReceived}
-                                      step="1"
-                                      placeholder="0"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const maxAllowed = item.orderedQuantity - item.previouslyReceived;
-                                        const newQty = Math.min(maxAllowed, Number(item.receivedQuantity) + 1);
-                                        handleItemChange(globalIndex, 'receivedQuantity', newQty);
-                                      }}
-                                      className="p-1 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                                      disabled={item.receivedQuantity >= (item.orderedQuantity - item.previouslyReceived)}
-                                    >
-                                      <Plus className="w-3.5 h-3.5 text-gray-600" />
-                                    </button>
-                                    <span className="text-sm text-gray-600">{item.unit}</span>
-                                  </div>
-                                  <div className="text-xs text-gray-500 mt-1">
-                                    Max: {item.orderedQuantity - item.previouslyReceived} {item.unit}
-                                  </div>
-                                  {item.receivedQuantity > (item.orderedQuantity - item.previouslyReceived) && (
-                                    <div className="text-xs text-red-600 mt-1">
-                                      Max allowed: {item.orderedQuantity - item.previouslyReceived} {item.unit}
-                                    </div>
-                                  )}
-                                </div>
-                                <div>
-                                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weight</div>
-                                  {item.subProduct ? (
-                                    <div>
-                                      <div className="text-sm font-semibold text-green-700">Total: {(Number(item.receivedWeight) || 0).toFixed(2)} kg</div>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const weight = Math.max(0, Number(item.receivedWeight || 0) - 1);
-                                          handleItemChange(globalIndex, 'receivedWeight', weight);
-                                        }}
-                                        className="p-0.5 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                                        disabled={item.receivedWeight <= 0}
-                                      >
-                                        <Minus className="w-3 h-3 text-gray-600" />
-                                      </button>
+                                    <span className="relative min-w-0 flex-1">
                                       <input
                                         type="number"
+                                        aria-label={`Received weight for ${item.productName}`}
                                         value={item.receivedWeight || 0}
                                         onChange={(e) => handleItemChange(globalIndex, 'receivedWeight', e.target.value)}
-                                        className="w-20 px-2 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 pr-8 text-center text-sm text-gray-900 outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                                         min="0"
                                         step="0.01"
                                       />
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const maxWeight = item.orderedWeight - item.previousWeight;
-                                          const weight = Math.min(maxWeight, Number(item.receivedWeight || 0) + 1);
-                                          handleItemChange(globalIndex, 'receivedWeight', weight);
-                                        }}
-                                        className="p-0.5 bg-gray-100 hover:bg-gray-200 rounded border border-gray-300 transition-colors"
-                                        disabled={item.receivedWeight >= (item.orderedWeight - item.previousWeight)}
-                                      >
-                                        <Plus className="w-3 h-3 text-gray-600" />
-                                      </button>
-                                      <span className="text-xs text-gray-600">kg</span>
-                                    </div>
-                                  )}
-                                </div>
-                                {item.subProduct && (
-                                  <SubProductSelector
-                                    productId={item.product}
-                                    selectedSubProduct={item.subProduct}
-                                    selectedSubProductName={item.subProductName}
-                                    quantity={item.receivedQuantity}
-                                    weights={item.receivedSubProductWeights}
-                                    categoryHasSubProducts={true}
-                                    onSelectSubProduct={() => {}}
-                                    onWeightsChange={(weights) => handleReceivedSubProductWeightsChange(globalIndex, weights)}
-                                    disableSelection={true}
-                                    allowAddNew={false}
-                                    compact
-                                  />
-                                )}
-                                {errors['items.' + globalIndex + '.receivedQuantity'] && (
-                                  <p className="text-red-500 text-xs">{errors['items.' + globalIndex + '.receivedQuantity']}</p>
+                                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">kg</span>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      aria-label={`Increase received weight for ${item.productName}`}
+                                      onClick={() => {
+                                        const maxWeight = item.orderedWeight - item.previousWeight;
+                                        const weight = Math.min(maxWeight, Number(item.receivedWeight || 0) + 1);
+                                        handleItemChange(globalIndex, 'receivedWeight', weight);
+                                      }}
+                                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                      disabled={item.receivedWeight >= (item.orderedWeight - item.previousWeight)}
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                    </button>
+                                  </div>
                                 )}
                               </div>
-                            </td>
-                            <td className="px-4 py-4 text-center">
-                              <div className="flex flex-col items-center gap-1">
-                                <input
-                                  type="checkbox"
-                                  checked={item.markAsComplete || false}
-                                  onChange={(e) => {
-                                    const updatedItems = [...formData.items];
-                                    updatedItems[globalIndex].markAsComplete = e.target.checked;
-                                    setFormData(prev => ({ ...prev, items: updatedItems }));
-                                  }}
-                                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-                                  title="Mark this item as complete even if quantity doesn't match (e.g., due to losses)"
-                                />
-                                {item.markAsComplete && (
-                                  <span className="text-xs text-green-600 font-medium">Final</span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </div>
+
+                            {errors['items.' + globalIndex + '.receivedQuantity'] && (
+                              <p className="mt-2 text-xs text-red-600">{errors['items.' + globalIndex + '.receivedQuantity']}</p>
+                            )}
+                          </div>
+
+                          <div className="lg:col-span-1">
+                            <p className="mb-2 text-xs font-semibold uppercase text-gray-500 lg:hidden">
+                              Final
+                            </p>
+                            <label className={`inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border px-3 transition-colors lg:w-10 lg:px-0 ${
+                              item.markAsComplete
+                                ? 'border-green-300 bg-green-50'
+                                : 'border-gray-200 bg-white hover:border-gray-300'
+                            }`}>
+                              <input
+                                type="checkbox"
+                                aria-label={`Mark ${item.productName}${item.subProductName ? ` X ${item.subProductName}` : ''} as final`}
+                                checked={item.markAsComplete || false}
+                                onChange={(e) => {
+                                  const updatedItems = [...formData.items];
+                                  updatedItems[globalIndex].markAsComplete = e.target.checked;
+                                  setFormData(prev => ({ ...prev, items: updatedItems }));
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                title="Mark this item as complete even if quantity doesn't match (e.g., due to losses)"
+                              />
+                              <span className={`text-sm font-semibold lg:hidden ${
+                                item.markAsComplete ? 'text-green-800' : 'text-gray-700'
+                              }`}>
+                                {item.markAsComplete ? 'Marked final' : 'Mark final'}
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {item.subProduct && (
+                          <div className="mt-3 border-t border-gray-100 pt-3 lg:ml-[41.666667%] lg:mr-[8.333333%]">
+                            <SubProductSelector
+                              productId={item.product}
+                              selectedSubProduct={item.subProduct}
+                              selectedSubProductName={item.subProductName}
+                              quantity={item.receivedQuantity}
+                              weights={item.receivedSubProductWeights}
+                              categoryHasSubProducts={true}
+                              onSelectSubProduct={() => {}}
+                              onWeightsChange={(weights) => handleReceivedSubProductWeightsChange(globalIndex, weights)}
+                              disableSelection={true}
+                              allowAddNew={false}
+                              compact
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Notes */}

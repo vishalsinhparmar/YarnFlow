@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Search, ChevronDown, X, Loader2 } from 'lucide-react';
 
 /**
@@ -25,6 +25,7 @@ const SearchableSelect = ({
   onSearch,
   searchPlaceholder = 'Search...',
   renderOption,
+  renderValue,
   getOptionLabel = (option) => option.label || option.name || option,
   getOptionValue = (option) => option.value || option._id || option,
   emptyMessage = 'No options found',
@@ -60,6 +61,13 @@ const SearchableSelect = ({
   const selectedOption = useMemo(() => {
     return options.find(option => getOptionValue(option) === value);
   }, [options, value, getOptionValue]);
+
+  const handleSelect = useCallback((option) => {
+    onChange(getOptionValue(option));
+    setIsOpen(false);
+    setSearchTerm('');
+    setHighlightedIndex(0);
+  }, [getOptionValue, onChange]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -115,7 +123,7 @@ const SearchableSelect = ({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, highlightedIndex, filteredOptions]);
+  }, [isOpen, highlightedIndex, filteredOptions, handleSelect]);
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -147,13 +155,6 @@ const SearchableSelect = ({
     list.addEventListener('scroll', handleScroll);
     return () => list.removeEventListener('scroll', handleScroll);
   }, [isOpen, hasMore, onLoadMore, loadingMore]);
-
-  const handleSelect = (option) => {
-    onChange(getOptionValue(option));
-    setIsOpen(false);
-    setSearchTerm('');
-    setHighlightedIndex(0);
-  };
 
   const handleClear = (e) => {
     e.stopPropagation();
@@ -199,9 +200,13 @@ const SearchableSelect = ({
           ${error ? 'border-red-500 ring-2 ring-red-100' : ''}
         `}
       >
-        <span className={`flex-1 truncate ${!selectedOption ? 'text-gray-400' : 'text-gray-900'}`}>
-          {selectedOption ? getOptionLabel(selectedOption) : placeholder}
-        </span>
+        <div className={`min-w-0 flex-1 ${!selectedOption ? 'truncate text-gray-400' : 'text-gray-900'}`}>
+          {selectedOption
+            ? (renderValue ? renderValue(selectedOption) : (
+              <span className="block truncate">{getOptionLabel(selectedOption)}</span>
+            ))
+            : placeholder}
+        </div>
         
         <div className="flex items-center gap-1">
           {loading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}

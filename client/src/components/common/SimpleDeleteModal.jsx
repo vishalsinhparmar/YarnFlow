@@ -4,10 +4,10 @@ const SimpleDeleteModal = ({ isOpen, onClose, onConfirm, itemName, loading }) =>
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed bottom-0 left-0 right-0 top-16 z-50 overflow-y-auto transition-[left] duration-200 lg:left-[var(--sidebar-width)]">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        className="absolute inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={onClose}
       ></div>
 

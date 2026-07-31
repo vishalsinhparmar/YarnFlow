@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Loader2, Settings } from 'lucide-react';
+import { Check, FolderOpen, Layers, Plus, X, Loader2, Settings } from 'lucide-react';
 import { usePaginatedSearch } from '../../hooks/usePaginatedSearch';
 import masterDataAPI, { subProductAPI, unitAPI } from '../../services/masterDataAPI';
 import SearchableSelect from '../common/SearchableSelect';
 import SubProductSelector from '../common/SubProductSelector';
 import UnitManagement from '../common/UnitManagement';
+import CategoryForm from '../masterdata/Categories/CategoryForm';
+import Modal from '../model/Modal';
 
 const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const [loading, setLoading] = useState(false);
@@ -35,8 +37,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     hasMore: hasMoreSuppliers,
     total: totalSuppliers,
     handleSearch: handleSupplierSearch,
-    handleLoadMore: loadMoreSuppliers,
-    refresh: refreshSuppliers
+    handleLoadMore: loadMoreSuppliers
   } = usePaginatedSearch(masterDataAPI.suppliers.getAll, { limit: 50 });
 
   const {
@@ -47,8 +48,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     hasMore: hasMoreCategories,
     total: totalCategories,
     handleSearch: handleCategorySearch,
-    handleLoadMore: loadMoreCategories,
-    refresh: refreshCategories
+    handleLoadMore: loadMoreCategories
   } = usePaginatedSearch(masterDataAPI.categories.getAll, { limit: 50 });
 
   const productSearch = usePaginatedSearch(
@@ -62,6 +62,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
+  const [categoryModalError, setCategoryModalError] = useState('');
   
   // Dynamic units from backend - start with defaults so UI is never empty
   const defaultUnits = [
@@ -180,9 +181,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
     }
   };
 
-  const handleCategoryChange = (e) => {
-    const { value } = e.target;
-    
+  const handleCategoryChange = (value) => {
     // Reset items when category changes
     setFormData(prev => ({
       ...prev,
@@ -542,15 +541,19 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
   const handleQuickAddCategory = async (categoryData) => {
     try {
       setModalLoading(true);
+      setCategoryModalError('');
       const response = await masterDataAPI.categories.create(categoryData);
       if (response.success) {
-        setCategories(prev => [...prev, response.data]);
-        setFormData(prev => ({ ...prev, category: response.data._id }));
+        setCategories(prev => [
+          response.data,
+          ...prev.filter(category => category._id !== response.data._id)
+        ]);
+        handleCategoryChange(response.data._id);
         setShowCategoryModal(false);
       }
     } catch (error) {
       console.error('Error creating category:', error);
-      throw error;
+      setCategoryModalError(error.message || 'Unable to create category. Please try again.');
     } finally {
       setModalLoading(false);
     }
@@ -569,23 +572,6 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
       }
     } catch (error) {
       console.error('Error creating product:', error);
-      throw error;
-    } finally {
-      setModalLoading(false);
-    }
-  };
-
-  const handleQuickAddUnit = async (unitData) => {
-    try {
-      setModalLoading(true);
-      const response = await unitAPI.create(unitData);
-      if (response.success) {
-        setUnits(prev => [...prev, response.data]);
-        setShowUnitModal(false);
-        return response.data;
-      }
-    } catch (error) {
-      console.error('Error creating unit:', error);
       throw error;
     } finally {
       setModalLoading(false);
@@ -711,7 +697,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
               error={errors.supplier}
               onAddNew={() => setShowSupplierModal(true)}
               addNewLabel="Add Supplier"
-              renderOption={(supplier, isSelected) => (
+              renderOption={(supplier) => (
                 <div className="flex flex-col">
                   <span className="font-medium">{supplier.companyName}</span>
                   {supplier.city && (
@@ -754,10 +740,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
               required
               options={categories.filter(cat => cat.status === 'Active')}
               value={formData.category}
-              onChange={(value) => {
-                setFormData(prev => ({ ...prev, category: value }));
-                handleCategoryChange({ target: { name: 'category', value } });
-              }}
+              onChange={handleCategoryChange}
               placeholder="Select Category"
               searchPlaceholder="Search categories..."
               getOptionLabel={(category) => category.categoryName}
@@ -769,14 +752,28 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
               onLoadMore={loadMoreCategories}
               total={totalCategories}
               error={errors.category}
-              onAddNew={() => setShowCategoryModal(true)}
-              addNewLabel="Add Category"
+              onAddNew={() => {
+                setCategoryModalError('');
+                setShowCategoryModal(true);
+              }}
+              addNewLabel="Create category"
               renderOption={(category, isSelected) => (
-                <div className="flex flex-col">
-                  <span className="font-medium">{category.categoryName}</span>
-                  {category.description && (
-                    <span className="text-xs text-gray-500 truncate">{category.description}</span>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-700">
+                    <FolderOpen className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{category.categoryName}</span>
+                    <span className="block truncate text-xs font-normal text-gray-500">
+                      {category.description || 'No description'}
+                    </span>
+                  </span>
+                  {category.hasSubProducts && (
+                    <span className="flex-shrink-0 rounded bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700">
+                      Variants
+                    </span>
                   )}
+                  {isSelected && <Check className="h-4 w-4 flex-shrink-0 text-blue-600" />}
                 </div>
               )}
             />
@@ -795,7 +792,9 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                   <svg className="h-4 w-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <span className="font-semibold">{getFilteredProducts().length} product(s) available in this category</span>
+                  <span className="font-semibold">
+                    {selectedCategory?.categoryName} · {getFilteredProducts().length} products · {categoryHasSubProducts ? 'Variant tracking enabled' : 'Standard product tracking'}
+                  </span>
                 </p>
               </div>
             )}
@@ -871,7 +870,7 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
                       onAddNew={formData.category ? () => setShowProductModal(true) : undefined}
                       addNewLabel="Add Product"
                       emptyMessage={!formData.category ? 'Please select a category first' : 'No products found'}
-                      renderOption={(product, isSelected) => (
+                      renderOption={(product) => (
                         <div className="flex flex-col">
                           <span className="font-medium">{product.productName}</span>
                           {product.description && (
@@ -1198,12 +1197,42 @@ const PurchaseOrderForm = ({ purchaseOrder, onSubmit, onCancel }) => {
 
       {/* Quick Add Modals */}
       {showSupplierModal && <QuickAddSupplierModal onClose={() => setShowSupplierModal(false)} onSubmit={handleQuickAddSupplier} loading={modalLoading} />}
-      {showCategoryModal && <QuickAddCategoryModal onClose={() => setShowCategoryModal(false)} onSubmit={handleQuickAddCategory} loading={modalLoading} />}
-      {showProductModal && <QuickAddProductModal onClose={() => setShowProductModal(false)} onSubmit={handleQuickAddProduct} loading={modalLoading} categoryId={formData.category} />}
+      {showCategoryModal && (
+        <Modal
+          isOpen
+          onClose={() => {
+            setCategoryModalError('');
+            setShowCategoryModal(false);
+          }}
+          size="lg"
+          title="Create Category"
+        >
+          <p className="mb-5 text-sm text-gray-500">
+            The category will be added to master data and selected for this purchase order.
+          </p>
+          {categoryModalError && (
+            <div
+              className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              role="alert"
+            >
+              {categoryModalError}
+            </div>
+          )}
+          <CategoryForm
+            loading={modalLoading}
+            onCancel={() => {
+              setCategoryModalError('');
+              setShowCategoryModal(false);
+            }}
+            onSubmit={handleQuickAddCategory}
+          />
+        </Modal>
+      )}
+      {showProductModal && <QuickAddProductModal onClose={() => setShowProductModal(false)} onSubmit={handleQuickAddProduct} loading={modalLoading} />}
       {showUnitModal && (
         <UnitManagement
           onClose={() => setShowUnitModal(false)}
-          onUnitAdded={(unit) => {
+          onUnitAdded={() => {
             fetchUnits(); // Refresh the units list
           }}
         />
@@ -1231,7 +1260,7 @@ const QuickAddSupplierModal = ({ onClose, onSubmit, loading }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4">Quick Add Supplier</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -1258,50 +1287,8 @@ const QuickAddSupplierModal = ({ onClose, onSubmit, loading }) => {
   );
 };
 
-// Quick Add Category Modal
-const QuickAddCategoryModal = ({ onClose, onSubmit, loading }) => {
-  const [formData, setFormData] = useState({ categoryName: '', description: '' });
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.categoryName.trim()) {
-      setError('Category name is required');
-      return;
-    }
-    try {
-      await onSubmit(formData);
-    } catch (err) {
-      setError(err.message || 'Failed to create category');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold mb-4">Quick Add Category</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category Name *</label>
-            <input type="text" value={formData.categoryName} onChange={(e) => setFormData(prev => ({ ...prev, categoryName: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Cotton Yarn, Plastic" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea value={formData.description} onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="Optional description" />
-          </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-            <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{loading ? 'Adding...' : 'Add Category'}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
 // Quick Add Product Modal
-const QuickAddProductModal = ({ onClose, onSubmit, loading, categoryId }) => {
+const QuickAddProductModal = ({ onClose, onSubmit, loading }) => {
   const [formData, setFormData] = useState({ productName: '', description: '' });
   const [error, setError] = useState('');
 
@@ -1319,7 +1306,7 @@ const QuickAddProductModal = ({ onClose, onSubmit, loading, categoryId }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4">Quick Add Product</h3>
         <form onSubmit={handleSubmit} className="space-y-4">

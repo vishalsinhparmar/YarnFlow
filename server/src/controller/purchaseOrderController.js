@@ -28,7 +28,10 @@ export const getAllPurchaseOrders = async (req, res) => {
     if (search) {
       query.$or = [
         { poNumber: { $regex: search, $options: 'i' } },
-        { 'supplierDetails.companyName': { $regex: search, $options: 'i' } }
+        { 'supplierDetails.companyName': { $regex: search, $options: 'i' } },
+        { 'items.productName': { $regex: search, $options: 'i' } },
+        { 'items.subProductName': { $regex: search, $options: 'i' } },
+        { 'items.notes': { $regex: search, $options: 'i' } }
       ];
     }
     
