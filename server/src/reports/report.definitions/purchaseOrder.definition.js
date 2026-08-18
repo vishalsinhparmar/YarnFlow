@@ -26,14 +26,14 @@ export default {
   itemArrayPath: 'items',
   fields: [
     // Basic fields
-    field({ key: 'poNumber', label: 'PO Number', type: TYPES.REFERENCE, reference: { model: 'PurchaseOrder', displayField: 'poNumber', valueField: '_id' }, group: 'Basic' }),
+    field({ key: 'poNumber', label: 'PO Number', type: TYPES.STRING, group: 'Basic' }),
     field({ key: 'orderDate', label: 'Order Date', type: TYPES.DATE, group: 'Basic', formatter: 'date' }),
     field({ key: 'expectedDeliveryDate', label: 'Expected Delivery Date', type: TYPES.DATE, group: 'Basic', formatter: 'date' }),
     field({ key: 'status', label: 'Status', type: TYPES.ENUM, allowedValues: ['Draft', 'Partially_Received', 'Fully_Received', 'Cancelled'], group: 'Basic' }),
     field({ key: 'createdAt', label: 'Created At', type: TYPES.DATE, group: 'Basic', formatter: 'datetime' }),
 
     // Supplier
-    field({ key: 'supplier', label: 'Supplier', type: TYPES.REFERENCE, reference: { model: 'Supplier', displayField: 'companyName', valueField: '_id' }, group: 'Supplier' }),
+    field({ key: 'supplier', label: 'Supplier', type: TYPES.REFERENCE, reference: { model: 'Supplier', displayField: 'companyName', valueField: '_id' }, path: 'supplier', group: 'Supplier' }),
     field({ key: 'supplierName', label: 'Supplier Name', type: TYPES.STRING, path: 'supplierDetails.companyName', group: 'Supplier' }),
 
     // Calculated
