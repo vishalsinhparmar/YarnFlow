@@ -147,6 +147,14 @@ const inventoryLotSchema = new mongoose.Schema({
     performedBy: String
   }],
   
+  // ===== IDEMPOTENCY PROTECTION (PHASE 6 FIX) =====
+  // Unique key to prevent duplicate inventory creation from same GRN
+  idempotencyKey: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  
   // ===== ADDITIONAL INFORMATION =====
   notes: {
     type: String,
@@ -221,6 +229,9 @@ inventoryLotSchema.index({ supplier: 1 });
 inventoryLotSchema.index({ grn: 1 });
 inventoryLotSchema.index({ status: 1 });
 inventoryLotSchema.index({ receivedDate: -1 });
+
+// PHASE 6 FIX: Prevent duplicate inventory from same GRN
+inventoryLotSchema.index({ grn: 1, product: 1, subProduct: 1 }, { unique: true, sparse: true });
 
 // ===== STATIC METHODS =====
 

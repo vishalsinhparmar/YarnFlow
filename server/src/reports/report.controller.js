@@ -11,6 +11,7 @@ import {
   deleteSavedReport
 } from './report.service.js';
 import { sendExcel } from './report.export.service.js';
+import { generateReportPDF } from '../utils/reportPdfGenerator.js';
 
 export const listReports = async (req, res) => {
   try {
@@ -45,6 +46,19 @@ export const exportExcel = async (req, res) => {
   try {
     const { buffer, filename } = await exportReport(req.params.reportKey, req.body);
     sendExcel(res, buffer, filename);
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ success: false, message: err.message });
+  }
+};
+
+export const exportPDF = async (req, res) => {
+  try {
+    const { buffer, filename } = await generateReportPDF(req.params.reportKey, req.body);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json({ success: false, message: err.message });

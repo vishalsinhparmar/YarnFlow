@@ -28,15 +28,15 @@ export const getInventoryProducts = async (req, res) => {
     let inventoryLots = await InventoryLot.find({
       status: { $in: ['Active', 'Consumed'] }
     })
-      .populate('product', 'productName productCode category')
-      .populate('supplier', 'companyName')
       .populate({
         path: 'product',
+        select: 'productName productCode category',
         populate: {
           path: 'category',
           select: 'categoryName'
         }
       })
+      .populate('supplier', 'companyName')
       .lean();
     console.log('invetory lots',inventoryLots);
     console.log(`📦 Found ${inventoryLots.length} inventory lots`);
@@ -69,6 +69,7 @@ export const getInventoryProducts = async (req, res) => {
           hasSubProducts: false,
           subProductCount: 0,
           suppliers: new Set(),
+          poNumbers: new Set(),
           lots: [],
           latestReceiptDate: null
         };
@@ -99,9 +100,6 @@ export const getInventoryProducts = async (req, res) => {
         .reduce((sum, m) => sum + (m.weight || 0), 0) || 0;
       agg.issuedWeight += issuedWeight;
       
-      // Current weight = original received weight - issued weight
-      agg.currentWeight = agg.receivedWeight - agg.issuedWeight;
-      
       // Track whether this product has any sub-products
       if (subProductId) {
         agg.hasSubProducts = true;
@@ -111,12 +109,20 @@ export const getInventoryProducts = async (req, res) => {
       if (lot.supplier?.companyName) {
         agg.suppliers.add(lot.supplier.companyName);
       }
+
+      // Track PO number(s) so the search bar's promise of "PO numbers" as a
+      // searchable field (see placeholder text) actually works — a product
+      // can be replenished by lots from several POs.
+      if (lot.poNumber) {
+        agg.poNumbers.add(lot.poNumber);
+      }
       
       // Add lot detail
       agg.lots.push({
         lotNumber: lot.lotNumber,
         lotId: lot._id,
         grnNumber: lot.grnNumber,
+        poNumber: lot.poNumber || '',
         receivedQuantity: lot.receivedQuantity,
         currentQuantity: lot.currentQuantity,
         issuedQuantity: issuedQty,
@@ -140,11 +146,16 @@ export const getInventoryProducts = async (req, res) => {
     });
 
     // Compute distinct sub-product count per product
+    // AND calculate current weight (received - issued) AFTER all lots are aggregated
     Object.values(productAggregation).forEach(agg => {
       const subProductIds = new Set(
         agg.lots.filter(l => l.subProductId).map(l => l.subProductId.toString())
       );
       agg.subProductCount = subProductIds.size;
+      
+      // Calculate current weight ONCE after all lots are aggregated
+      // Current weight = total received weight - total issued weight
+      agg.currentWeight = agg.receivedWeight - agg.issuedWeight;
     });
 
 
@@ -152,6 +163,7 @@ export const getInventoryProducts = async (req, res) => {
     // Convert to array
     let products = Object.values(productAggregation).map(product => {
       const supplierList = Array.from(product.suppliers);
+      const poNumberList = Array.from(product.poNumbers);
       
       return {
         productId: product.productId,
@@ -161,18 +173,18 @@ export const getInventoryProducts = async (req, res) => {
         categoryId: product.categoryId,
         productCode: product.productCode,
         unit: product.unit,
-        currentStock: product.currentStock,
-        receivedStock: product.receivedStock,
-        issuedStock: product.issuedStock,
-        totalStock: product.currentStock,
-        currentWeight: product.currentWeight,
-        receivedWeight: product.receivedWeight,
-        issuedWeight: product.issuedWeight,
-        totalWeight: product.currentWeight,
+        currentStock: product.currentStock,  // Current stock after all movements
+        receivedStock: product.receivedStock,  // Total received from GRN
+        issuedStock: product.issuedStock,  // Total issued via Challan
+        currentWeight: product.currentWeight,  // Current weight (received - issued)
+        receivedWeight: product.receivedWeight,  // Total received weight
+        issuedWeight: product.issuedWeight,  // Total issued weight
         hasSubProducts: product.hasSubProducts,
         subProductCount: product.subProductCount,
         suppliers: supplierList,
         supplierNames: supplierList.join(', '),
+        poNumbers: poNumberList,
+        poNumbersText: poNumberList.join(', '),
         lotCount: product.lots.length,
         lots: product.lots.sort((a, b) => new Date(b.receivedDate) - new Date(a.receivedDate)),
         latestReceiptDate: product.latestReceiptDate
@@ -184,11 +196,12 @@ export const getInventoryProducts = async (req, res) => {
 
     // Apply filters
     if (search) {
-      const searchLower = search.toLowerCase();
-      products = products.filter(p => 
+      const searchLower = search.trim().toLowerCase();
+      products = products.filter(p =>
         p.productName.toLowerCase().includes(searchLower) ||
         p.productCode.toLowerCase().includes(searchLower) ||
-        p.supplierNames.toLowerCase().includes(searchLower)
+        p.supplierNames.toLowerCase().includes(searchLower) ||
+        p.poNumbersText.toLowerCase().includes(searchLower)
       );
     }
     
@@ -909,12 +922,12 @@ export const getProductInventoryDetail = async (req, res) => {
       product: productId,
       status: { $in: ['Active', 'Consumed'] }
     })
-      .populate('product', 'productName productCode category')
-      .populate('supplier', 'companyName')
       .populate({
         path: 'product',
+        select: 'productName productCode category',
         populate: { path: 'category', select: 'categoryName' }
       })
+      .populate('supplier', 'companyName')
       .sort({ receivedDate: 1 }) // FIFO — must match the order challan stock-out deducts from
       .lean();
 
@@ -937,6 +950,7 @@ export const getProductInventoryDetail = async (req, res) => {
           currentWeight: 0,
           receivedWeight: 0,
           issuedWeight: 0,
+          perUnitWeights: [], // Per-unit weights for mobile/web display
           lots: []
         };
       }
@@ -958,6 +972,11 @@ export const getProductInventoryDetail = async (req, res) => {
       sp.receivedWeight += receivedWeight;
       sp.issuedWeight += issuedWeight;
       sp.currentWeight = sp.receivedWeight - sp.issuedWeight;
+      
+      // Collect per-unit weights from all lots in this sub-product
+      if (Array.isArray(lot.subProductWeights) && lot.subProductWeights.length > 0) {
+        sp.perUnitWeights.push(...lot.subProductWeights.map(w => Number(w) || 0));
+      }
 
       totalCurrentStock += lot.currentQuantity || 0;
       totalReceivedStock += lot.receivedQuantity || 0;

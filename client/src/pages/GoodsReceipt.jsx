@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ClipboardList, CheckCircle, Clock, AlertCircle, Calendar, Plus, Search, ChevronDown, ChevronRight, Eye } from 'lucide-react';
 import { grnAPI, grnUtils } from '../services/grnAPI';
 import Modal from '../components/model/Modal';
@@ -6,6 +7,7 @@ import GRNForm from '../components/GRN/GRNForm';
 import GRNDetail from '../components/GRN/GRNDetail';
 
 const GoodsReceipt = () => {
+  const location = useLocation();
   const [, setGRNs] = useState([]);
   const [groupedByPO, setGroupedByPO] = useState([]);
   const [expandedPOs, setExpandedPOs] = useState({});
@@ -232,6 +234,18 @@ const GoodsReceipt = () => {
   useEffect(() => {
     fetchStats();
   }, []);
+
+  // Handle navigation from PO with pre-selected PO
+  useEffect(() => {
+    if (location.state?.selectedPurchaseOrderId) {
+      setSelectedPO(location.state.selectedPurchaseOrderId);
+      if (location.state?.openCreateModal) {
+        setShowCreateGRN(true);
+      }
+      // Clear the state so it doesn't persist on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   // Handle search and filter changes
   useEffect(() => {
@@ -713,7 +727,7 @@ const GoodsReceipt = () => {
               setShowCreateGRN(false);
               setSelectedPO(null);
             }}
-            preSelectedPO={selectedPO?.poId}
+            preSelectedPO={selectedPO?.poId || selectedPO}
             purchaseOrderData={selectedPO?.purchaseOrder}
           />
         </Modal>

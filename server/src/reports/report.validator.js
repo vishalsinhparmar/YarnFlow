@@ -72,7 +72,7 @@ const validateValueForOperator = (field, operator, value, valueTo) => {
     if (value.length > MAX_IN_ARRAY_LENGTH) {
       throw new ReportValidationError(`Too many values for ${field.key}`);
     }
-    if (field.type === 'reference' && !isValidObjectId(value)) {
+    if (field.type === 'reference' && field.reference?.valueField === '_id' && !isValidObjectId(value)) {
       throw new ReportValidationError(`Invalid ObjectId in reference filter for ${field.key}`);
     }
     return;
@@ -96,7 +96,7 @@ const validateValueForOperator = (field, operator, value, valueTo) => {
     }
   }
 
-  if (field.type === 'reference' && operator !== 'in' && operator !== 'notIn' && !isValidObjectId(value)) {
+  if (field.type === 'reference' && field.reference?.valueField === '_id' && operator !== 'in' && operator !== 'notIn' && !isValidObjectId(value)) {
     throw new ReportValidationError(`Invalid ObjectId for reference field ${field.key}`);
   }
 
@@ -125,9 +125,14 @@ const validateFilterGroup = (definition, group, groupIndex = 0) => {
   }
 
   const validated = [];
+  const validFieldKeys = new Set(definition.fields.map(f => f.key));
+  
   for (const filter of filters) {
     if (!filter || typeof filter !== 'object') continue;
-    const field = validateFieldKey(definition, filter.field, 'filter');
+    // Skip filters for fields that no longer exist in definition
+    if (!validFieldKeys.has(filter.field)) continue;
+    
+    const field = definition.fields.find(f => f.key === filter.field);
     if (!field.filterable) {
       throw new ReportValidationError(`Field ${field.key} is not filterable`);
     }
@@ -149,16 +154,21 @@ const validateFilterGroup = (definition, group, groupIndex = 0) => {
 
 export const validatePayload = (definition, payload = {}) => {
   const selectedFields = Array.isArray(payload.selectedFields) ? payload.selectedFields : [];
-  if (selectedFields.length === 0) {
+  
+  // Filter out unsupported fields (fields that no longer exist in definition)
+  const validFieldKeys = new Set(definition.fields.map(f => f.key));
+  const filteredFields = selectedFields.filter(key => validFieldKeys.has(key));
+  
+  if (filteredFields.length === 0) {
     throw new ReportValidationError('At least one field must be selected');
   }
-  if (selectedFields.length > MAX_SELECTED_FIELDS) {
+  if (filteredFields.length > MAX_SELECTED_FIELDS) {
     throw new ReportValidationError('Too many fields selected');
   }
 
   const fieldMap = new Map();
-  for (const key of selectedFields) {
-    const field = validateFieldKey(definition, key, 'selected');
+  for (const key of filteredFields) {
+    const field = definition.fields.find(f => f.key === key);
     if (!field.exportable) {
       throw new ReportValidationError(`Field ${field.key} is not exportable`);
     }
@@ -177,9 +187,15 @@ export const validatePayload = (definition, payload = {}) => {
         throw new ReportValidationError('Too many filter groups');
       }
       filters.condition = VALID_CONDITIONS.has(rawFilters.condition) ? rawFilters.condition : 'and';
-      filters.groups = rawFilters.groups.map((g, i) => validateFilterGroup(definition, g, i));
+      // Filter out groups with no valid filters
+      filters.groups = rawFilters.groups
+        .map((g, i) => validateFilterGroup(definition, g, i))
+        .filter(g => g.filters && g.filters.length > 0);
     } else {
-      filters.groups = [validateFilterGroup(definition, rawFilters, 0)];
+      const group = validateFilterGroup(definition, rawFilters, 0);
+      if (group.filters && group.filters.length > 0) {
+        filters.groups = [group];
+      }
     }
   }
 
@@ -192,7 +208,9 @@ export const validatePayload = (definition, payload = {}) => {
   const sort = [];
   for (const s of sortInput) {
     if (!s || typeof s !== 'object') continue;
-    const field = validateFieldKey(definition, s.field, 'sort');
+    // Skip if field doesn't exist in definition
+    if (!validFieldKeys.has(s.field)) continue;
+    const field = definition.fields.find(f => f.key === s.field);
     if (!field.sortable) {
       throw new ReportValidationError(`Field ${field.key} is not sortable`);
     }

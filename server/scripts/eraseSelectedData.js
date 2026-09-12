@@ -32,7 +32,7 @@ const availableCollections = {
 };
 
 // Get MongoDB URI from environment variables
-const MONGO_URI = "mongodb+srv://vishalsinh:vishalsinh@cluster0.gf66tvi.mongodb.net/yarnflow?retryWrites=true&w=majority&appName=Cluster0" || process.env.MONGO_URI;
+const MONGO_URI = process.env.MONGODB_URI;
 
 if (!MONGO_URI) {
   console.error('❌ Error: MONGODB_URI not found in environment variables');

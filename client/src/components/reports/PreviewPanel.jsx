@@ -7,7 +7,9 @@ export default function PreviewPanel({
   onPageChange,
   onPreview,
   onExport,
-  exporting
+  onExportPDF,
+  exporting,
+  exportingPDF
 }) {
   const { data, total, page, limit, loading, error } = preview;
   const totalPages = Math.ceil(total / limit) || 1;
@@ -52,7 +54,15 @@ export default function PreviewPanel({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            Export Excel
+            Excel
+          </button>
+          <button
+            onClick={onExportPDF}
+            disabled={exportingPDF || loading || selectedFieldDefs.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exportingPDF ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            PDF
           </button>
         </div>
       </div>

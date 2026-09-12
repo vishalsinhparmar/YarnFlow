@@ -165,6 +165,9 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose, isOpen = true }) => {
     100,
     Math.max(0, Number(detail?.completionPercentage) || poUtils.calculateCompletion(items))
   );
+  const completedLines = items.filter((item) =>
+    ['Complete', 'Final'].includes(getItemStatus(item))
+  ).length;
   const totalOrderedWeight = items.reduce(
     (sum, item) => sum + (Number(item.weight) || 0),
     0
@@ -178,12 +181,12 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose, isOpen = true }) => {
     'Not available';
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 top-16 z-50 flex items-center justify-center bg-black/60 p-2 backdrop-blur-sm transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
+    <div className="fixed bottom-0 left-0 right-0 top-16 z-[9999] flex items-center justify-center bg-black/60 p-2 backdrop-blur-sm transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="purchase-order-detail-title"
-        className="flex max-h-[calc(100vh-5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl sm:max-h-[calc(100vh-6rem)]"
+        className="flex max-h-[calc(100vh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl sm:max-h-[92vh]"
       >
         <header className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-gray-200 bg-white px-4 py-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -230,8 +233,11 @@ const PurchaseOrderDetail = ({ purchaseOrder, onClose, isOpen = true }) => {
                   <h3 id="purchase-order-summary-title" className="text-sm font-bold uppercase text-gray-700">
                     Order Summary
                   </h3>
+                  {/* <span className="text-right text-xs text-gray-500">
+                    {completedLines} of {items.length} lines complete
+                  </span> */}
                 </div>
-                <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 md:grid-cols-3">
+                <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-00   bg-gray-200 md:grid-cols-3">
                   <div className="bg-white"><DetailField icon={ClipboardList} label="PO Number" value={detail?.poNumber || 'Not available'} valueClassName="text-orange-700" /></div>
                   <div className="bg-white"><DetailField icon={Calendar} label="Order Date" value={formatDate(detail?.orderDate)} /></div>
                   <div className="bg-white"><DetailField icon={Clock} label="Expected Delivery" value={formatDate(detail?.expectedDeliveryDate)} /></div>

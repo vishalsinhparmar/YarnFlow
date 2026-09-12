@@ -16,6 +16,11 @@ const grnItemSchema = new mongoose.Schema({
     type: String,
     required: true // Store for historical reference
   },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    default: null
+  },
   
   // Sub-product tracking
   subProduct: {
@@ -139,6 +144,18 @@ const grnSchema = new mongoose.Schema({
     default: 'Partial'
   },
   
+  // Inventory Tracking (PHASE 3 FIX)
+  // Track whether inventory has been created for this GRN
+  inventoryCreated: {
+    type: Boolean,
+    default: false
+  },
+  // Link to created inventory lots
+  inventoryLots: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'InventoryLot'
+  }],
+  
   // Storage and Warehouse
   warehouseLocation: {
     type: String,
@@ -172,7 +189,7 @@ grnSchema.pre('save', async function(next) {
     if (!this.grnNumber) {
       this.grnNumber = await generateDocumentNumber({
         type: 'GRN',
-        prefix: 'PKRK',
+        prefix: '',  // No prefix - generates GRN/001, GRN/002, etc.
         pad: 3
       });
     }

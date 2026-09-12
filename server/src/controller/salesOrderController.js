@@ -23,7 +23,13 @@ export const getAllSalesOrders = async (req, res) => {
     // Build filter query
     const filter = {};
     
-    if (status) filter.status = status;
+    // Accepts either a single status or a comma-separated list (e.g.
+    // "Draft,Pending,Processing") so the UI can group several raw statuses
+    // into a single "Pending"/"Closed" tab without a dedicated endpoint.
+    if (status) {
+      const statusList = status.split(',').map(s => s.trim()).filter(Boolean);
+      filter.status = statusList.length > 1 ? { $in: statusList } : statusList[0];
+    }
     if (customer) filter.customer = customer;
     
     if (orderDate) {
@@ -180,6 +186,7 @@ export const createSalesOrder = async (req, res) => {
       validatedItems.push({
         product: product._id,
         productName: product.productName,
+        category: product.category || null,
         subProduct: item.subProduct || null,
         subProductName: item.subProductName || null,
         subProductWeights: itemSubProductWeights,
@@ -400,6 +407,18 @@ export const cancelSalesOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `Cannot cancel order in ${salesOrder.status} status`
+      });
+    }
+
+    // A Sales Challan already dispatched against this order means stock has
+    // been deducted from inventory lots. Cancelling the order at this point
+    // would leave orphaned challans and corrupt inventory reconciliation, so
+    // it must be blocked (mirrors the PO/GRN cancellation guard).
+    const existingChallanCount = await SalesChallan.countDocuments({ salesOrder: id });
+    if (existingChallanCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot cancel this order — ${existingChallanCount} sales challan(s) have already been dispatched against it`
       });
     }
 

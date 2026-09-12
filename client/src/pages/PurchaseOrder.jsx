@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ClipboardList, CheckCircle, Clock, AlertCircle, Plus, Search, Eye, Edit, XCircle, Trash2, Loader2 } from 'lucide-react';
 import { purchaseOrderAPI, poUtils } from '../services/purchaseOrderAPI';
 import Modal from '../components/model/Modal';
@@ -6,6 +7,7 @@ import PurchaseOrderForm from '../components/PurchaseOrders/PurchaseOrderForm';
 import PurchaseOrderDetail from '../components/PurchaseOrders/PurchaseOrderDetail';
 
 const PurchaseOrder = () => {
+  const navigate = useNavigate();
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [stats, setStats] = useState({
     totalPOs: 0,
@@ -140,6 +142,10 @@ const PurchaseOrder = () => {
             await fetchStats();
             alert('Purchase order deleted successfully');
           }
+          break;
+        case 'createGRN':
+          // Navigate to goods-receipt page with PO pre-selected
+          navigate('/goods-receipt', { state: { selectedPurchaseOrderId: po._id, openCreateModal: true } });
           break;
         default:
           break;
@@ -339,13 +345,31 @@ const PurchaseOrder = () => {
                     purchaseOrders.map((po) => (
                     <tr key={po._id} className="hover:bg-orange-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-gray-900">{po.poNumber}</div>
-                        {poUtils.isOverdue(po.expectedDeliveryDate, po.status) && (
-                          <div className="text-xs text-red-600 flex items-center gap-1 mt-1">
-                            <AlertCircle className="w-3 h-3" />
-                            Overdue
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 flex items-center justify-center">
+                            {po.status !== 'Fully_Received' && po.status !== 'Cancelled' && (
+                              <button
+                                onClick={() => handleOrderAction('createGRN', po)}
+                                className="group relative p-1.5 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
+                                title="Create Goods Receipt Note"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span className="absolute left-8 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                  + Create GRN
+                                </span>
+                              </button>
+                            )}
                           </div>
-                        )}
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">{po.poNumber}</div>
+                            {poUtils.isOverdue(po.expectedDeliveryDate, po.status) && (
+                              <div className="text-xs text-red-600 flex items-center gap-1 mt-1">
+                                <AlertCircle className="w-3 h-3" />
+                                Overdue
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{po.supplierDetails?.companyName}</div>
@@ -419,6 +443,7 @@ const PurchaseOrder = () => {
                               </button>
                             </>
                           )}
+
                           {po.status === 'Cancelled' && (
                             <button
                               onClick={() => handleOrderAction('delete', po)}

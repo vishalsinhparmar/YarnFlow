@@ -62,7 +62,7 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 top-16 z-50 flex items-center justify-center overflow-hidden p-2 transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
+    <div className="fixed bottom-0 left-0 right-0 top-16 z-[9999] flex items-center justify-center overflow-hidden p-2 transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
       <button
         aria-label="Close modal"
         className="absolute inset-0 cursor-default bg-gray-950/55"

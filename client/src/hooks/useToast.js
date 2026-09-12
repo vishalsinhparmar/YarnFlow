@@ -139,10 +139,8 @@ const useToast = () => {
     // Goods Receipt Note specific toast messages
     const grnToasts = {
         createSuccess: (grnNumber) => toastSuccess(`✅ GRN "${grnNumber}" created successfully!`),
-        approveSuccess: (grnNumber) => toastSuccess(`✅ GRN "${grnNumber}" approved successfully!`),
         updateSuccess: (grnNumber) => toastSuccess(`✅ GRN "${grnNumber}" updated successfully!`),
         createError: () => toastError('❌ Failed to create GRN. Please try again.'),
-        approveError: () => toastError('❌ Failed to approve GRN. Please try again.'),
         loadError: () => toastError('❌ Failed to load GRNs. Please refresh the page.')
     };
 

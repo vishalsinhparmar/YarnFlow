@@ -202,6 +202,17 @@ export const createSalesChallan = async (req, res) => {
     // (see stock-out loop below). Manual entry is still accepted for backward
     // compatibility / products without lot-level warehouse data, but no longer required.
 
+    // Resolve warehouse location - if it's an ObjectId, fetch the warehouse name
+    let resolvedWarehouseLocation = warehouseLocation;
+    if (warehouseLocation && mongoose.Types.ObjectId.isValid(warehouseLocation)) {
+      const WarehouseLocation = mongoose.model('WarehouseLocation');
+      const warehouse = await WarehouseLocation.findById(warehouseLocation).session(session);
+      if (warehouse) {
+        resolvedWarehouseLocation = warehouse.name;
+        console.log(`📍 Resolved warehouse ObjectId to name: ${resolvedWarehouseLocation}`);
+      }
+    }
+
     if (!items || items.length === 0) {
       await session.abortTransaction();
       return res.status(400).json({
@@ -239,12 +250,31 @@ export const createSalesChallan = async (req, res) => {
       });
     }
     
-    // Prevent challan creation for Delivered or Cancelled SOs
-    if (['Delivered', 'Cancelled'].includes(so.status)) {
+    // Create SO items map for O(1) lookup (performance optimization)
+    const soItemMap = new Map(so.items.map(si => [si._id.toString(), si]));
+    
+    // Prevent challan creation for Cancelled SOs
+    // Allow challan creation for Delivered SOs if they have pending items (partial delivery)
+    if (so.status === 'Cancelled') {
       await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: 'Cannot create challan for delivered or cancelled sales order'
+        message: 'Cannot create challan for cancelled sales order'
+      });
+    }
+    
+    // Check if SO has any pending items
+    const hasPendingItems = so.items.some(item => {
+      const dispatched = item.dispatchedQuantity || 0;
+      const pending = item.quantity - dispatched;
+      return pending > 0;
+    });
+    
+    if (so.status === 'Delivered' && !hasPendingItems) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot create challan for fully delivered sales order'
       });
     }
     
@@ -272,7 +302,7 @@ export const createSalesChallan = async (req, res) => {
       }
       requestedSalesOrderItems.add(salesOrderItemId);
 
-      const soItem = so.items.find(si => si._id.toString() === salesOrderItemId);
+      const soItem = soItemMap.get(salesOrderItemId);
       if (!soItem) {
         await session.abortTransaction();
         return res.status(400).json({
@@ -329,11 +359,12 @@ export const createSalesChallan = async (req, res) => {
     // Auto-derive warehouse from the inventory lot(s) that will fulfill this order
     // (same product+category flow that was already used for GRN stock-in) instead of
     // requiring the user to manually pick a warehouse every time.
-    let derivedWarehouseLocation = warehouseLocation || '';
+    let derivedWarehouseLocation = resolvedWarehouseLocation || '';
+
     if (!derivedWarehouseLocation) {
       const derivedWarehouses = new Set();
       for (const item of items) {
-        const soItemForWarehouse = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
+        const soItemForWarehouse = soItemMap.get(item.salesOrderItem.toString());
         const wFilter = {
           product: item.product,
           status: 'Active',
@@ -357,12 +388,13 @@ export const createSalesChallan = async (req, res) => {
       warehouseLocation: derivedWarehouseLocation,
       expectedDeliveryDate: expectedDeliveryDate || null,
       items: items.map(item => {
-        // Find corresponding SO item to get notes and sub-product details
-        const soItem = so.items.find(si => si._id.toString() === item.salesOrderItem.toString());
+        // Find corresponding SO item to get notes and sub-product details (O(1) lookup)
+        const soItem = soItemMap.get(item.salesOrderItem.toString());
         return {
           salesOrderItem: item.salesOrderItem,
           product: item.product,
           productName: item.productName,
+          category: soItem?.category || item.category || null,
           subProduct: soItem?.subProduct || item.subProduct || null,
           subProductName: soItem?.subProductName || item.subProductName || null,
           subProductWeights: Array.isArray(item.subProductWeights) ? item.subProductWeights : [],
@@ -404,8 +436,8 @@ export const createSalesChallan = async (req, res) => {
       console.log(`   Dispatch Qty: ${item.dispatchQuantity}`);
       console.log(`   Weight: ${item.weight}`);
       
-      // Find the SO item to check completion status
-      const soItem = so.items.find(i => i._id.toString() === item.salesOrderItem.toString());
+      // Find the SO item to check completion status (O(1) lookup using map)
+      const soItem = soItemMap.get(item.salesOrderItem.toString());
       if (!soItem) {
         console.warn(`⚠️ SO item not found for ${item.productName}`);
         console.warn(`   Available SO items: ${so.items.map(i => i._id.toString()).join(', ')}`);
@@ -417,6 +449,7 @@ export const createSalesChallan = async (req, res) => {
       const movementReference = `${challan.challanNumber}|SOItem:${item.salesOrderItem}`;
       console.log(`   Looking for existing movement with reference: "${movementReference}"`);
       
+      // Check if this exact movement already exists (prevents duplicates)
       const existingMovement = await InventoryLot.findOne({
         product: item.product,
         'movements': {
@@ -429,6 +462,23 @@ export const createSalesChallan = async (req, res) => {
       
       if (existingMovement) {
         console.log(`⏭️ Stock already deducted for this challan item (reference: ${movementReference})`);
+        continue;
+      }
+      
+      // CRITICAL: Check if ANY lot for this product already has a movement for this challan
+      // This prevents duplicate movements if the same challan is processed twice
+      const challanMovementExists = await InventoryLot.findOne({
+        product: item.product,
+        'movements': {
+          $elemMatch: {
+            type: 'Issued',
+            reference: { $regex: `^${challan.challanNumber}\\|` }
+          }
+        }
+      }).session(session).lean();
+      
+      if (challanMovementExists) {
+        console.log(`⏭️ Movement for challan ${challan.challanNumber} already exists for this product`);
         continue;
       }
       
@@ -520,7 +570,9 @@ export const createSalesChallan = async (req, res) => {
 
         // Update lot quantities (similar to GRN updating inventory)
         lot.currentQuantity -= qtyToDeduct;
-        lot.totalWeight = Math.max(0, (lot.totalWeight || 0) - weightToDeduct);
+        // NOTE: totalWeight is immutable - it represents the original received weight
+        // Only currentQuantity is reduced. The balance is calculated as:
+        // Balance Weight = totalWeight - sum(Issued movements)
 
         // Scope movements to one challan item so partial and final dispatches are independent.
         lot.movements.push({
@@ -546,12 +598,34 @@ export const createSalesChallan = async (req, res) => {
         console.log(`📦 Deducted ${qtyToDeduct} ${item.unit} (${weightToDeduct.toFixed(2)} kg) of ${item.productName} from lot ${lot.lotNumber}${lotHasIndividualWeights ? ' [exact weights]' : ' [avg]'}`);
       }
 
-      // Update product inventory (following GRN pattern) - within transaction
+      // CRITICAL: Reconcile QUANTITY only (weight is user-entered, not calculated)
+      // IMPORTANT: User enters the weight being dispatched - this is the single source of truth
+      // The system deducts from inventory based on actual lot unit weights
+      // These may differ due to rounding, packing variations, etc. - this is NORMAL and EXPECTED
       if (lotsUpdated.length > 0) {
-        const totalDeducted = lotsUpdated.reduce((sum, l) => sum + l.quantity, 0);
+        const totalDeductedQty = lotsUpdated.reduce((sum, l) => sum + l.quantity, 0);
+        const totalDeductedWeight = lotsUpdated.reduce((sum, l) => sum + l.weight, 0);
+        
+        console.log(`📊 Reconciliation for ${item.productName}:`);
+        console.log(`   Requested Qty: ${totalQtyToDeduct} ${item.unit}`);
+        console.log(`   Deducted Qty:  ${totalDeductedQty} ${item.unit}`);
+        console.log(`   User-entered weight: ${totalWeightToDeduct.toFixed(2)} kg (single source of truth)`);
+        console.log(`   Inventory deducted weight: ${totalDeductedWeight.toFixed(2)} kg (from lot unit weights)`);
+        
+        // ONLY verify quantity matches - weight is user-entered and should be trusted
+        if (totalDeductedQty !== totalQtyToDeduct) {
+          const err = new Error(
+            `Quantity reconciliation failed for ${item.productName}: ` +
+            `requested ${totalQtyToDeduct} but deducted ${totalDeductedQty}`
+          );
+          err.statusCode = 500;
+          throw err;
+        }
+        
+        // Update product inventory (following GRN pattern) - within transaction
         await Product.findByIdAndUpdate(
           item.product,
-          { $inc: { 'inventory.currentStock': -totalDeducted } },
+          { $inc: { 'inventory.currentStock': -totalDeductedQty } },
           { session }
         );
       }

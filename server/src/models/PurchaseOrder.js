@@ -11,6 +11,11 @@ const purchaseOrderItemSchema = new mongoose.Schema({
     type: String,
     required: true // Store name for historical reference
   },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    default: null
+  },
   subProduct: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'SubProduct',
@@ -205,7 +210,7 @@ purchaseOrderSchema.pre('save', async function (next) {
     if (!this.poNumber) {
       this.poNumber = await generateDocumentNumber({
         type: 'PO',
-        prefix: 'PKRK',
+        prefix: '',  // No prefix - generates PO/001, PO/002, etc.
         pad: 3
       });
     }
@@ -268,12 +273,12 @@ purchaseOrderSchema.methods.updateReceiptStatus = function() {
       this.items[i].set('pendingQuantity', 0);
       this.items[i].set('pendingWeight', 0);
     } else {
-      // Calculate pending quantities only if NOT manually completed
+      // PHASE 5 FIX: Calculate pending quantities from actual GRN values
       const pendingQty = item.quantity - (item.receivedQuantity || 0);
-      const pendingWt = 0; // Weight tracking removed from product model
+      const pendingWt = item.weight - (item.receivedWeight || 0);
       
       this.items[i].set('pendingQuantity', pendingQty);
-      this.items[i].set('pendingWeight', pendingWt);
+      this.items[i].set('pendingWeight', Math.max(0, pendingWt));
       
       // Set status based on received quantity
       if (item.receivedQuantity === 0) {

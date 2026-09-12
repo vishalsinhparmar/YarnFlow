@@ -144,7 +144,15 @@ const SalesChallan = () => {
 
   // Auto-open create modal if navigated from Sales Order
   useEffect(() => {
-    if (location.state?.selectedOrderId) {
+    if (location.state?.selectedSalesOrderId) {
+      setSelectedSO(location.state.selectedSalesOrderId);
+      if (location.state?.openCreateModal) {
+        setShowCreateModal(true);
+      }
+      // Clear the state so it doesn't persist on refresh
+      window.history.replaceState({}, document.title);
+    } else if (location.state?.selectedOrderId) {
+      // Backward compatibility
       setShowCreateModal(true);
     }
   }, [location.state]);
@@ -816,7 +824,7 @@ const SalesChallan = () => {
             setSelectedSO(null);
           }}
           onSubmit={handleCreateChallan}
-          preSelectedOrderId={selectedSO?.soId || selectedSO?._id || location.state?.selectedOrderId}
+          preSelectedOrderId={selectedSO?.soId || selectedSO?._id || location.state?.selectedSalesOrderId || location.state?.selectedOrderId}
         />
       )}
 

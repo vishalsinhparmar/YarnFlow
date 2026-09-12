@@ -44,14 +44,6 @@ export const grnAPI = {
     });
   },
 
-  // Approve GRN and create inventory lots
-  approve: async (id, approvedBy, notes = '') => {
-    return await apiRequest(`/grn/${id}/approve`, {
-      method: 'PATCH',
-      body: JSON.stringify({ approvedBy, notes }),
-    });
-  },
-
   // Get GRN statistics
   getStats: async () => {
     return apiRequest('/grn/stats');

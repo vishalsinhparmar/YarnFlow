@@ -26,6 +26,7 @@ export const field = ({
   operators,
   allowedValues,
   reference,
+  hasLookup,
   group = 'General',
   exportable = true,
   filterable = true,
@@ -34,7 +35,8 @@ export const field = ({
   width = 18,
   formatter = null,
   transform = null,
-  expression = null
+  expression = null,
+  isDateFilter = false
 }) => ({
   key,
   path,
@@ -43,6 +45,7 @@ export const field = ({
   operators: operators || OPERATORS[type] || [],
   allowedValues: allowedValues || [],
   reference,
+  hasLookup,
   group,
   exportable,
   filterable,
@@ -51,7 +54,8 @@ export const field = ({
   width,
   formatter,
   transform,
-  expression
+  expression,
+  isDateFilter
 });
 
 export const toObjectId = (value) => {

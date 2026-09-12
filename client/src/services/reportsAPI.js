@@ -77,6 +77,25 @@ export const reportsAPI = {
     return blob;
   },
   getLookupOptions: (reportKey, fieldKey) => fetchWithAuth(`/reports/${reportKey}/lookup-options/${fieldKey}`),
+  
+  exportPDF: async (reportKey, payload, filename) => {
+    const response = await fetch(`${API_BASE_URL}/reports/${reportKey}/export-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || `PDF export failed: ${response.status}`);
+    }
+    const blob = await response.blob();
+    // Download the file to browser AND return blob for further processing
+    downloadBlob(blob, filename);
+    return blob;
+  },
 
   // Saved reports
   getSavedReports: () => fetchWithAuth('/reports/saved'),

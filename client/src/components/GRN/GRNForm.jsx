@@ -126,6 +126,12 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO }) => {
 
     try {
       const response = await purchaseOrderAPI.getById(poId);
+      
+      if (!response || !response.data) {
+        console.error('[GRN Form] Invalid response structure:', response);
+        throw new Error('Invalid API response');
+      }
+      
       const po = response.data;
       setSelectedPO(po);
       
@@ -146,11 +152,28 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO }) => {
         const pendingQty = item.quantity - receivedQty;
         const pendingWt = orderedWeight - receivedWt;
         
+        // Get sub-product weights from PO item
+        const orderedSubProductWeights = Array.isArray(item.subProductWeights)
+          ? item.subProductWeights
+          : [];
+        
         // Default received per-unit weights from PO ordered weights
-        const orderedSubProductWeights = item.subProductWeights || [];
+        // PHASE 11A FIX: Use remaining expected unit weights from backend
+        // Backend provides remainingExpectedUnitWeights which are the expected weights
+        // for the next GRN, not the previously received weights
+        let remainingExpectedUnitWeights = item.remainingExpectedUnitWeights || [];
+        
+        // FALLBACK: If backend doesn't provide remainingExpectedUnitWeights
+        // (for POs created before Phase 11A fix), calculate locally
+        if (remainingExpectedUnitWeights.length === 0 && orderedSubProductWeights.length > 0) {
+          const startIdx = receivedQty;
+          const endIdx = receivedQty + pendingQty;
+          remainingExpectedUnitWeights = orderedSubProductWeights.slice(startIdx, endIdx);
+        }
+        
         const receiveQty = pendingQty > 0 ? pendingQty : 0;
-        const defaultReceivedWeights = orderedSubProductWeights.length > 0
-          ? orderedSubProductWeights.slice(0, receiveQty)
+        const defaultReceivedWeights = remainingExpectedUnitWeights.length > 0
+          ? remainingExpectedUnitWeights.slice(0, receiveQty)
           : [];
 
         return {
@@ -603,11 +626,11 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO }) => {
                                 </p>
                               </div>
                             </div>
-                            {/* {item.previouslyReceived > 0 && (
+                            {item.previouslyReceived > 0 && (
                               <p className="mt-2 text-xs text-gray-500">
                                 Previously received: <span className="font-medium text-gray-700">{item.previouslyReceived} {item.unit}</span>
                               </p>
-                            )} */}
+                            )}
                           </div>
 
                           <div className="lg:col-span-2">
@@ -694,7 +717,7 @@ const GRNForm = ({ grn, onSubmit, onCancel, preSelectedPO }) => {
                                         aria-label={`Received weight for ${item.productName}`}
                                         value={item.receivedWeight || 0}
                                         onChange={(e) => handleItemChange(globalIndex, 'receivedWeight', e.target.value)}
-                                        className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 pr-8 text-center text-sm text-gray-900 outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                                        className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 pr-6 text-left text-sm text-gray-900 outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
                                         min="0"
                                         step="0.01"
                                       />

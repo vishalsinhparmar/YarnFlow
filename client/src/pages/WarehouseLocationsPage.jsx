@@ -15,7 +15,10 @@ export default function WarehouseLocationsPage() {
   const [editing, setEditing]     = useState(null);
   const [form, setForm]           = useState(emptyForm);
   const [error, setError]         = useState('');
+  const [success, setSuccess]     = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmToggle, setConfirmToggle] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const load = async () => {
     setLoading(true);
@@ -31,21 +34,36 @@ export default function WarehouseLocationsPage() {
 
   useEffect(() => { load(); }, [showInactive]);
 
-  const openCreate = () => { setForm(emptyForm); setEditing(null); setModal('create'); setError(''); };
-  const openEdit   = (loc) => { setForm({ name: loc.name, code: loc.code, type: loc.type, address: loc.address || '', isActive: loc.isActive }); setEditing(loc); setModal('edit'); setError(''); };
-  const closeModal = () => { setModal(null); setEditing(null); setError(''); };
+  const validateForm = () => {
+    const errors = {};
+    if (!form.name.trim()) errors.name = 'Name is required';
+    if (!form.code.trim()) errors.code = 'Code is required';
+    if (form.code.length < 2) errors.code = 'Code must be at least 2 characters';
+    if (form.code.length > 20) errors.code = 'Code must be at most 20 characters';
+    if (!/^[A-Z0-9\-_]+$/.test(form.code)) errors.code = 'Code must contain only uppercase letters, numbers, hyphens, and underscores';
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const openCreate = () => { setForm(emptyForm); setEditing(null); setModal('create'); setError(''); setSuccess(''); setFieldErrors({}); };
+  const openEdit   = (loc) => { setForm({ name: loc.name, code: loc.code, type: loc.type, address: loc.address || '', isActive: loc.isActive }); setEditing(loc); setModal('edit'); setError(''); setSuccess(''); setFieldErrors({}); };
+  const closeModal = () => { setModal(null); setEditing(null); setError(''); setSuccess(''); setFieldErrors({}); };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.code.trim()) { setError('Name and code are required'); return; }
-    setSaving(true); setError('');
+    if (!validateForm()) return;
+    setSaving(true); setError(''); setSuccess('');
     try {
       if (modal === 'create') {
         await warehouseAPI.create(form);
+        setSuccess('Location added successfully!');
       } else {
         await warehouseAPI.update(editing._id, form);
+        setSuccess('Location updated successfully!');
       }
-      closeModal();
-      load();
+      setTimeout(() => {
+        closeModal();
+        load();
+      }, 500);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -53,9 +71,15 @@ export default function WarehouseLocationsPage() {
     }
   };
 
-  const handleToggle = async (loc) => {
+  const handleToggle = (loc) => {
+    setConfirmToggle(loc);
+  };
+
+  const confirmToggleAction = async () => {
     try {
-      await warehouseAPI.update(loc._id, { isActive: !loc.isActive });
+      await warehouseAPI.update(confirmToggle._id, { isActive: !confirmToggle.isActive });
+      setSuccess(`Location ${confirmToggle.isActive ? 'disabled' : 'enabled'} successfully!`);
+      setConfirmToggle(null);
       load();
     } catch (e) {
       setError(e.message);
@@ -65,6 +89,7 @@ export default function WarehouseLocationsPage() {
   const handleDelete = async (id) => {
     try {
       await warehouseAPI.remove(id);
+      setSuccess('Location deleted successfully!');
       setConfirmDelete(null);
       load();
     } catch (e) {
@@ -101,7 +126,17 @@ export default function WarehouseLocationsPage() {
       </div>
 
       {error && !modal && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-red-700 hover:text-red-900"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {success && !modal && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-center justify-between">
+          <span>{success}</span>
+          <button onClick={() => setSuccess('')} className="text-green-700 hover:text-green-900"><X className="w-4 h-4" /></button>
+        </div>
       )}
 
       {/* Table */}
@@ -126,15 +161,17 @@ export default function WarehouseLocationsPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {locations.map(loc => (
-                <tr key={loc._id} className="hover:bg-gray-50/60 transition-colors">
-                  <td className="px-5 py-3.5 font-medium text-gray-900">{loc.name}</td>
-                  <td className="px-5 py-3.5 font-mono text-xs bg-gray-50 text-gray-700">{loc.code}</td>
+                <tr key={loc._id} className={`hover:bg-gray-50/60 transition-colors ${!loc.isActive ? 'opacity-60 bg-gray-50' : ''}`}>
+                  <td className={`px-5 py-3.5 font-medium ${!loc.isActive ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{loc.name}</td>
+                  <td className={`px-5 py-3.5 font-mono text-xs ${!loc.isActive ? 'bg-gray-100 text-gray-500' : 'bg-gray-50 text-gray-700'}`}>{loc.code}</td>
                   <td className="px-5 py-3.5">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${badgeColor(loc.type)}`}>{loc.type}</span>
                   </td>
-                  <td className="px-5 py-3.5 text-gray-500 max-w-xs truncate">{loc.address || '—'}</td>
+                  <td className="px-5 py-3.5 text-gray-500 max-w-xs truncate">
+                    {loc.address ? loc.address : <span className="text-gray-400 italic">Not specified</span>}
+                  </td>
                   <td className="px-5 py-3.5">
-                    <button onClick={() => handleToggle(loc)} title={loc.isActive ? 'Disable' : 'Enable'}>
+                    <button onClick={() => handleToggle(loc)} title={loc.isActive ? 'Click to disable' : 'Click to enable'} className="transition-transform hover:scale-110">
                       {loc.isActive
                         ? <ToggleRight className="w-5 h-5 text-green-500" />
                         : <ToggleLeft  className="w-5 h-5 text-gray-400" />}
@@ -142,8 +179,8 @@ export default function WarehouseLocationsPage() {
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
-                      <button onClick={() => openEdit(loc)} className="p-1.5 rounded-md hover:bg-blue-50 text-blue-600 transition-colors"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => setConfirmDelete(loc)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => openEdit(loc)} className="p-1.5 rounded-md hover:bg-blue-50 text-blue-600 transition-colors" title="Edit"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={() => setConfirmDelete(loc)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500 transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -155,48 +192,66 @@ export default function WarehouseLocationsPage() {
 
       {/* Create / Edit Modal */}
       {modal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="fixed bottom-0 left-0 right-0 top-16 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-gray-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
               <h2 className="text-lg font-semibold text-gray-900">{modal === 'create' ? 'Add Location' : 'Edit Location'}</h2>
-              <button onClick={closeModal}><X className="w-5 h-5 text-gray-400 hover:text-gray-700" /></button>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-700 transition-colors"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 space-y-4">
-              {error && <div className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
+            <div className="p-6 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+              {error && <div className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg border border-red-200">{error}</div>}
+              {success && <div className="text-green-600 text-sm bg-green-50 px-3 py-2 rounded-lg border border-green-200">{success}</div>}
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none"
-                    value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} placeholder="e.g. Main Godown" />
+                  <label className="block text-xs font-semibold text-gray-700 mb-2">Name *</label>
+                  <input 
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none transition-colors ${fieldErrors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                    value={form.name} 
+                    onChange={e => { setForm(p => ({...p, name: e.target.value})); setFieldErrors(p => ({...p, name: ''})); }} 
+                    placeholder="e.g. Main Godown" />
+                  {fieldErrors.name && <p className="text-red-600 text-xs mt-1">{fieldErrors.name}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Code *</label>
-                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none uppercase"
-                    value={form.code} onChange={e => setForm(p => ({...p, code: e.target.value.toUpperCase()}))} placeholder="e.g. MAIN-GDN" />
+                  <label className="block text-xs font-semibold text-gray-700 mb-2">Code *</label>
+                  <input 
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none transition-colors uppercase ${fieldErrors.code ? 'border-red-300 bg-red-50' : 'border-gray-300'}`}
+                    value={form.code} 
+                    onChange={e => { setForm(p => ({...p, code: e.target.value.toUpperCase()})); setFieldErrors(p => ({...p, code: ''})); }} 
+                    placeholder="e.g. MAIN-GDN" />
+                  {fieldErrors.code && <p className="text-red-600 text-xs mt-1">{fieldErrors.code}</p>}
                 </div>
               </div>
+              
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 outline-none"
-                  value={form.type} onChange={e => setForm(p => ({...p, type: e.target.value}))}>
+                <label className="block text-xs font-semibold text-gray-700 mb-2">Type</label>
+                <select 
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 outline-none transition-colors"
+                  value={form.type} 
+                  onChange={e => setForm(p => ({...p, type: e.target.value}))}>
                   {TYPES.map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
+              
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Address</label>
-                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 outline-none"
-                  value={form.address} onChange={e => setForm(p => ({...p, address: e.target.value}))} placeholder="Optional address" />
+                <label className="block text-xs font-semibold text-gray-700 mb-2">Address</label>
+                <input 
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 outline-none transition-colors"
+                  value={form.address} 
+                  onChange={e => setForm(p => ({...p, address: e.target.value}))} 
+                  placeholder="Optional address" />
               </div>
+              
               {modal === 'edit' && (
-                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors">
                   <input type="checkbox" checked={form.isActive} onChange={e => setForm(p => ({...p, isActive: e.target.checked}))} className="rounded" />
-                  Active
+                  <span className="font-medium">Active</span>
                 </label>
               )}
             </div>
-            <div className="flex justify-end gap-3 px-6 pb-5">
-              <button onClick={closeModal} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-lg disabled:opacity-50">
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+              <button onClick={closeModal} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-wait transition-all">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 {modal === 'create' ? 'Add Location' : 'Save Changes'}
               </button>
@@ -205,18 +260,37 @@ export default function WarehouseLocationsPage() {
         </div>
       )}
 
+      {/* Toggle Confirm */}
+      {confirmToggle && (
+        <div className="fixed bottom-0 left-0 right-0 top-16 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center border border-gray-200">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              {confirmToggle.isActive ? <ToggleRight className="w-6 h-6 text-blue-600" /> : <ToggleLeft className="w-6 h-6 text-blue-600" />}
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{confirmToggle.isActive ? 'Disable' : 'Enable'} Location?</h3>
+            <p className="text-sm text-gray-600 mb-6">Are you sure you want to <strong>{confirmToggle.isActive ? 'disable' : 'enable'}</strong> <strong>{confirmToggle.name}</strong>?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmToggle(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={confirmToggleAction} className={`flex-1 px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors ${confirmToggle.isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
+                {confirmToggle.isActive ? 'Disable' : 'Enable'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirm */}
       {confirmDelete && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+        <div className="fixed bottom-0 left-0 right-0 top-16 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center border border-gray-200">
             <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-6 h-6 text-red-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Location?</h3>
-            <p className="text-sm text-gray-500 mb-6">Are you sure you want to delete <strong>{confirmDelete.name}</strong>? This cannot be undone.</p>
+            <p className="text-sm text-gray-600 mb-6">Are you sure you want to delete <strong>{confirmDelete.name}</strong>? This cannot be undone.</p>
             <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button onClick={() => handleDelete(confirmDelete._id)} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium">Delete</button>
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={() => handleDelete(confirmDelete._id)} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors">Delete</button>
             </div>
           </div>
         </div>

@@ -43,7 +43,24 @@ const getPeriodDates = (period) => {
   return { startDate, endDate };
 };
 
-const formatDate = (date) => date.toISOString().split('T')[0];
+const formatDate = (date) => {
+  if (!date) return '';
+  
+  // If it's already a string in YYYY-MM-DD format, return it
+  if (typeof date === 'string') {
+    return date;
+  }
+  
+  // If it's a Date object, format using local date (not UTC)
+  if (date instanceof Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  
+  return '';
+};
 
 const periodLabels = {
   today: 'Today',
@@ -57,7 +74,7 @@ const periodLabels = {
 };
 
 export default function DateRangeSelector({ value, onChange }) {
-  const [period, setPeriod] = useState(value?.period || 'last_month');
+  const [period, setPeriod] = useState(value?.period || 'today');
   const [customStart, setCustomStart] = useState(value?.startDate || '');
   const [customEnd, setCustomEnd] = useState(value?.endDate || '');
 
@@ -84,8 +101,32 @@ export default function DateRangeSelector({ value, onChange }) {
     ? { startDate: customStart, endDate: customEnd }
     : getPeriodDates(period);
 
+  const formatDateString = (dateInput) => {
+    if (!dateInput) return '';
+    
+    if (typeof dateInput === 'string') {
+      // Parse YYYY-MM-DD string directly without creating Date object (avoids timezone issues)
+      const [year, month, day] = dateInput.split('-');
+      if (year && month && day) {
+        // Format as DD/MM/YYYY for display
+        return `${day}/${month}/${year}`;
+      }
+      return dateInput;
+    }
+    
+    if (dateInput instanceof Date) {
+      // Format Date object using local date
+      const day = String(dateInput.getDate()).padStart(2, '0');
+      const month = String(dateInput.getMonth() + 1).padStart(2, '0');
+      const year = dateInput.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    
+    return '';
+  };
+
   const displayRange = startDate && endDate 
-    ? `${new Date(startDate).toLocaleDateString('en-IN')} to ${new Date(endDate).toLocaleDateString('en-IN')}`
+    ? `${formatDateString(startDate)} to ${formatDateString(endDate)}`
     : 'Select date range';
 
   return (
