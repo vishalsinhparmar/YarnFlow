@@ -431,7 +431,7 @@ const Inventory = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-lg font-bold text-green-600">
-                                  {product.currentStock || product.totalStock} {product.unit}
+                                  {product.currentStock ?? 0} {product.unit}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                   After stock out
@@ -439,7 +439,7 @@ const Inventory = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap bg-blue-50/50">
                                 <div className="text-sm font-bold text-blue-600">
-                                  +{product.receivedStock || product.totalStock}
+                                  +{product.receivedStock ?? 0}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                   From GRN
@@ -455,7 +455,7 @@ const Inventory = () => {
                               </td>
                               <td className="px-6 py-4">
                                 <div className="text-sm font-bold text-gray-900">
-                                  {product.currentWeight ? `${product.currentWeight.toFixed(2)} Kg` : (product.totalWeight ? `${product.totalWeight.toFixed(2)} Kg` : '-')}
+                                  {product.currentWeight !== undefined && product.currentWeight !== null ? `${product.currentWeight.toFixed(2)} Kg` : '-'}
                                 </div>
                                 <div className="flex items-center space-x-2 mt-1">
                                   {product.receivedWeight > 0 && (

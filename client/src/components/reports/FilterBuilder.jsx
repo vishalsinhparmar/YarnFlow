@@ -9,7 +9,30 @@ function FilterValueInput({ field, operator, value, valueTo, onChange }) {
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
-    if (field?.type !== 'reference' || !operator) return;
+    // Reset UI state when field changes
+    setSearchText('');
+    setShowDropdown(false);
+    
+    // Check if field has lookup options (reference, hasLookup, or known lookup fields)
+    const lookupFields = [
+      // Inventory Lots
+      'productName', 'subProductName', 'supplierName', 'grnNumber', 'poNumber', 'warehouse',
+      // GRN
+      'grnNumber', 'poNumber', 'supplierName', 'warehouseLocation', 'itemProductName', 'itemSubProductName',
+      // Purchase Orders
+      'poNumber', 'supplierName', 'itemProductName', 'itemSubProductName',
+      // Sales Orders
+      'soNumber', 'customerName', 'itemProductName', 'itemSubProductName',
+      // Sales Challans
+      'soNumber', 'customerName', 'warehouseLocation', 'itemProductName', 'itemSubProductName'
+    ];
+    const hasLookup = field?.type === 'reference' || field?.hasLookup || 
+      (field?.type === 'string' && lookupFields.includes(field?.key));
+    if (!hasLookup || !operator) {
+      setOptions([]);
+      return;
+    }
+    
     let mounted = true;
     setLoading(true);
     reportsAPI.getLookupOptions(field._reportKey, field.key)
@@ -74,7 +97,23 @@ function FilterValueInput({ field, operator, value, valueTo, onChange }) {
     );
   }
 
-  if (field.type === 'reference') {
+  // Check if field has lookup suggestions (reference fields or fields with hasLookup property)
+  const lookupFields = [
+    // Inventory Lots
+    'productName', 'subProductName', 'supplierName', 'grnNumber', 'poNumber', 'warehouse',
+    // GRN
+    'grnNumber', 'poNumber', 'supplierName', 'warehouseLocation', 'itemProductName', 'itemSubProductName',
+    // Purchase Orders
+    'poNumber', 'supplierName', 'itemProductName', 'itemSubProductName',
+    // Sales Orders
+    'soNumber', 'customerName', 'itemProductName', 'itemSubProductName',
+    // Sales Challans
+    'soNumber', 'customerName', 'warehouseLocation', 'itemProductName', 'itemSubProductName'
+  ];
+  const hasLookupSuggestions = field.type === 'reference' || field.hasLookup || 
+    (field.type === 'string' && lookupFields.includes(field.key));
+  
+  if (hasLookupSuggestions) {
     if (isMulti) {
       const selected = Array.isArray(value) ? value : [];
       return (
@@ -133,7 +172,11 @@ function FilterValueInput({ field, operator, value, valueTo, onChange }) {
         {/* Dropdown with suggestions */}
         {showDropdown && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-orange-200 rounded-lg shadow-lg z-20 max-h-56 overflow-y-auto">
-            {hasMatches ? (
+            {loading ? (
+              <div className="px-3 py-4 text-center text-sm text-gray-500">
+                <p className="mb-1">⏳ Loading options...</p>
+              </div>
+            ) : hasMatches ? (
               <>
                 {filteredOptions.map((opt, idx) => (
                   <button

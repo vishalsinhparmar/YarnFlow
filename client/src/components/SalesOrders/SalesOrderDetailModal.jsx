@@ -207,7 +207,7 @@ const SalesOrderDetailModal = ({ isOpen, onClose, order }) => {
   const customerName = detail?.customer?.companyName || detail?.customerName || 'Not available';
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 top-16 z-50 flex items-center justify-center bg-black/60 p-2 backdrop-blur-sm transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
+    <div className="fixed bottom-0 left-0 right-0 top-16 z-[9999] flex items-center justify-center bg-black/60 p-2 backdrop-blur-sm transition-[left] duration-200 sm:p-4 lg:left-[var(--sidebar-width)]">
       <section
         role="dialog"
         aria-modal="true"

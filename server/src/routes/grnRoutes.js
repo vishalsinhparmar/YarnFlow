@@ -6,7 +6,6 @@ import {
   updateGRN,
   deleteGRN,
   updateGRNStatus,
-  approveGRN,
   getGRNStats,
   getGRNsByPO,
   markItemAsComplete
@@ -40,9 +39,6 @@ router.delete('/:id', deleteGRN);
 
 // Status Management
 router.patch('/:id/status', updateGRNStatus);
-
-// Approval
-router.patch('/:id/approve', approveGRN);
 
 // Manual Completion
 router.patch('/:grnId/item/:itemId/complete', markItemAsComplete);

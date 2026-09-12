@@ -30,6 +30,13 @@ const coerceValue = (field, rawValue) => {
     case 'date':
       return new Date(rawValue);
     case 'reference':
+      // Check if this reference uses ObjectId or a string value
+      const valueField = field.reference?.valueField;
+      if (valueField && valueField !== '_id') {
+        // String-based reference (e.g., warehouse with valueField: 'name')
+        return String(rawValue);
+      }
+      // ObjectId-based reference
       return toObjectIds(rawValue);
     case 'enum':
       return String(rawValue);
@@ -64,7 +71,9 @@ const buildSingleCondition = (field, operator, rawValue, rawValueTo, isItemLevel
     return { [path]: range };
   }
 
-  const rawValueAsReference = field.type === 'reference' && !['in', 'notIn'].includes(operator);
+  // Check if this is a reference field that uses ObjectId as valueField
+  const isObjectIdReference = field.type === 'reference' && (!field.reference?.valueField || field.reference?.valueField === '_id');
+  const rawValueAsReference = isObjectIdReference && !['in', 'notIn'].includes(operator);
   const value = rawValueAsReference ? toObjectIds(rawValue)[0] : coerceValue(field, rawValue);
 
   switch (operator) {
@@ -86,11 +95,17 @@ const buildSingleCondition = (field, operator, rawValue, rawValueTo, isItemLevel
       return { [path]: { $regex: `^${escapeRegex(value)}`, $options: 'i' } };
     case 'in': {
       const inArr = Array.isArray(rawValue) ? rawValue : [rawValue];
-      return { [path]: { $in: inArr.map(v => coerceValue(field, v)) } };
+      const mappedValues = isObjectIdReference 
+        ? inArr.map(v => toObjectIds(v)[0]).filter(Boolean)
+        : inArr.map(v => coerceValue(field, v));
+      return { [path]: { $in: mappedValues } };
     }
     case 'notIn': {
       const ninArr = Array.isArray(rawValue) ? rawValue : [rawValue];
-      return { [path]: { $nin: ninArr.map(v => coerceValue(field, v)) } };
+      const mappedValues = isObjectIdReference 
+        ? ninArr.map(v => toObjectIds(v)[0]).filter(Boolean)
+        : ninArr.map(v => coerceValue(field, v));
+      return { [path]: { $nin: mappedValues } };
     }
     case 'after':
       return { [path]: { $gt: value } };
@@ -197,7 +212,7 @@ const buildLookups = (definition) => {
   };
   
   for (const field of referenceFields) {
-    const { model, displayField } = field.reference;
+    const { model, displayField, valueField } = field.reference;
     const collection = modelCollectionMap[model] || model.toLowerCase() + 's';
     const lookupAs = `${field.key}_lookup`;
     
@@ -205,11 +220,18 @@ const buildLookups = (definition) => {
     const alreadyExists = stages.some(s => s.$lookup && s.$lookup.as === lookupAs);
     if (alreadyExists) continue;
     
+    // Determine the foreign field to match on
+    // If valueField is specified and not '_id', use that; otherwise use '_id'
+    const foreignField = (valueField && valueField !== '_id') ? valueField : '_id';
+    
+    // For item-level fields (e.g., items.category), use the path directly
+    const localField = field.path || field.key;
+    
     stages.push({
       $lookup: {
         from: collection,
-        localField: field.path || field.key,
-        foreignField: '_id',
+        localField: localField,
+        foreignField: foreignField,
         as: lookupAs
       }
     });
@@ -223,11 +245,20 @@ const buildLookups = (definition) => {
     });
     
     // Add a field that shows the display value
-    stages.push({
-      $addFields: {
-        [field.key]: `$${lookupAs}.${displayField}`
-      }
-    });
+    // For item-level fields, we need to update the nested field
+    if (field.isItemField && definition.itemArrayPath) {
+      stages.push({
+        $addFields: {
+          [localField]: `$${lookupAs}.${displayField}`
+        }
+      });
+    } else {
+      stages.push({
+        $addFields: {
+          [field.key]: `$${lookupAs}.${displayField}`
+        }
+      });
+    }
   }
   
   return stages;

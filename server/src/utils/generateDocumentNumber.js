@@ -2,8 +2,8 @@
 import Counter from '../models/Counter.js';
 
 export const generateDocumentNumber = async ({
-  type,        // 'GRN'
-  prefix = 'PKRK',
+  type,        // 'GRN', 'PO', 'SO', 'SC'
+  prefix = '',  // Optional prefix (e.g., 'PKRK')
   pad = 3
 }) => {
   const counter = await Counter.findByIdAndUpdate(
@@ -12,5 +12,11 @@ export const generateDocumentNumber = async ({
     { new: true, upsert: true }
   );
 
-  return `${prefix}/${type}/${String(counter.seq).padStart(pad, '0')}`;
+  const paddedNumber = String(counter.seq).padStart(pad, '0');
+  
+  // Build document number with optional prefix
+  if (prefix) {
+    return `${prefix}/${type}/${paddedNumber}`;
+  }
+  return `${type}/${paddedNumber}`;
 };

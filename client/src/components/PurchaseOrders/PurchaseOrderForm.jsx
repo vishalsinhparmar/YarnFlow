@@ -1260,7 +1260,7 @@ const QuickAddSupplierModal = ({ onClose, onSubmit, loading }) => {
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
+    <div className="absolute inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4">Quick Add Supplier</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -1306,7 +1306,7 @@ const QuickAddProductModal = ({ onClose, onSubmit, loading }) => {
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
+    <div className="absolute inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4">Quick Add Product</h3>
         <form onSubmit={handleSubmit} className="space-y-4">

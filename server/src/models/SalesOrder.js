@@ -46,6 +46,11 @@ const salesOrderSchema = new mongoose.Schema({
       required: true
     },
     productName: { type: String, required: true },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Category',
+      default: null
+    },
     subProduct: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'SubProduct',
@@ -293,7 +298,7 @@ salesOrderSchema.pre('save',async function (next) {
           if (!this.soNumber) {
             this.soNumber = await generateDocumentNumber({
               type: 'SO',
-              prefix: 'PKRK',
+              prefix: '',  // No prefix - generates SO/001, SO/002, etc.
               pad: 3
             });
           }

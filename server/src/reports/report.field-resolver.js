@@ -10,24 +10,32 @@ export const getReferenceOptions = async (reportKey, fieldKey) => {
   }
 
   const field = definition.fields.find(f => f.key === fieldKey);
-  if (!field || field.type !== 'reference' || !field.reference) {
-    const error = new Error(`Field ${fieldKey} is not a reference field`);
+  if (!field) {
+    const error = new Error(`Field ${fieldKey} not found`);
     error.status = 400;
     throw error;
   }
 
-  const { reference } = field;
-  const model = mongoose.model(reference.model);
-  const valueField = reference.valueField || '_id';
-  const displayField = reference.displayField || 'name';
+  // Check for reference field or hasLookup field
+  const lookupConfig = field.reference || field.hasLookup;
+  if (!lookupConfig) {
+    const error = new Error(`Field ${fieldKey} does not have lookup options`);
+    error.status = 400;
+    throw error;
+  }
 
-  const options = await model
-    .find({}, { [valueField]: 1, [displayField]: 1 })
-    .sort({ [displayField]: 1 })
+  const { model, displayField, valueField } = lookupConfig;
+  const ModelClass = mongoose.model(model);
+  const actualValueField = valueField || '_id';
+  const actualDisplayField = displayField || 'name';
+
+  const options = await ModelClass
+    .find({}, { [actualValueField]: 1, [actualDisplayField]: 1 })
+    .sort({ [actualDisplayField]: 1 })
     .lean();
 
   return options.map(opt => ({
-    value: valueField === '_id' ? opt._id.toString() : opt[valueField],
-    label: opt[displayField] || '(Unnamed)'
+    value: actualValueField === '_id' ? opt._id.toString() : opt[actualValueField],
+    label: opt[actualDisplayField] || '(Unnamed)'
   }));
 };

@@ -6,12 +6,16 @@ const initialFilters = { condition: 'and', groups: [{ condition: 'and', filters:
 const getDefaultDateRange = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-  lastMonthEnd.setHours(23, 59, 59, 999);
+  
+  // Format as YYYY-MM-DD using local date (not UTC)
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
+  
   return {
-    startDate: lastMonth.toISOString().split('T')[0],
-    endDate: lastMonthEnd.toISOString().split('T')[0]
+    startDate: dateStr,
+    endDate: dateStr
   };
 };
 

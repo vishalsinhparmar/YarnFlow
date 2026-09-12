@@ -26,23 +26,23 @@ export default {
   itemArrayPath: 'items',
   fields: [
     // Basic fields
-    field({ key: 'poNumber', label: 'PO Number', type: TYPES.STRING, group: 'Basic' }),
-    field({ key: 'orderDate', label: 'Order Date', type: TYPES.DATE, group: 'Basic', formatter: 'date' }),
+    field({ key: 'poNumber', label: 'PO Number', type: TYPES.STRING, group: 'Basic', hasLookup: { model: 'PurchaseOrder', displayField: 'poNumber', valueField: 'poNumber' } }),
+    field({ key: 'orderDate', label: 'Order Date', type: TYPES.DATE, group: 'Basic', formatter: 'date', isDateFilter: true }),
     field({ key: 'expectedDeliveryDate', label: 'Expected Delivery Date', type: TYPES.DATE, group: 'Basic', formatter: 'date' }),
     field({ key: 'status', label: 'Status', type: TYPES.ENUM, allowedValues: ['Draft', 'Partially_Received', 'Fully_Received', 'Cancelled'], group: 'Basic' }),
     field({ key: 'createdAt', label: 'Created At', type: TYPES.DATE, group: 'Basic', formatter: 'datetime' }),
 
     // Supplier
-    field({ key: 'supplier', label: 'Supplier', type: TYPES.REFERENCE, reference: { model: 'Supplier', displayField: 'companyName', valueField: '_id' }, path: 'supplier', group: 'Supplier' }),
-    field({ key: 'supplierName', label: 'Supplier Name', type: TYPES.STRING, path: 'supplierDetails.companyName', group: 'Supplier' }),
+    field({ key: 'supplierName', label: 'Supplier Name', type: TYPES.STRING, path: 'supplierDetails.companyName', group: 'Supplier', hasLookup: { model: 'Supplier', displayField: 'companyName', valueField: 'companyName' } }),
 
     // Calculated
     field({ key: 'completionPercentage', label: 'Completion %', type: TYPES.NUMBER, path: 'completionPercentage', group: 'Calculated', formatter: 'percent' }),
     field({ key: 'isOverdue', label: 'Is Overdue', type: TYPES.BOOLEAN, group: 'Calculated', expression: { $and: [{ $ne: ['$expectedDeliveryDate', null] }, { $lt: ['$expectedDeliveryDate', new Date()] }, { $not: { $in: ['$status', ['Fully_Received', 'Cancelled']] } }] }, formatter: 'boolean' }),
 
     // Item fields
-    field({ key: 'itemProductName', label: 'Product', type: TYPES.STRING, path: 'items.productName', isItemField: true, group: 'Item' }),
-    field({ key: 'itemSubProductName', label: 'Sub Product', type: TYPES.STRING, path: 'items.subProductName', isItemField: true, group: 'Item' }),
+    field({ key: 'itemProductName', label: 'Product', type: TYPES.STRING, path: 'items.productName', isItemField: true, group: 'Item', hasLookup: { model: 'Product', displayField: 'productName', valueField: 'productName' } }),
+    field({ key: 'itemCategory', label: 'Category', type: TYPES.REFERENCE, path: 'items.category', reference: { model: 'Category', displayField: 'categoryName', valueField: '_id' }, isItemField: true, group: 'Item' }),
+    field({ key: 'itemSubProductName', label: 'Sub Product', type: TYPES.STRING, path: 'items.subProductName', isItemField: true, group: 'Item', hasLookup: { model: 'SubProduct', displayField: 'subProductName', valueField: 'subProductName' } }),
     field({ key: 'itemOrderedQuantity', label: 'Ordered Qty', type: TYPES.NUMBER, path: 'items.quantity', isItemField: true, group: 'Item' }),
     field({ key: 'itemReceivedQuantity', label: 'Received Qty', type: TYPES.NUMBER, path: 'items.receivedQuantity', isItemField: true, group: 'Item' }),
     field({ key: 'itemPendingQuantity', label: 'Pending Qty', type: TYPES.NUMBER, path: 'items.pendingQuantity', isItemField: true, group: 'Item' }),

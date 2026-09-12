@@ -4,6 +4,7 @@ import {
   getDefinition,
   preview,
   exportExcel,
+  exportPDF,
   lookupOptions,
   savedReportsList,
   savedReportDetail,
@@ -41,6 +42,7 @@ router.get('/:reportKey/lookup-options/:fieldKey', lookupOptions);
 // Preview and export routes
 router.post('/:reportKey/preview', preview);
 router.post('/:reportKey/export', exportExcel);
+router.post('/:reportKey/export-pdf', exportPDF);
 
 // Create saved report with reportKey in URL (must come last)
 router.post('/:reportKey/saved', createSaved);

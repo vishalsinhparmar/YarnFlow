@@ -3,6 +3,8 @@ import Product from '../models/Product.js';
 import SubProduct from '../models/SubProduct.js';
 import Supplier from '../models/Supplier.js';
 import Category from '../models/Category.js';
+import GoodsReceiptNote from '../models/GoodsReceiptNote.js';
+import { getRemainingExpectedUnitWeights } from '../utils/grnValidation.js';
 
 // ============ PURCHASE ORDER CONTROLLERS ============
 
@@ -40,9 +42,13 @@ export const getAllPurchaseOrders = async (req, res) => {
       query.supplier = supplier;
     }
     
-    // Filter by status
+    // Filter by status. Accepts either a single status or a comma-separated
+    // list (e.g. "Draft,Partially_Received") so the mobile/web UI can group
+    // several raw statuses into a single "Pending"/"Closed" tab without
+    // needing a dedicated endpoint per grouping.
     if (status) {
-      query.status = status;
+      const statusList = status.split(',').map(s => s.trim()).filter(Boolean);
+      query.status = statusList.length > 1 ? { $in: statusList } : statusList[0];
     }
     
     // Date range filter
@@ -110,9 +116,28 @@ export const getPurchaseOrderById = async (req, res) => {
       });
     }
     
+    // PHASE 11A FIX: Calculate remaining expected unit weights for GRN form
+    // This ensures the frontend displays the correct expected weight for the next GRN
+    const enrichedItems = purchaseOrder.items.map(item => {
+      const pendingQuantity = Math.max(0, item.quantity - (item.receivedQuantity || 0));
+      const remainingExpectedUnitWeights = getRemainingExpectedUnitWeights(item, pendingQuantity);
+      
+      // Convert to plain object and ensure all fields are included
+      const itemObj = item.toObject ? item.toObject() : item;
+      
+      return {
+        ...itemObj,
+        remainingExpectedUnitWeights,  // Explicitly set
+        pendingQuantity                 // Explicitly set
+      };
+    });
+    
+    const enrichedPO = purchaseOrder.toObject();
+    enrichedPO.items = enrichedItems;
+    
     res.status(200).json({
       success: true,
-      data: purchaseOrder
+      data: enrichedPO
     });
   } catch (error) {
     console.error('Error fetching purchase order:', error);
@@ -202,6 +227,7 @@ export const createPurchaseOrder = async (req, res) => {
       const populatedItem = {
         product: product._id,
         productName: product.productName,
+        category: product.category || null,
         productCode: product.productCode,
         subProduct: subProduct?._id || null,
         subProductName: subProductName || item.subProductName || null,
@@ -405,6 +431,27 @@ export const updatePurchaseOrderStatus = async (req, res) => {
       });
     }
     
+    const existingPO = await PurchaseOrder.findById(id);
+    if (!existingPO) {
+      return res.status(404).json({
+        success: false,
+        message: 'Purchase order not found'
+      });
+    }
+
+    // A GRN already recorded against this PO means stock has been received
+    // into inventory. Cancelling at this point would leave orphaned GRNs and
+    // corrupt inventory reconciliation, so it must be blocked.
+    if (status === 'Cancelled') {
+      const existingGRNCount = await GoodsReceiptNote.countDocuments({ purchaseOrder: id });
+      if (existingGRNCount > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot cancel this purchase order — ${existingGRNCount} GRN(s) have already been recorded against it`
+        });
+      }
+    }
+
     const updateData = { status };
     
     const updatedPO = await PurchaseOrder.findByIdAndUpdate(
@@ -462,6 +509,16 @@ export const cancelPurchaseOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Cannot cancel a fully received purchase order'
+      });
+    }
+
+    // Prevent cancellation once a GRN has already been recorded against this PO,
+    // to avoid orphaned GRNs / inventory lots pointing at a cancelled order.
+    const existingGRN = await GoodsReceiptNote.findOne({ purchaseOrder: id }).select('_id').lean();
+    if (existingGRN) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot cancel this purchase order because a Goods Receipt Note has already been recorded against it'
       });
     }
     

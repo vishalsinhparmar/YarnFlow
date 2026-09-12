@@ -12,6 +12,7 @@ import { BarChart3, ChevronDown, Loader2, AlertCircle, RotateCcw, Save } from 'l
 export default function ReportBuilder() {
   const rb = useReportBuilder();
   const [exportError, setExportError] = useState('');
+  const [exportingPDF, setExportingPDF] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -113,6 +114,61 @@ export default function ReportBuilder() {
       reader.readAsDataURL(blob);
     } catch (err) {
       setExportError(err.message || 'Export failed');
+    }
+  };
+
+  const handleExportPDF = async () => {
+    setExportError('');
+    try {
+      setExportingPDF(true);
+      const selectedReport = rb.reports.find(r => r.key === rb.selectedReportKey);
+      const reportName = selectedReport?.name || rb.selectedReportKey;
+      const dateRangeStr = `${new Date(rb.dateRange.startDate).toLocaleDateString('en-IN')} to ${new Date(rb.dateRange.endDate).toLocaleDateString('en-IN')}`;
+      const filename = `${rb.selectedReportKey}_Report_${Date.now()}.pdf`;
+      
+      // Call export PDF API to get the file blob
+      const blob = await reportsAPI.exportPDF(rb.selectedReportKey, rb.buildPayload(), filename);
+      
+      if (!blob) {
+        throw new Error('No file data returned from PDF export');
+      }
+      
+      // Convert blob to base64 for storage
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64Data = reader.result.split(',')[1]; // Remove data:application/... prefix
+          
+          if (!base64Data) {
+            throw new Error('Failed to convert file to base64');
+          }
+          
+          // Save to backend with file data
+          const result = await reportsAPI.createDownload({
+            reportName,
+            reportKey: rb.selectedReportKey,
+            dateRange: dateRangeStr,
+            filename,
+            fileData: base64Data,
+          });
+          
+          console.log('PDF download saved:', result);
+          
+          // Notify Downloads tab to refresh
+          window.dispatchEvent(new CustomEvent('downloadCreated', { detail: result }));
+        } catch (err) {
+          console.error('Error saving PDF download:', err);
+          setExportError(`PDF export successful but failed to save download record: ${err.message}`);
+        }
+      };
+      reader.onerror = () => {
+        setExportError('Failed to read PDF file data');
+      };
+      reader.readAsDataURL(blob);
+    } catch (err) {
+      setExportError(err.message || 'PDF export failed');
+    } finally {
+      setExportingPDF(false);
     }
   };
 
@@ -299,7 +355,9 @@ export default function ReportBuilder() {
               onPageChange={(page) => rb.runPreview(page)}
               onPreview={() => rb.runPreview(1)}
               onExport={handleExport}
+              onExportPDF={handleExportPDF}
               exporting={rb.exporting}
+              exportingPDF={exportingPDF}
             />
           </div>
         </div>

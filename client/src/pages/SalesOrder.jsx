@@ -98,6 +98,10 @@ const SalesOrder = () => {
             alert('Order deleted successfully');
           }
           break;
+        case 'createChallan':
+          // Navigate to sales-challan page with SO pre-selected
+          navigate('/sales-challan', { state: { selectedSalesOrderId: order._id, openCreateModal: true } });
+          break;
         default:
           break;
       }
@@ -301,10 +305,26 @@ const SalesOrder = () => {
                       <tr key={order._id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                              <ShoppingCart className="w-4 h-4 text-blue-600" />
+                            <div className="w-6 h-6 flex items-center justify-center">
+                              {order.status !== 'Delivered' && order.status !== 'Cancelled' && order.status !== 'Returned' && (
+                                <button
+                                  onClick={() => handleOrderAction('createChallan', order)}
+                                  className="group relative p-1.5 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
+                                  title="Create Sales Challan"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                  <span className="absolute left-8 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                    + Create Challan
+                                  </span>
+                                </button>
+                              )}
                             </div>
-                            <span className="text-sm font-semibold text-gray-900">{order.soNumber}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <ShoppingCart className="w-4 h-4 text-blue-600" />
+                              </div>
+                              <span className="text-sm font-semibold text-gray-900">{order.soNumber}</span>
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

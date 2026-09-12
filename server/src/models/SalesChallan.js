@@ -53,6 +53,11 @@ const salesChallanSchema = new mongoose.Schema({
       required: true
     },
     productName: { type: String, required: true },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Category',
+      default: null
+    },
     
     // Sub-product tracking
     subProduct: {
@@ -124,7 +129,7 @@ salesChallanSchema.pre('save', async function(next) {
     if (this.isNew && !this.challanNumber) {
       this.challanNumber = await generateDocumentNumber({
         type: 'SC',        // Sales Challan
-        prefix: 'PKRK',
+        prefix: '',  // No prefix - generates SC/001, SC/002, etc.
         pad: 3
       });
     }
